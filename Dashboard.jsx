@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { useNavigate } from "react-router-dom";
 import "./App.css";
 
 const supabase = createClient(
@@ -7,7 +8,7 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-function TierSection({ title, tickets, onMove, onDraftChange, onSend }) {
+function TierSection({ title, tickets, onMove, onDraftChange, onSend, isAdmin, userId }) {
   return (
     <div className="tier-section">
       <h2 className="tier-title">
@@ -15,7 +16,7 @@ function TierSection({ title, tickets, onMove, onDraftChange, onSend }) {
       </h2>
       {tickets.length === 0 ? (
         <p className="tier-empty">No tickets here.</p>
-      ) : (
+      ) : isAdmin ? (
         tickets.map(ticket => (
           <div key={ticket.id} className={`task-card ${ticket.tier === "completed" ? "completed" : ""}`}>
             <div className="task-title">{ticket.title}</div>
@@ -54,6 +55,47 @@ function TierSection({ title, tickets, onMove, onDraftChange, onSend }) {
             </div>
           </div>
         ))
+      ) : (
+        tickets
+          .filter(ticket => ticket.created_by === userId)
+          .map(ticket => (
+            <div key={ticket.id} className={`task-card ${ticket.tier === "completed" ? "completed" : ""}`}>
+              <div className="task-title">{ticket.title}</div>
+              <div className="task-meta">Assigned to {ticket.assigned_to}</div>
+              <div className="task-updates">
+                {ticket.updates.map((u, i) => (
+                  <div key={i} className="task-update">
+                    <strong>{u.author}</strong>: {u.content}{" "}
+                    <small>{new Date(u.date).toLocaleDateString()}</small>
+                  </div>
+                ))}
+              </div>
+              <div className="task-controls">
+                <input
+                  placeholder="Write comment..."
+                  value={ticket.draft || ""}
+                  onChange={e => onDraftChange(ticket.id, e.target.value)}
+                  className="task-input"
+                />
+                <button
+                  onClick={() => onSend(ticket.id)}
+                  className={`btn primary ${!ticket.draft ? "opacity-50 cursor-not-allowed" : ""}`}
+                  disabled={!ticket.draft}
+                >
+                  Send
+                </button>
+                {ticket.tier !== "completed" && (
+                  <button onClick={() => onMove(ticket.id, "completed")} className="btn success">Complete</button>
+                )}
+                {ticket.tier === "current" && (
+                  <button onClick={() => onMove(ticket.id, "next")} className="btn warning">Backlog</button>
+                )}
+                {ticket.tier === "next" && (
+                  <button onClick={() => onMove(ticket.id, "current")} className="btn info">Escalate</button>
+                )}
+              </div>
+            </div>
+          ))
       )}
     </div>
   );
@@ -64,8 +106,24 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [newTicket, setNewTicket] = useState({ title: "", assigned_to: "Disney" });
   const [notification, setNotification] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userId, setUserId] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
+    async function fetchUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        const { data, error } = await supabase
+          .from("users")
+          .select("is_admin")
+          .eq("id", user.id)
+          .single();
+        if (!error && data) setIsAdmin(data.is_admin);
+      }
+    }
+    fetchUser();
     fetchTickets();
   }, []);
 
@@ -81,10 +139,11 @@ function Dashboard() {
 
   async function createTicket() {
     if (!newTicket.title) return;
+    const { data: { user } } = await supabase.auth.getUser();
     await supabase.from("tickets").insert([
       {
         ...newTicket,
-        created_by: "You",
+        created_by: user.id,
         created: new Date().toISOString(),
         tier: "next",
         updates: []
@@ -97,7 +156,7 @@ function Dashboard() {
 
   async function sendComment(id) {
     const ticket = tickets.find(t => t.id === id);
-    const update = { author: "You", content: ticket.draft, date: new Date().toISOString() };
+    const update = { author: userId, content: ticket.draft, date: new Date().toISOString() };
     await supabase
       .from("tickets")
       .update({ updates: [...ticket.updates, update] })
@@ -108,7 +167,7 @@ function Dashboard() {
 
   async function moveTier(id, tier) {
     const ticket = tickets.find(t => t.id === id);
-    const update = { author: "You", content: `Moved to ${tier}`, date: new Date().toISOString() };
+    const update = { author: userId, content: `Moved to ${tier}`, date: new Date().toISOString() };
     await supabase
       .from("tickets")
       .update({ tier, updates: [...ticket.updates, update] })
@@ -125,12 +184,18 @@ function Dashboard() {
   return (
     <div className="container">
       <header className="header">
+        <button
+          onClick={() => navigate("/")}
+          className="text-blue-400 hover:underline mr-4"
+        >
+          Back
+        </button>
         <h1 className="app-title">Ticket Tracker</h1>
         <div className="flex items-center gap-4">
           <button
             onClick={async () => {
               await supabase.auth.signOut();
-              window.location.href = "/login";
+              navigate("/login");
             }}
             className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
           >
@@ -168,6 +233,8 @@ function Dashboard() {
             onMove={moveTier}
             onDraftChange={(id, text) => setTickets(ts => ts.map(t => (t.id === id ? { ...t, draft: text } : t)))}
             onSend={sendComment}
+            isAdmin={isAdmin}
+            userId={userId}
           />
           <TierSection
             title="Next Up"
@@ -175,6 +242,8 @@ function Dashboard() {
             onMove={moveTier}
             onDraftChange={(id, text) => setTickets(ts => ts.map(t => (t.id === id ? { ...t, draft: text } : t)))}
             onSend={sendComment}
+            isAdmin={isAdmin}
+            userId={userId}
           />
           <TierSection
             title="Completed"
@@ -182,6 +251,8 @@ function Dashboard() {
             onMove={() => {}}
             onDraftChange={(id, text) => setTickets(ts => ts.map(t => (t.id === id ? { ...t, draft: text } : t)))}
             onSend={sendComment}
+            isAdmin={isAdmin}
+            userId={userId}
           />
         </>
       )}
