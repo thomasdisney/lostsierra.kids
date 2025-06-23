@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 body {
-  @apply bg-black text-gray-200 font-mono;
+  @apply bg-gray-950 text-gray-200 font-mono;
 }
 
 .container {
-  @apply max-w-5xl mx-auto p-6;
+  @apply max-w-5xl mx-auto p-6 bg-gray-950; 
 }
 
 .header {
@@ -55,7 +55,7 @@ body {
 }
 
 .tier-section {
-  @apply mb-10;
+  @apply mb-10 bg-gray-950; 
 }
 
 .tier-title {
@@ -67,15 +67,15 @@ body {
 }
 
 .task-card {
-  @apply bg-gray-900 p-5 border border-gray-700 mb-4 shadow-md;
+  @apply bg-gray-900 p-5 border border-gray-700 mb-4 shadow-md; 
 }
 
 .task-card.completed {
-  @apply opacity-70 bg-gray-800;
+  @apply opacity-70 bg-gray-850;
 }
 
 .task-title {
-  @apply text-xl font-bold mb-2 text-gray-100; /* Improved contrast */
+  @apply text-xl font-bold mb-2 text-gray-100;
 }
 
 .task-meta {
