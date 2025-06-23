@@ -1,5 +1,5 @@
 .login-container {
-  @apply min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4;
+  @apply min-h-screen bg-black flex flex-col items-center justify-center p-6;
 }
 
 .login-form {
@@ -7,11 +7,11 @@
 }
 
 .input-field {
-  @apply bg-gray-800 text-white p-3 rounded-lg border border-gray-700 focus:outline-none focus:border-blue-600;
+  @apply bg-gray-800 text-gray-200 p-4 rounded-none border border-gray-700 focus:outline-none focus:border-blue-500;
 }
 
 .login-btn {
-  @apply bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700;
+  @apply bg-blue-600 text-gray-200 p-3 rounded-none border border-gray-700 hover:bg-blue-700;
 }
 
 .error-text {
