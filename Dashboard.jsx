@@ -8,7 +8,62 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-function TierSection({ title, tickets, onMove, onDraftChange, onSend, isAdmin, userId }) {
+function LoginModal({ onClose, onLogin }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setError(error.message);
+      } else {
+        onLogin();
+        onClose();
+      }
+    } catch (err) {
+      setError("An unexpected error occurred");
+      console.error(err);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-gray-800 p-6 rounded-lg w-full max-w-sm">
+        <h2 className="text-2xl font-bold text-white mb-4">Login to Comment</h2>
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            className="task-input"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            className="task-input"
+          />
+          <button type="submit" className="btn primary">Login</button>
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+        </form>
+        <button
+          onClick={onClose}
+          className="mt-4 text-blue-400 hover:underline"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TierSection({ title, tickets, onMove, onDraftChange, onSend, onDelete, isAdmin, isLoggedIn, userId, showLoginModal }) {
   return (
     <div className="tier-section">
       <h2 className="tier-title">
@@ -16,7 +71,7 @@ function TierSection({ title, tickets, onMove, onDraftChange, onSend, isAdmin, u
       </h2>
       {tickets.length === 0 ? (
         <p className="tier-empty">No tickets here.</p>
-      ) : isAdmin ? (
+      ) : (
         tickets.map(ticket => (
           <div key={ticket.id} className={`task-card ${ticket.tier === "completed" ? "completed" : ""}`}>
             <div className="task-title">{ticket.title}</div>
@@ -37,65 +92,27 @@ function TierSection({ title, tickets, onMove, onDraftChange, onSend, isAdmin, u
                 className="task-input"
               />
               <button
-                onClick={() => onSend(ticket.id)}
+                onClick={() => (isLoggedIn ? onSend(ticket.id) : showLoginModal())}
                 className={`btn primary ${!ticket.draft ? "opacity-50 cursor-not-allowed" : ""}`}
                 disabled={!ticket.draft}
               >
                 Send
               </button>
-              {ticket.tier !== "completed" && (
+              {isAdmin && ticket.tier !== "completed" && (
                 <button onClick={() => onMove(ticket.id, "completed")} className="btn success">Complete</button>
               )}
-              {ticket.tier === "current" && (
+              {isAdmin && ticket.tier === "current" && (
                 <button onClick={() => onMove(ticket.id, "next")} className="btn warning">Backlog</button>
               )}
-              {ticket.tier === "next" && (
+              {isAdmin && ticket.tier === "next" && (
                 <button onClick={() => onMove(ticket.id, "current")} className="btn info">Escalate</button>
+              )}
+              {isAdmin && (
+                <button onClick={() => onDelete(ticket.id)} className="btn bg-red-600 hover:bg-red-700">Delete</button>
               )}
             </div>
           </div>
         ))
-      ) : (
-        tickets
-          .filter(ticket => ticket.created_by === userId)
-          .map(ticket => (
-            <div key={ticket.id} className={`task-card ${ticket.tier === "completed" ? "completed" : ""}`}>
-              <div className="task-title">{ticket.title}</div>
-              <div className="task-meta">Assigned to {ticket.assigned_to}</div>
-              <div className="task-updates">
-                {ticket.updates.map((u, i) => (
-                  <div key={i} className="task-update">
-                    <strong>{u.author}</strong>: {u.content}{" "}
-                    <small>{new Date(u.date).toLocaleDateString()}</small>
-                  </div>
-                ))}
-              </div>
-              <div className="task-controls">
-                <input
-                  placeholder="Write comment..."
-                  value={ticket.draft || ""}
-                  onChange={e => onDraftChange(ticket.id, e.target.value)}
-                  className="task-input"
-                />
-                <button
-                  onClick={() => onSend(ticket.id)}
-                  className={`btn primary ${!ticket.draft ? "opacity-50 cursor-not-allowed" : ""}`}
-                  disabled={!ticket.draft}
-                >
-                  Send
-                </button>
-                {ticket.tier !== "completed" && (
-                  <button onClick={() => onMove(ticket.id, "completed")} className="btn success">Complete</button>
-                )}
-                {ticket.tier === "current" && (
-                  <button onClick={() => onMove(ticket.id, "next")} className="btn warning">Backlog</button>
-                )}
-                {ticket.tier === "next" && (
-                  <button onClick={() => onMove(ticket.id, "current")} className="btn info">Escalate</button>
-                )}
-              </div>
-            </div>
-          ))
       )}
     </div>
   );
@@ -107,7 +124,9 @@ function Dashboard() {
   const [newTicket, setNewTicket] = useState({ title: "", assigned_to: "Disney" });
   const [notification, setNotification] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userId, setUserId] = useState(null);
+  const [showLogin, setShowLogin] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -115,6 +134,7 @@ function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
+        setIsLoggedIn(true);
         const { data, error } = await supabase
           .from("users")
           .select("is_admin")
@@ -139,11 +159,10 @@ function Dashboard() {
 
   async function createTicket() {
     if (!newTicket.title) return;
-    const { data: { user } } = await supabase.auth.getUser();
     await supabase.from("tickets").insert([
       {
         ...newTicket,
-        created_by: user.id,
+        created_by: userId || "anonymous",
         created: new Date().toISOString(),
         tier: "next",
         updates: []
@@ -176,6 +195,15 @@ function Dashboard() {
     fetchTickets();
   }
 
+  async function deleteTicket(id) {
+    await supabase
+      .from("tickets")
+      .delete()
+      .eq("id", id);
+    notify("Ticket deleted");
+    fetchTickets();
+  }
+
   function notify(msg) {
     setNotification(msg);
     setTimeout(() => setNotification(""), 2000);
@@ -183,6 +211,15 @@ function Dashboard() {
 
   return (
     <div className="container">
+      {showLogin && (
+        <LoginModal
+          onClose={() => setShowLogin(false)}
+          onLogin={() => {
+            setIsLoggedIn(true);
+            fetchUser();
+          }}
+        />
+      )}
       <header className="header">
         <button
           onClick={() => navigate("/")}
@@ -192,15 +229,27 @@ function Dashboard() {
         </button>
         <h1 className="app-title">Ticket Tracker</h1>
         <div className="flex items-center gap-4">
-          <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              navigate("/");
-            }}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
-          >
-            Logout
-          </button>
+          {isLoggedIn ? (
+            <button
+              onClick={async () => {
+                await supabase.auth.signOut();
+                setIsLoggedIn(false);
+                setUserId(null);
+                setIsAdmin(false);
+                navigate("/");
+              }}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+            >
+              Logout
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowLogin(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            >
+              Login
+            </button>
+          )}
         </div>
       </header>
 
@@ -233,8 +282,11 @@ function Dashboard() {
             onMove={moveTier}
             onDraftChange={(id, text) => setTickets(ts => ts.map(t => (t.id === id ? { ...t, draft: text } : t)))}
             onSend={sendComment}
+            onDelete={deleteTicket}
             isAdmin={isAdmin}
+            isLoggedIn={isLoggedIn}
             userId={userId}
+            showLoginModal={() => setShowLogin(true)}
           />
           <TierSection
             title="Next Up"
@@ -242,8 +294,11 @@ function Dashboard() {
             onMove={moveTier}
             onDraftChange={(id, text) => setTickets(ts => ts.map(t => (t.id === id ? { ...t, draft: text } : t)))}
             onSend={sendComment}
+            onDelete={deleteTicket}
             isAdmin={isAdmin}
+            isLoggedIn={isLoggedIn}
             userId={userId}
+            showLoginModal={() => setShowLogin(true)}
           />
           <TierSection
             title="Completed"
@@ -251,8 +306,11 @@ function Dashboard() {
             onMove={() => {}}
             onDraftChange={(id, text) => setTickets(ts => ts.map(t => (t.id === id ? { ...t, draft: text } : t)))}
             onSend={sendComment}
+            onDelete={deleteTicket}
             isAdmin={isAdmin}
+            isLoggedIn={isLoggedIn}
             userId={userId}
+            showLoginModal={() => setShowLogin(true)}
           />
         </>
       )}
