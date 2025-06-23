@@ -2,10 +2,15 @@
 export default {
   content: [
     './index.html',
-    './main.jsx'
+    './main.jsx',
+    './App.jsx',
+    './Dashboard.jsx',
+    './LandingPage.jsx',
+    './LoginPage.jsx',
+    './ProtectedRoute.jsx',
   ],
   theme: {
-    extend: {}
+    extend: {},
   },
-  plugins: []
-}
+  plugins: [],
+};
