@@ -1,11 +1,11 @@
 .landing-container {
-  @apply min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4;
+  @apply min-h-screen bg-black flex flex-col items-center justify-center p-6;
 }
 
 .link-grid {
-  @apply grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8;
+  @apply grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10;
 }
 
 .link-btn {
-  @apply bg-gray-800 text-white px-4 py-2 rounded-lg text-center hover:bg-gray-700;
+  @apply bg-gray-900 text-gray-200 px-5 py-3 rounded-none border border-gray-700 text-center uppercase tracking-wide font-semibold hover:bg-gray-800;
 }
