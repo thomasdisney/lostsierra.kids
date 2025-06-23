@@ -13,18 +13,29 @@ function LoginPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    const { error } = isSignup
-      ? await signup(email, password)
-      : await login(email, password);
-    if (error) {
-      setError(error.message);
-    } else {
-      navigate("/dashboard");
+    try {
+      const { error } = isSignup
+        ? await signup(email, password)
+        : await login(email, password);
+      if (error) {
+        setError(error.message);
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (err) {
+      setError("An unexpected error occurred");
+      console.error(err);
     }
   }
 
   return (
     <div className="login-container">
+      <button
+        onClick={() => navigate("/")}
+        className="mb-4 text-blue-400 hover:underline"
+      >
+        Back
+      </button>
       <h1 className="text-3xl font-bold text-white mb-6">
         {isSignup ? "Sign Up" : "Login"}
       </h1>
