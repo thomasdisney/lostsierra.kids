@@ -31,9 +31,9 @@ function LoginModal({ onClose, onLogin }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-gray-800 p-6 rounded-lg w-full max-w-sm">
-        <h2 className="text-2xl font-bold text-white mb-4">Login to Comment</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+      <div className="bg-gray-900 p-6 border border-gray-700 w-full max-w-sm">
+        <h2 className="text-2xl font-bold text-gray-200 mb-4 uppercase tracking-wide">Login to Comment</h2>
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <input
             type="email"
@@ -54,7 +54,7 @@ function LoginModal({ onClose, onLogin }) {
         </form>
         <button
           onClick={onClose}
-          className="mt-4 text-blue-400 hover:underline"
+          className="mt-4 text-blue-500 hover:underline"
         >
           Cancel
         </button>
@@ -223,7 +223,7 @@ function Dashboard() {
       <header className="header">
         <button
           onClick={() => navigate("/")}
-          className="text-blue-400 hover:underline mr-4"
+          className="text-blue-500 hover:underline mr-4"
         >
           Back
         </button>
@@ -238,14 +238,14 @@ function Dashboard() {
                 setIsAdmin(false);
                 navigate("/");
               }}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+              className="bg-red-600 text-gray-200 px-4 py-2 rounded-none border border-gray-700 hover:bg-red-700"
             >
               Logout
             </button>
           ) : (
             <button
               onClick={() => setShowLogin(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+              className="bg-blue-600 text-gray-200 px-4 py-2 rounded-none border border-gray-700 hover:bg-blue-700"
             >
               Login
             </button>
