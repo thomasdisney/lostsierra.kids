@@ -1,31 +1,29 @@
-/* Tailwind directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Global styles for dark theme consistency */
 body {
-  @apply bg-gray-900 text-white;
+  @apply bg-black text-gray-200 font-mono;
 }
 
 .container {
-  @apply max-w-7xl mx-auto p-4;
+  @apply max-w-5xl mx-auto p-6;
 }
 
 .header {
-  @apply flex justify-between items-center mb-8;
+  @apply flex justify-between items-center mb-10 border-b border-gray-700 pb-4;
 }
 
 .app-title {
-  @apply text-3xl font-bold;
+  @apply text-4xl font-bold uppercase tracking-wider;
 }
 
 .new-task-form {
-  @apply mb-8 bg-gray-800 p-6 rounded-lg;
+  @apply mb-10 bg-gray-900 p-6 border border-gray-700 shadow-lg;
 }
 
 .task-input {
-  @apply bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:outline-none focus:border-blue-600;
+  @apply bg-gray-800 text-gray-200 p-4 rounded-none border border-gray-700 focus:outline-none focus:border-blue-500 transition-all;
 }
 
 .task-input.wide {
@@ -37,7 +35,7 @@ body {
 }
 
 .btn {
-  @apply px-4 py-2 rounded-lg text-white font-semibold;
+  @apply px-5 py-3 rounded-none text-gray-200 font-semibold uppercase tracking-wide border border-gray-700;
 }
 
 .btn.primary {
@@ -57,23 +55,23 @@ body {
 }
 
 .tier-section {
-  @apply mb-8;
+  @apply mb-10;
 }
 
 .tier-title {
-  @apply text-2xl font-semibold mb-4;
+  @apply text-2xl font-bold uppercase tracking-wide mb-4 border-l-4 border-blue-500 pl-3;
 }
 
 .tier-empty {
-  @apply text-gray-400 italic;
+  @apply text-gray-500 italic;
 }
 
 .task-card {
-  @apply bg-gray-800 p-4 rounded-lg mb-4 border border-gray-700;
+  @apply bg-gray-900 p-5 border border-gray-700 mb-4 shadow-md;
 }
 
 .task-card.completed {
-  @apply opacity-75 bg-gray-700;
+  @apply opacity-70 bg-gray-800;
 }
 
 .task-title {
@@ -81,7 +79,7 @@ body {
 }
 
 .task-meta {
-  @apply text-gray-400 mb-2;
+  @apply text-gray-500 mb-2;
 }
 
 .task-updates {
@@ -89,21 +87,17 @@ body {
 }
 
 .task-update {
-  @apply text-sm text-gray-300 mb-1;
+  @apply text-sm text-gray-400 mb-1;
 }
 
 .task-controls {
-  @apply flex gap-2 items-center;
+  @apply flex gap-3 items-center;
 }
 
 .notification {
-  @apply fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg;
+  @apply fixed top-4 right-4 bg-blue-600 text-gray-200 px-4 py-2 border border-gray-700 shadow-lg;
 }
 
 .loading {
-  @apply text-center text-gray-400;
-}
-
-.project-select {
-  @apply bg-gray-700 text-white p-2 rounded-lg border border-gray-600;
+  @apply text-center text-gray-500;
 }
