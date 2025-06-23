@@ -109,8 +109,8 @@ function Dashboard() {
         created_by: "You",
         created: new Date().toISOString(),
         tier: "next",
-        updates: [],
-      },
+        updates: []
+      }
     ]);
     setNewTask({ title: "", assigned_to: "" });
     notify("Task created");
@@ -148,17 +148,28 @@ function Dashboard() {
     <div className="container">
       <header className="header">
         <h1 className="app-title">Project Tracker</h1>
-        <select
-          value={activeProjectId || ""}
-          onChange={e => setActiveProjectId(e.target.value)}
-          className="project-select"
-        >
-          {projects.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-4">
+          <select
+            value={activeProjectId || ""}
+            onChange={e => setActiveProjectId(e.target.value)}
+            className="project-select"
+          >
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+              window.location.href = "/login";
+            }}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
       <section className="new-task-form">
@@ -169,9 +180,7 @@ function Dashboard() {
           onChange={e => setNewProjectName(e.target.value)}
           className="task-input wide"
         />
-        <button onClick={createProject} className="btn info">
-          Create Project
-        </button>
+        <button onClick={createProject} className="btn info">Create Project</button>
       </section>
 
       {notification && <div className="notification">{notification}</div>}
@@ -190,9 +199,7 @@ function Dashboard() {
           onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value })}
           className="task-input narrow"
         />
-        <button onClick={createTask} className="btn primary">
-          Add Task
-        </button>
+        <button onClick={createTask} className="btn primary">Add Task</button>
       </section>
 
       {loading ? (
