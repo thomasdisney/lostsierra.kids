@@ -11,13 +11,16 @@ const supabase = createClient(
 function LoginModal({ onClose, onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSignup, setIsSignup] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleLogin(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = isSignup
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setError(error.message);
       } else {
@@ -33,8 +36,8 @@ function LoginModal({ onClose, onLogin }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
       <div className="bg-gray-900 p-6 border border-gray-700 w-full max-w-sm">
-        <h2 className="text-2xl font-bold text-gray-200 mb-4 uppercase tracking-wide">Login to Comment</h2>
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+        <h2 className="text-2xl font-bold text-gray-200 mb-4 uppercase tracking-wide">{isSignup ? "Create Account" : "Login"}</h2>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <input
             type="email"
             placeholder="Email"
@@ -49,12 +52,18 @@ function LoginModal({ onClose, onLogin }) {
             onChange={e => setPassword(e.target.value)}
             className="task-input"
           />
-          <button type="submit" className="btn primary">Login</button>
+          <button type="submit" className="btn primary">{isSignup ? "Sign Up" : "Login"}</button>
           {error && <p className="text-red-500 text-sm">{error}</p>}
         </form>
         <button
-          onClick={onClose}
+          onClick={() => setIsSignup(!isSignup)}
           className="mt-4 text-blue-500 hover:underline"
+        >
+          {isSignup ? "Already have an account? Login" : "Need an account? Sign Up"}
+        </button>
+        <button
+          onClick={onClose}
+          className="mt-2 text-blue-500 hover:underline"
         >
           Cancel
         </button>
@@ -75,7 +84,7 @@ function TierSection({ title, tickets, onMove, onDraftChange, onSend, onDelete, 
         tickets.map(ticket => (
           <div key={ticket.id} className={`task-card ${ticket.tier === "completed" ? "completed" : ""}`}>
             <div className="task-title">{ticket.title}</div>
-            <div className="task-meta">Assigned to {ticket.assigned_to}</div>
+            <div className="task-meta">Assigned to {ticket.assigned_to} | Created by {ticket.created_by}</div>
             <div className="task-updates">
               {ticket.updates.map((u, i) => (
                 <div key={i} className="task-update">
@@ -90,11 +99,12 @@ function TierSection({ title, tickets, onMove, onDraftChange, onSend, onDelete, 
                 value={ticket.draft || ""}
                 onChange={e => onDraftChange(ticket.id, e.target.value)}
                 className="task-input"
+                disabled={!isLoggedIn}
               />
               <button
                 onClick={() => (isLoggedIn ? onSend(ticket.id) : showLoginModal())}
-                className={`btn primary ${!ticket.draft ? "opacity-50 cursor-not-allowed" : ""}`}
-                disabled={!ticket.draft}
+                className={`btn primary ${!ticket.draft || !isLoggedIn ? "opacity-50 cursor-not-allowed" : ""}`}
+                disabled={!ticket.draft || !isLoggedIn}
               >
                 Send
               </button>
@@ -126,6 +136,7 @@ function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userId, setUserId] = useState(null);
+  const [userEmail, setUserEmail] = useState(null);
   const [showLogin, setShowLogin] = useState(false);
   const navigate = useNavigate();
 
@@ -134,6 +145,7 @@ function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
+        setUserEmail(user.email);
         setIsLoggedIn(true);
         const { data, error } = await supabase
           .from("users")
@@ -162,7 +174,7 @@ function Dashboard() {
     await supabase.from("tickets").insert([
       {
         ...newTicket,
-        created_by: userId || "anonymous",
+        created_by: userEmail ? userEmail.split("@")[0] : "anonymous",
         created: new Date().toISOString(),
         tier: "next",
         updates: []
@@ -174,8 +186,9 @@ function Dashboard() {
   }
 
   async function sendComment(id) {
+    if (!isLoggedIn) return;
     const ticket = tickets.find(t => t.id === id);
-    const update = { author: userId, content: ticket.draft, date: new Date().toISOString() };
+    const update = { author: userEmail.split("@")[0], content: ticket.draft, date: new Date().toISOString() };
     await supabase
       .from("tickets")
       .update({ updates: [...ticket.updates, update] })
@@ -185,8 +198,9 @@ function Dashboard() {
   }
 
   async function moveTier(id, tier) {
+    if (!isAdmin) return;
     const ticket = tickets.find(t => t.id === id);
-    const update = { author: userId, content: `Moved to ${tier}`, date: new Date().toISOString() };
+    const update = { author: userEmail.split("@")[0], content: `Moved to ${tier}`, date: new Date().toISOString() };
     await supabase
       .from("tickets")
       .update({ tier, updates: [...ticket.updates, update] })
@@ -196,6 +210,7 @@ function Dashboard() {
   }
 
   async function deleteTicket(id) {
+    if (!isAdmin) return;
     await supabase
       .from("tickets")
       .delete()
@@ -235,6 +250,7 @@ function Dashboard() {
                 await supabase.auth.signOut();
                 setIsLoggedIn(false);
                 setUserId(null);
+                setUserEmail(null);
                 setIsAdmin(false);
                 navigate("/");
               }}
