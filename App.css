@@ -71,7 +71,7 @@ body {
 }
 
 .task-card.completed {
-  @apply opacity-70 bg-gray-850;
+  @apply opacity-70 bg-gray-800; 
 }
 
 .task-title {
