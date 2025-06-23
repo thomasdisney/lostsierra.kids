@@ -1,24 +1,28 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { getUser } from "./auth";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 function ProtectedRoute({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
 
   useEffect(() => {
     async function checkAuth() {
-      const { data, error } = await getUser();
+      const { data, error } = await supabase.auth.getUser();
       setIsAuthenticated(!!data.user && !error);
     }
     checkAuth();
 
-    // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       setIsAuthenticated(!!session?.user);
     });
 
     return () => {
-      authListener.subscription.unsubscribe();
+      authListener.subscription?.unsubscribe();
     };
   }, []);
 
