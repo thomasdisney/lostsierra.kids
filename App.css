@@ -15,7 +15,7 @@ body {
 }
 
 .app-title {
-  @apply text-4xl font-bold uppercase tracking-wider;
+  @apply text-4xl font-bold uppercase tracking-wider text-gray-100;
 }
 
 .new-task-form {
@@ -59,7 +59,7 @@ body {
 }
 
 .tier-title {
-  @apply text-2xl font-bold uppercase tracking-wide mb-4 border-l-4 border-blue-500 pl-3;
+  @apply text-2xl font-bold uppercase tracking-wide mb-4 border-l-4 border-blue-500 pl-3 text-gray-100;
 }
 
 .tier-empty {
@@ -75,7 +75,7 @@ body {
 }
 
 .task-title {
-  @apply text-xl font-bold mb-2;
+  @apply text-xl font-bold mb-2 text-gray-100; /* Improved contrast */
 }
 
 .task-meta {
