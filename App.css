@@ -52,19 +52,19 @@ body {
 }
 
 .action-card {
-  @apply relative w-full rounded-3xl px-6 py-6 bg-slate-900/70 border border-slate-800 shadow-[0_20px_45px_-30px_rgba(30,64,175,0.75)];
-  transition: transform 160ms ease, box-shadow 160ms ease, border 160ms ease;
+  @apply relative w-full rounded-3xl px-6 py-6 bg-slate-900/70 border border-slate-800 shadow-[0_16px_38px_-28px_rgba(30,64,175,0.55)];
+  transition: transform 140ms ease, box-shadow 140ms ease, border 140ms ease;
 }
 
 .action-card:hover {
-  transform: translateY(-4px) scale(1.01);
-  box-shadow: 0 28px 50px -32px rgba(56, 189, 248, 0.9);
-  border-color: rgba(148, 163, 184, 0.35);
+  transform: translateY(-2px) scale(1.005);
+  box-shadow: 0 22px 46px -34px rgba(56, 189, 248, 0.6);
+  border-color: rgba(148, 163, 184, 0.25);
 }
 
 .action-card.dragging {
-  transform: scale(1.02) rotate(-0.6deg);
-  box-shadow: 0 32px 60px -28px rgba(56, 189, 248, 0.9);
+  transform: scale(1.01) rotate(-0.35deg);
+  box-shadow: 0 26px 48px -32px rgba(56, 189, 248, 0.55);
 }
 
 .action-meta {
@@ -108,13 +108,13 @@ body {
 }
 
 .primary-action {
-  @apply mt-6 inline-flex items-center justify-center px-6 py-3 rounded-2xl text-sm font-semibold text-slate-950 bg-sky-300 shadow-lg shadow-sky-500/30;
-  transition: transform 160ms ease, box-shadow 160ms ease;
+  @apply mt-6 inline-flex items-center justify-center px-6 py-3 rounded-2xl text-sm font-semibold text-slate-950 bg-sky-300 shadow-md shadow-sky-500/25;
+  transition: transform 140ms ease, box-shadow 140ms ease;
 }
 
 .primary-action:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 32px -18px rgba(125, 211, 252, 0.85);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 28px -20px rgba(125, 211, 252, 0.6);
 }
 
 .action-editable {
@@ -163,7 +163,7 @@ body {
 
 .add-action-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 18px 32px -18px rgba(74, 222, 128, 0.8);
+  box-shadow: 0 16px 28px -20px rgba(74, 222, 128, 0.6);
 }
 
 .completed-column {
@@ -222,7 +222,7 @@ body {
 }
 
 .modal-card {
-  @apply relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl shadow-sky-900/50;
+  @apply relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-xl shadow-sky-900/40;
 }
 
 .modal-close {
@@ -262,7 +262,31 @@ body {
 }
 
 .ghost-btn {
-  @apply inline-flex items-center justify-center px-4 py-2 rounded-2xl border border-slate-700/70 text-sm text-slate-300 hover:text-slate-100 transition;
+  @apply inline-flex items-center justify-center px-6 py-3 rounded-2xl border border-slate-700/70 text-sm font-semibold text-slate-300 hover:text-slate-100 transition;
+}
+
+.modal-details {
+  @apply flex flex-col gap-6;
+}
+
+.details-header {
+  @apply flex flex-col gap-3;
+}
+
+.detail-section {
+  @apply flex flex-col gap-3 bg-slate-900/70 border border-slate-800 rounded-2xl px-5 py-4;
+}
+
+.detail-section h3 {
+  @apply text-sm font-semibold uppercase tracking-[0.2em] text-slate-400;
+}
+
+.detail-card {
+  @apply bg-slate-950/40 border border-slate-800 rounded-2xl px-4 py-3 flex flex-col gap-2;
+}
+
+.detail-stack {
+  @apply flex flex-col gap-3;
 }
 
 .edit-toggle {
@@ -290,15 +314,15 @@ body {
   width: 100%;
   height: 100%;
   border-radius: 9999px;
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.3), rgba(125, 211, 252, 0.75));
-  box-shadow: 0 0 18px rgba(56, 189, 248, 0.45);
-  transition: transform 200ms ease, box-shadow 200ms ease, background 200ms ease;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(125, 211, 252, 0.6));
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
 .edit-toggle-dot.active {
-  transform: scale(1.35);
-  box-shadow: 0 0 28px rgba(56, 189, 248, 0.75);
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.9), rgba(14, 165, 233, 0.9));
+  transform: scale(1.25);
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.6);
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.75), rgba(14, 165, 233, 0.75));
 }
 
 .empty-state {

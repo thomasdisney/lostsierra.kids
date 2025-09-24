@@ -169,11 +169,13 @@ function Dashboard() {
   function handleActionTypeToggle(id, value) {
     updateAction(id, action => {
       const hasValue = action.actionTypes.includes(value);
-      return {
-        actionTypes: hasValue
-          ? action.actionTypes.filter(type => type !== value)
-          : [...action.actionTypes, value]
-      };
+      const nextTypes = hasValue
+        ? action.actionTypes.filter(type => type !== value)
+        : [...action.actionTypes, value];
+      if (nextTypes.length === 0) {
+        return { actionTypes: action.actionTypes };
+      }
+      return { actionTypes: nextTypes };
     });
   }
 
@@ -232,9 +234,13 @@ function Dashboard() {
   function handleNewActionTypeToggle(value) {
     setNewAction(prev => {
       const hasValue = prev.actionTypes.includes(value);
+      const nextTypes = hasValue ? prev.actionTypes.filter(type => type !== value) : [...prev.actionTypes, value];
+      if (nextTypes.length === 0) {
+        return prev;
+      }
       return {
         ...prev,
-        actionTypes: hasValue ? prev.actionTypes.filter(type => type !== value) : [...prev.actionTypes, value]
+        actionTypes: nextTypes
       };
     });
   }
@@ -245,6 +251,11 @@ function Dashboard() {
     setDocumentForm({ fileName: "", comment: "" });
     setApproverForm({ fullName: "", email: "", message: "" });
   }
+
+  const dialogAction = useMemo(
+    () => (dialog ? actions.find(action => action.id === dialog.actionId) ?? null : null),
+    [actions, dialog]
+  );
 
   function handlePrimaryAction(action, forcedType) {
     const primaryType = forcedType ?? action.actionTypes[0];
@@ -395,14 +406,6 @@ function Dashboard() {
                 }}
                 onDragEnd={handleDragEnd}
               >
-                <div className="action-meta">
-                  <span className="priority-pill">Priority {openActions.findIndex(item => item.id === action.id) + 1}</span>
-                  {!isEditing && (
-                    <button className="complete-btn" onClick={() => handleToggleComplete(action.id)} type="button">
-                      Mark complete
-                    </button>
-                  )}
-                </div>
                 {isEditing ? (
                   <div className="action-editable">
                     <input
@@ -472,14 +475,6 @@ function Dashboard() {
             <div className="awaiting-grid">
               {awaitingApproval.map(action => (
                 <article key={action.id} className="action-card awaiting">
-                  <div className="action-meta">
-                    <span className="priority-pill">Priority {awaitingApproval.findIndex(item => item.id === action.id) + 1}</span>
-                    {!isEditing && (
-                      <button className="complete-btn" onClick={() => handleToggleComplete(action.id)} type="button">
-                        Mark complete
-                      </button>
-                    )}
-                  </div>
                   <div className="action-content">
                     <h2>{action.title}</h2>
                     <p>{action.description || "Approvals are in progress."}</p>
@@ -547,7 +542,12 @@ function Dashboard() {
             <h3>Recently completed</h3>
             <div className="completed-grid">
               {completedActions.map(action => (
-                <button key={action.id} className="completed-pill" type="button" onClick={() => handleToggleComplete(action.id)}>
+                <button
+                  key={action.id}
+                  className="completed-pill"
+                  type="button"
+                  onClick={() => setDialog({ type: "view-completed", actionId: action.id })}
+                >
                   ✓ {action.title}
                 </button>
               ))}
@@ -660,6 +660,85 @@ function Dashboard() {
                   </button>
                 </div>
               </form>
+            )}
+            {dialog.type === "view-completed" && dialogAction && (
+              <div className="modal-details">
+                <div className="details-header">
+                  <h2>{dialogAction.title}</h2>
+                  <p className="muted">
+                    Completed {dialogAction.completedAt ? new Date(dialogAction.completedAt).toLocaleString() : "—"}
+                  </p>
+                  <div className="chip-row">
+                    {dialogAction.actionTypes.map(type => {
+                      const option = ACTION_OPTIONS.find(opt => opt.value === type);
+                      return (
+                        <span key={type} className="action-chip">
+                          {option ? option.label : type}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                <section className="detail-section">
+                  <h3>Summary</h3>
+                  <p>{dialogAction.description || "No description provided."}</p>
+                </section>
+                {dialogAction.signOffDetails && (
+                  <section className="detail-section">
+                    <h3>Sign-off</h3>
+                    <div className="detail-card">
+                      <p>
+                        Signed by <strong>{dialogAction.signOffDetails.signer}</strong>
+                      </p>
+                      {dialogAction.signOffDetails.signedAt && (
+                        <span className="muted">
+                          {new Date(dialogAction.signOffDetails.signedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </section>
+                )}
+                {dialogAction.documentSubmissions.length > 0 && (
+                  <section className="detail-section">
+                    <h3>Documents</h3>
+                    <div className="detail-stack">
+                      {dialogAction.documentSubmissions.map(submission => (
+                        <div key={submission.id} className="detail-card">
+                          <p>
+                            <strong>{submission.fileName}</strong>
+                          </p>
+                          {submission.submittedAt && (
+                            <span className="muted">{new Date(submission.submittedAt).toLocaleString()}</span>
+                          )}
+                          {submission.comment && <p className="muted">“{submission.comment}”</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                {dialogAction.approverInvites.length > 0 && (
+                  <section className="detail-section">
+                    <h3>Approvals</h3>
+                    <div className="detail-stack">
+                      {dialogAction.approverInvites.map(invite => (
+                        <div key={invite.id} className="detail-card">
+                          <p>
+                            <strong>{invite.fullName}</strong>
+                          </p>
+                          <span className="muted">{invite.email}</span>
+                          {invite.sentAt && <span className="muted">Sent {new Date(invite.sentAt).toLocaleString()}</span>}
+                          {invite.message && <p className="muted">“{invite.message}”</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                <div className="modal-actions">
+                  <button type="button" className="ghost-btn" onClick={closeDialog}>
+                    Close
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
