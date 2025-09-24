@@ -1,357 +1,320 @@
-import React, { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./App.css";
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+const ACTION_OPTIONS = [
+  { value: "submit-document", label: "Submit a document" },
+  { value: "sign-off", label: "Sign off on completion" },
+  { value: "add-approvers", label: "Add approvers" },
+  { value: "review", label: "Review progress" }
+];
 
-function LoginModal({ onClose, onLogin }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isSignup, setIsSignup] = useState(false);
-  const [error, setError] = useState("");
+const STORAGE_KEY = "tomdisney-open-actions";
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    try {
-      const { error } = isSignup
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        setError(error.message);
-      } else {
-        onLogin();
-        onClose();
-      }
-    } catch (err) {
-      setError("An unexpected error occurred");
-      console.error(err);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-gray-900 p-6 border border-gray-700 w-full max-w-sm">
-        <h2 className="text-2xl font-bold text-gray-200 mb-4 uppercase tracking-wide">{isSignup ? "Create Account" : "Login"}</h2>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="task-input"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="task-input"
-          />
-          <button type="submit" className="btn primary">{isSignup ? "Sign Up" : "Login"}</button>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-        </form>
-        <button
-          onClick={() => setIsSignup(!isSignup)}
-          className="mt-4 text-blue-500 hover:underline"
-        >
-          {isSignup ? "Already have an account? Login" : "Need an account? Sign Up"}
-        </button>
-        <button
-          onClick={onClose}
-          className="mt-2 text-blue-500 hover:underline"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
+function createBlankAction(priority) {
+  return {
+    id: crypto.randomUUID(),
+    title: "Untitled action",
+    description: "",
+    actionTypes: [ACTION_OPTIONS[0].value],
+    priority,
+    isCompleted: false
+  };
 }
 
-function TierSection({ title, tickets, onMove, onDraftChange, onSend, onDelete, isAdmin, isLoggedIn, userId, showLoginModal }) {
-  return (
-    <div className="tier-section">
-      <h2 className="tier-title">
-        {title} ({tickets.length})
-      </h2>
-      {tickets.length === 0 ? (
-        <p className="tier-empty">No tickets here.</p>
-      ) : (
-        tickets.map(ticket => (
-          <div key={ticket.id} className={`task-card ${ticket.tier === "completed" ? "completed" : ""}`}>
-            <div className="task-title">{ticket.title}</div>
-            <div className="task-meta">Assigned to {ticket.assigned_to} | Created by {ticket.created_by}</div>
-            <div className="task-updates">
-              {ticket.updates.map((u, i) => (
-                <div key={i} className="task-update">
-                  <strong>{u.author}</strong>: {u.content}{" "}
-                  <small>{new Date(u.date).toLocaleDateString()}</small>
-                </div>
-              ))}
-            </div>
-            <div className="task-controls">
-              <input
-                placeholder="Write comment..."
-                value={ticket.draft || ""}
-                onChange={e => onDraftChange(ticket.id, e.target.value)}
-                className="task-input"
-                disabled={!isLoggedIn}
-              />
-              <button
-                onClick={() => (isLoggedIn ? onSend(ticket.id) : showLoginModal())}
-                className={`btn primary ${!ticket.draft || !isLoggedIn ? "opacity-50 cursor-not-allowed" : ""}`}
-                disabled={!ticket.draft || !isLoggedIn}
-              >
-                Send
-              </button>
-              {isAdmin && ticket.tier !== "completed" && (
-                <button onClick={() => onMove(ticket.id, "completed")} className="btn success">Complete</button>
-              )}
-              {isAdmin && ticket.tier === "current" && (
-                <button onClick={() => onMove(ticket.id, "next")} className="btn warning">Backlog</button>
-              )}
-              {isAdmin && ticket.tier === "next" && (
-                <button onClick={() => onMove(ticket.id, "current")} className="btn info">Escalate</button>
-              )}
-              {isAdmin && (
-                <button onClick={() => onDelete(ticket.id)} className="btn bg-red-600 hover:bg-red-700">Delete</button>
-              )}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
+function getInitialActions() {
+  const stored = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (err) {
+      console.error("Failed to read stored actions", err);
+    }
+  }
+  return [
+    {
+      id: crypto.randomUUID(),
+      title: "Submit the integration packet",
+      description: "Bundle the final drawings, safety analysis, and vendor sign-offs, then upload them to the shared workspace.",
+      actionTypes: ["submit-document", "add-approvers"],
+      priority: 0,
+      isCompleted: false
+    },
+    {
+      id: crypto.randomUUID(),
+      title: "Circulate completion sign-off",
+      description: "Confirm that the hand-off checklist is complete and route it for signatures from operations and QA.",
+      actionTypes: ["sign-off", "review"],
+      priority: 1,
+      isCompleted: false
+    },
+    {
+      id: crypto.randomUUID(),
+      title: "Invite additional approvers",
+      description: "Loop in procurement for the parts order so they can add their approval criteria.",
+      actionTypes: ["add-approvers"],
+      priority: 2,
+      isCompleted: false
+    }
+  ];
 }
 
 function Dashboard() {
-  const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [newTicket, setNewTicket] = useState({ title: "", assigned_to: "Disney" });
-  const [notification, setNotification] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userId, setUserId] = useState(null);
-  const [userEmail, setUserEmail] = useState(null);
-  const [showLogin, setShowLogin] = useState(false);
   const navigate = useNavigate();
+  const [actions, setActions] = useState(() => getInitialActions());
+  const [isEditing, setIsEditing] = useState(false);
+  const [draggedId, setDraggedId] = useState(null);
+  const [newAction, setNewAction] = useState(() => createBlankAction(0));
 
   useEffect(() => {
-    fetchUser();
-    fetchTickets();
-  }, []);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(actions));
+  }, [actions]);
 
-  async function fetchUser() {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
+  const openActions = useMemo(() => actions.filter(action => !action.isCompleted).sort((a, b) => a.priority - b.priority), [actions]);
+  const completedActions = useMemo(
+    () => actions.filter(action => action.isCompleted).sort((a, b) => a.priority - b.priority),
+    [actions]
+  );
 
-    if (error) {
-      console.error("Failed to fetch user", error);
+  function updateAction(id, updater) {
+    setActions(prev => {
+      const updated = prev.map(action => (action.id === id ? { ...action, ...updater(action) } : action));
+      return syncPriorities(updated);
+    });
+  }
+
+  function syncPriorities(list) {
+    const sorted = [...list].sort((a, b) => a.priority - b.priority);
+    const open = sorted.filter(a => !a.isCompleted);
+    const completed = sorted.filter(a => a.isCompleted);
+    const remapped = [
+      ...open.map((action, index) => ({ ...action, priority: index })),
+      ...completed.map((action, index) => ({ ...action, priority: open.length + index }))
+    ];
+    remapped.sort((a, b) => a.priority - b.priority);
+    return remapped;
+  }
+
+  function handleToggleComplete(id) {
+    setActions(prev => {
+      const updated = prev.map(action => (action.id === id ? { ...action, isCompleted: !action.isCompleted } : action));
+      return syncPriorities(updated);
+    });
+  }
+
+  function handleActionTypeToggle(id, value) {
+    updateAction(id, action => {
+      const hasValue = action.actionTypes.includes(value);
+      return {
+        actionTypes: hasValue
+          ? action.actionTypes.filter(type => type !== value)
+          : [...action.actionTypes, value]
+      };
+    });
+  }
+
+  function handleDragStart(id) {
+    setDraggedId(id);
+  }
+
+  function handleDragEnter(targetId) {
+    if (!draggedId || draggedId === targetId) return;
+    setActions(prev => {
+      const openList = prev.filter(action => !action.isCompleted).sort((a, b) => a.priority - b.priority);
+      const draggedIndex = openList.findIndex(action => action.id === draggedId);
+      const targetIndex = openList.findIndex(action => action.id === targetId);
+      if (draggedIndex === -1 || targetIndex === -1) {
+        return prev;
+      }
+      const reordered = [...openList];
+      const [removed] = reordered.splice(draggedIndex, 1);
+      reordered.splice(targetIndex, 0, removed);
+      const completedList = prev.filter(action => action.isCompleted).sort((a, b) => a.priority - b.priority);
+      const recombined = [...reordered, ...completedList];
+      return recombined.map((action, index) => ({ ...action, priority: index }));
+    });
+  }
+
+  function handleDragEnd() {
+    setDraggedId(null);
+  }
+
+  function handleAddAction() {
+    if (!newAction.title.trim()) {
       return;
     }
-
-    if (user) {
-      setUserId(user.id);
-      setUserEmail(user.email);
-      setIsLoggedIn(true);
-
-      const { data, error: profileError } = await supabase
-        .from("users")
-        .select("is_admin")
-        .eq("id", user.id)
-        .single();
-
-      if (!profileError && data) {
-        setIsAdmin(data.is_admin);
-      } else if (profileError) {
-        console.error("Failed to fetch user profile", profileError);
-        setIsAdmin(false);
-      }
-    } else {
-      setIsLoggedIn(false);
-      setUserId(null);
-      setUserEmail(null);
-      setIsAdmin(false);
-    }
+    setActions(prev => {
+      const nextPriority = prev.filter(action => !action.isCompleted).length;
+      const actionToAdd = {
+        ...newAction,
+        id: crypto.randomUUID(),
+        priority: nextPriority,
+        isCompleted: false
+      };
+      return [...prev, actionToAdd];
+    });
+    setNewAction(createBlankAction(0));
   }
 
-  async function fetchTickets() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("tickets")
-      .select("*")
-      .order("created", { ascending: true });
-    if (!error) setTickets(data.map(t => ({ ...t, draft: "" })));
-    setLoading(false);
+  function handleNewActionTypeToggle(value) {
+    setNewAction(prev => {
+      const hasValue = prev.actionTypes.includes(value);
+      return {
+        ...prev,
+        actionTypes: hasValue ? prev.actionTypes.filter(type => type !== value) : [...prev.actionTypes, value]
+      };
+    });
   }
 
-  async function createTicket() {
-    if (!newTicket.title) return;
-    await supabase.from("tickets").insert([
-      {
-        ...newTicket,
-        created_by: userEmail ? userEmail.split("@")[0] : "anonymous",
-        created: new Date().toISOString(),
-        tier: "next",
-        updates: []
-      }
-    ]);
-    setNewTicket({ title: "", assigned_to: "Disney" });
-    notify("Ticket created");
-    fetchTickets();
-  }
-
-  async function sendComment(id) {
-    if (!isLoggedIn) return;
-    const ticket = tickets.find(t => t.id === id);
-    const update = { author: userEmail.split("@")[0], content: ticket.draft, date: new Date().toISOString() };
-    await supabase
-      .from("tickets")
-      .update({ updates: [...ticket.updates, update] })
-      .eq("id", id);
-    notify("Comment sent");
-    fetchTickets();
-  }
-
-  async function moveTier(id, tier) {
-    if (!isAdmin) return;
-    const ticket = tickets.find(t => t.id === id);
-    const update = { author: userEmail.split("@")[0], content: `Moved to ${tier}`, date: new Date().toISOString() };
-    await supabase
-      .from("tickets")
-      .update({ tier, updates: [...ticket.updates, update] })
-      .eq("id", id);
-    notify("Ticket moved");
-    fetchTickets();
-  }
-
-  async function deleteTicket(id) {
-    if (!isAdmin) return;
-    await supabase
-      .from("tickets")
-      .delete()
-      .eq("id", id);
-    notify("Ticket deleted");
-    fetchTickets();
-  }
-
-  function notify(msg) {
-    setNotification(msg);
-    setTimeout(() => setNotification(""), 2000);
-  }
+  const primaryActionLabel = action => {
+    const label = ACTION_OPTIONS.find(option => option.value === action.actionTypes[0]);
+    return label ? label.label : "Take action";
+  };
 
   return (
-    <div className="container">
-      {showLogin && (
-        <LoginModal
-          onClose={() => setShowLogin(false)}
-          onLogin={() => {
-            setIsLoggedIn(true);
-            fetchUser();
-          }}
-        />
-      )}
-      <header className="header">
-        <button
-          onClick={() => navigate("/")}
-          className="text-blue-500 hover:underline mr-4"
-        >
-          Back
-        </button>
-        <h1 className="app-title">Ticket Tracker</h1>
-        <div className="flex items-center gap-4">
-          {isLoggedIn ? (
-            <button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                setIsLoggedIn(false);
-                setUserId(null);
-                setUserEmail(null);
-                setIsAdmin(false);
-                navigate("/");
-              }}
-              className="bg-red-600 text-gray-200 px-4 py-2 rounded-none border border-gray-700 hover:bg-red-700"
-            >
-              Logout
-            </button>
+    <div className="dashboard-shell">
+      <button className="edit-toggle" onClick={() => setIsEditing(prev => !prev)} aria-label="Toggle editing">
+        <span className={`edit-toggle-dot ${isEditing ? "active" : ""}`} />
+      </button>
+      <div className="actions-wrapper">
+        <header className="actions-header">
+          <button onClick={() => navigate("/")} className="back-link" type="button">
+            ← back
+          </button>
+          <div>
+            <h1>Action hub</h1>
+            <p>Prioritize the next moves and glide each action to done.</p>
+          </div>
+        </header>
+        <section className="priority-column" aria-live="polite">
+          {openActions.length === 0 ? (
+            <div className="empty-state">
+              <h2>All actions are complete</h2>
+              <p>Take a breather or add what comes next.</p>
+            </div>
           ) : (
-            <button
-              onClick={() => setShowLogin(true)}
-              className="bg-blue-600 text-gray-200 px-4 py-2 rounded-none border border-gray-700 hover:bg-blue-700"
-            >
-              Login
-            </button>
+            openActions.map(action => (
+              <article
+                key={action.id}
+                className={`action-card ${draggedId === action.id ? "dragging" : ""}`}
+                draggable={isEditing}
+                onDragStart={() => handleDragStart(action.id)}
+                onDragOver={event => {
+                  event.preventDefault();
+                  if (isEditing) {
+                    handleDragEnter(action.id);
+                  }
+                }}
+                onDragEnd={handleDragEnd}
+              >
+                <div className="action-meta">
+                  <span className="priority-pill">Priority {openActions.findIndex(item => item.id === action.id) + 1}</span>
+                  {!isEditing && (
+                    <button className="complete-btn" onClick={() => handleToggleComplete(action.id)} type="button">
+                      Mark complete
+                    </button>
+                  )}
+                </div>
+                {isEditing ? (
+                  <div className="action-editable">
+                    <input
+                      value={action.title}
+                      onChange={event => updateAction(action.id, () => ({ title: event.target.value }))}
+                      className="action-input title"
+                      placeholder="Action title"
+                    />
+                    <textarea
+                      value={action.description}
+                      onChange={event => updateAction(action.id, () => ({ description: event.target.value }))}
+                      className="action-input description"
+                      placeholder="Describe the next move"
+                    />
+                    <div className="checkbox-grid">
+                      {ACTION_OPTIONS.map(option => (
+                        <label key={option.value} className="checkbox-chip">
+                          <input
+                            type="checkbox"
+                            checked={action.actionTypes.includes(option.value)}
+                            onChange={() => handleActionTypeToggle(action.id, option.value)}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="action-content">
+                    <h2>{action.title}</h2>
+                    <p>{action.description || "Add a description so everyone knows the objective."}</p>
+                    <div className="chip-row">
+                      {action.actionTypes.map(type => {
+                        const option = ACTION_OPTIONS.find(opt => opt.value === type);
+                        return (
+                          <span key={type} className="action-chip">
+                            {option ? option.label : type}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <button className="primary-action" type="button" onClick={() => handleToggleComplete(action.id)}>
+                      {primaryActionLabel(action)}
+                    </button>
+                  </div>
+                )}
+              </article>
+            ))
           )}
-        </div>
-      </header>
-
-      {notification && <div className="notification">{notification}</div>}
-
-      <section className="new-task-form">
-        <h2>New Ticket</h2>
-        <input
-          placeholder="Title"
-          value={newTicket.title}
-          onChange={e => setNewTicket({ ...newTicket, title: e.target.value })}
-          className="task-input wide"
-        />
-        <input
-          placeholder="Assign to"
-          value={newTicket.assigned_to}
-          disabled
-          className="task-input narrow opacity-50"
-        />
-        <button onClick={createTicket} className="btn primary">Add Ticket</button>
-      </section>
-
-      {loading ? (
-        <p className="loading">Loading tickets…</p>
-      ) : (
-        <>
-          <TierSection
-            title="Current"
-            tickets={tickets.filter(t => t.tier === "current")}
-            onMove={moveTier}
-            onDraftChange={(id, text) => setTickets(ts => ts.map(t => (t.id === id ? { ...t, draft: text } : t)))}
-            onSend={sendComment}
-            onDelete={deleteTicket}
-            isAdmin={isAdmin}
-            isLoggedIn={isLoggedIn}
-            userId={userId}
-            showLoginModal={() => setShowLogin(true)}
-          />
-          <TierSection
-            title="Next Up"
-            tickets={tickets.filter(t => t.tier === "next")}
-            onMove={moveTier}
-            onDraftChange={(id, text) => setTickets(ts => ts.map(t => (t.id === id ? { ...t, draft: text } : t)))}
-            onSend={sendComment}
-            onDelete={deleteTicket}
-            isAdmin={isAdmin}
-            isLoggedIn={isLoggedIn}
-            userId={userId}
-            showLoginModal={() => setShowLogin(true)}
-          />
-          <TierSection
-            title="Completed"
-            tickets={tickets.filter(t => t.tier === "completed")}
-            onMove={() => {}}
-            onDraftChange={(id, text) => setTickets(ts => ts.map(t => (t.id === id ? { ...t, draft: text } : t)))}
-            onSend={sendComment}
-            onDelete={deleteTicket}
-            isAdmin={isAdmin}
-            isLoggedIn={isLoggedIn}
-            userId={userId}
-            showLoginModal={() => setShowLogin(true)}
-          />
-        </>
-      )}
+        </section>
+        {isEditing && (
+          <section className="new-action-panel">
+            <h3>Add a new action</h3>
+            <div className="new-action-grid">
+              <input
+                className="action-input title"
+                value={newAction.title}
+                onChange={event => setNewAction(prev => ({ ...prev, title: event.target.value }))}
+                placeholder="Action title"
+              />
+              <textarea
+                className="action-input description"
+                value={newAction.description}
+                onChange={event => setNewAction(prev => ({ ...prev, description: event.target.value }))}
+                placeholder="What needs to happen?"
+              />
+            </div>
+            <div className="checkbox-grid">
+              {ACTION_OPTIONS.map(option => (
+                <label key={option.value} className="checkbox-chip">
+                  <input
+                    type="checkbox"
+                    checked={newAction.actionTypes.includes(option.value)}
+                    onChange={() => handleNewActionTypeToggle(option.value)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+            <button className="add-action-btn" type="button" onClick={handleAddAction}>
+              Add to queue
+            </button>
+          </section>
+        )}
+        {completedActions.length > 0 && (
+          <section className="completed-column">
+            <h3>Recently completed</h3>
+            <div className="completed-grid">
+              {completedActions.map(action => (
+                <button key={action.id} className="completed-pill" type="button" onClick={() => handleToggleComplete(action.id)}>
+                  ✓ {action.title}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
     </div>
   );
 }
