@@ -141,23 +141,45 @@ function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    async function fetchUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-        setUserEmail(user.email);
-        setIsLoggedIn(true);
-        const { data, error } = await supabase
-          .from("users")
-          .select("is_admin")
-          .eq("id", user.id)
-          .single();
-        if (!error && data) setIsAdmin(data.is_admin);
-      }
-    }
     fetchUser();
     fetchTickets();
   }, []);
+
+  async function fetchUser() {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      console.error("Failed to fetch user", error);
+      return;
+    }
+
+    if (user) {
+      setUserId(user.id);
+      setUserEmail(user.email);
+      setIsLoggedIn(true);
+
+      const { data, error: profileError } = await supabase
+        .from("users")
+        .select("is_admin")
+        .eq("id", user.id)
+        .single();
+
+      if (!profileError && data) {
+        setIsAdmin(data.is_admin);
+      } else if (profileError) {
+        console.error("Failed to fetch user profile", profileError);
+        setIsAdmin(false);
+      }
+    } else {
+      setIsLoggedIn(false);
+      setUserId(null);
+      setUserEmail(null);
+      setIsAdmin(false);
+    }
+  }
 
   async function fetchTickets() {
     setLoading(true);
