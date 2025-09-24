@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import "./App.css";
 
 const ACTION_OPTIONS = [
-  { value: "submit-document", label: "Submit a document" },
+  { value: "submit-document", label: "Upload document" },
   { value: "sign-off", label: "Sign off on completion" },
   { value: "add-approvers", label: "Assign approvers" },
   { value: "review", label: "Review progress" }
@@ -308,8 +308,23 @@ function Dashboard() {
           submittedAt: timestamp
         },
         ...action.documentSubmissions
-      ]
+      ],
+      isCompleted: true,
+      completedAt: timestamp
     }));
+    closeDialog();
+  }
+
+  function handleReopenAction(id) {
+    updateAction(id, () => ({
+      isCompleted: false,
+      completedAt: null
+    }));
+    closeDialog();
+  }
+
+  function handleDeleteAction(id) {
+    setActions(prev => syncPriorities(prev.filter(action => action.id !== id)));
     closeDialog();
   }
 
@@ -352,7 +367,7 @@ function Dashboard() {
     if (primaryType === "submit-document") {
       return (
         <button className="primary-action" type="button" onClick={() => handlePrimaryAction(action)}>
-          Upload supporting document
+          Upload document
         </button>
       );
     }
@@ -734,6 +749,16 @@ function Dashboard() {
                   </section>
                 )}
                 <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => handleReopenAction(dialogAction.id)}
+                  >
+                    Reopen ticket
+                  </button>
+                  <button type="button" className="danger-btn" onClick={() => handleDeleteAction(dialogAction.id)}>
+                    Delete
+                  </button>
                   <button type="button" className="ghost-btn" onClick={closeDialog}>
                     Close
                   </button>
