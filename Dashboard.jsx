@@ -350,6 +350,14 @@ function Dashboard() {
     closeDialog();
   }
 
+  function handleApprovalsComplete(id) {
+    const timestamp = new Date().toISOString();
+    updateAction(id, () => ({
+      isCompleted: true,
+      completedAt: timestamp
+    }));
+  }
+
   const primaryActionLabel = action => {
     const label = ACTION_OPTIONS.find(option => option.value === action.actionTypes[0]);
     return label ? label.label : "Take action";
@@ -505,13 +513,22 @@ function Dashboard() {
                         </div>
                       ))}
                     </div>
-                    <button
-                      className="primary-action"
-                      type="button"
-                      onClick={() => handlePrimaryAction(action, "add-approvers")}
-                    >
-                      Add another approver
-                    </button>
+                    <div className="awaiting-actions">
+                      <button
+                        className="primary-action"
+                        type="button"
+                        onClick={() => handlePrimaryAction(action, "add-approvers")}
+                      >
+                        Add another approver
+                      </button>
+                      <button
+                        className="ghost-btn"
+                        type="button"
+                        onClick={() => handleApprovalsComplete(action.id)}
+                      >
+                        Mark approvals received
+                      </button>
+                    </div>
                   </div>
                 </article>
               ))}
