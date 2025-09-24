@@ -179,7 +179,7 @@ body {
 }
 
 .completed-pill {
-  @apply px-4 py-2 rounded-full bg-slate-800/60 border border-slate-700/60 text-xs text-slate-400 hover:text-slate-100 transition;
+  @apply px-4 py-2 rounded-full bg-slate-700/40 border border-slate-500/60 text-xs font-medium text-slate-100/90 hover:text-slate-50 hover:border-slate-400/70 transition;
 }
 
 .awaiting-column {
@@ -258,12 +258,22 @@ body {
 }
 
 .modal-actions {
-  @apply flex items-center justify-end gap-3;
+  @apply flex items-center justify-end gap-3 flex-wrap;
 }
 
 .ghost-btn {
   @apply inline-flex items-center justify-center px-6 py-3 rounded-2xl border border-slate-700/70 text-sm font-semibold text-slate-300 hover:text-slate-100 transition;
 }
+.modal-actions .primary-action,
+.modal-actions .ghost-btn,
+.modal-actions .danger-btn {
+  margin-top: 0;
+}
+
+.danger-btn {
+  @apply inline-flex items-center justify-center px-6 py-3 rounded-2xl text-sm font-semibold text-rose-50 bg-rose-500/80 hover:bg-rose-500 transition shadow-[0_10px_25px_-20px_rgba(244,63,94,0.7)];
+}
+
 
 .modal-details {
   @apply flex flex-col gap-6;
