@@ -202,6 +202,14 @@ body {
   @apply flex flex-col gap-3 mt-4;
 }
 
+.awaiting-actions {
+  @apply flex flex-wrap items-center gap-3 mt-6;
+}
+
+.awaiting-actions .primary-action {
+  margin-top: 0;
+}
+
 .approver-pill {
   @apply rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm flex flex-col gap-1;
 }
