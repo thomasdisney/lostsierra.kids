@@ -404,8 +404,7 @@ function Dashboard() {
             ← back
           </button>
           <div>
-            <h1>Action hub</h1>
-            <p>Prioritize the next moves and glide each action to done.</p>
+            <h1>Deployment Tracker</h1>
           </div>
         </header>
         <section className="priority-column" aria-live="polite">

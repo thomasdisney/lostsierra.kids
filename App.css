@@ -171,7 +171,7 @@ body {
 }
 
 .completed-column h3 {
-  @apply text-sm uppercase tracking-[0.35em] text-slate-400/80 mb-3;
+  @apply text-sm uppercase tracking-[0.35em] text-slate-200/90 mb-3;
 }
 
 .completed-grid {
@@ -179,7 +179,7 @@ body {
 }
 
 .completed-pill {
-  @apply px-4 py-2 rounded-full bg-slate-700/40 border border-slate-500/60 text-xs font-medium text-slate-100/90 hover:text-slate-50 hover:border-slate-400/70 transition;
+  @apply px-4 py-2 rounded-full bg-slate-700/70 border border-slate-300/60 text-xs font-medium text-slate-100 hover:text-slate-50 hover:border-slate-200/70 hover:bg-slate-600/80 transition;
 }
 
 .awaiting-column {
