@@ -2,340 +2,230 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom";
 import "./SimulatorV2.css";
 
-const GRID_WIDTH = 20;
-const GRID_HEIGHT = 14;
+const GRID_WIDTH = 32;
+const GRID_HEIGHT = 28;
 const CELL_SIZE = 40;
+const SLIPBOT_WIDTH = 8;
+const SLIPBOT_HEIGHT = 17;
 const ANIMATION_DELAY_MS = 220;
-const EPSILON = 1e-6;
-const TOGGLE_STATUS_MESSAGE =
-  "Obstacle updated. Adjust more or exit edit mode to command the Slipbot.";
+
+const DEFAULT_ALLOWED_AREA = {
+  x: 1,
+  y: 1,
+  width: GRID_WIDTH - 2,
+  height: GRID_HEIGHT - 2
+};
+
+const TRAILER_BASE_X = 2;
+const TRAILER_BASE_Y = GRID_HEIGHT - SLIPBOT_HEIGHT - 1;
+const TRAILER_SPACING = SLIPBOT_WIDTH + 2;
+
+const DIRECTIONS = [
+  { dx: 1, dy: 0 },
+  { dx: -1, dy: 0 },
+  { dx: 0, dy: 1 },
+  { dx: 0, dy: -1 }
+];
 
 function pointKey(x, y) {
   return `${x},${y}`;
 }
 
-class GridWorld {
-  constructor(width, height, obstacles) {
-    this.width = width;
-    this.height = height;
-    this.obstacles = new Set(obstacles ?? []);
-  }
-
-  isValid(x, y) {
-    return x >= 0 && y >= 0 && x < this.width && y < this.height;
-  }
-
-  isFree(x, y) {
-    if (!this.isValid(x, y)) return false;
-    return !this.obstacles.has(pointKey(x, y));
-  }
-
-  getNeighbors(x, y) {
-    const result = [];
-    const directions = [
-      [0, 1],
-      [0, -1],
-      [1, 0],
-      [-1, 0]
-    ];
-
-    for (const [dx, dy] of directions) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (this.isValid(nx, ny)) {
-        result.push([nx, ny, 1]);
-      }
+function forEachFootprintCell(x, y, callback) {
+  for (let dx = 0; dx < SLIPBOT_WIDTH; dx += 1) {
+    for (let dy = 0; dy < SLIPBOT_HEIGHT; dy += 1) {
+      callback(x + dx, y + dy);
     }
-
-    return result;
   }
 }
 
-class DStarLitePlanner {
-  constructor(world) {
-    this.world = world;
-    this.g = new Map();
-    this.rhs = new Map();
-    this.openList = [];
-    this.openSet = new Set();
-    this.km = 0;
-    this.start = null;
-    this.goal = null;
-  }
-
-  initialize(start, goal) {
-    this.start = { ...start };
-    this.goal = { ...goal };
-    this.km = 0;
-    this.openList = [];
-    this.openSet = new Set();
-    this.g.clear();
-    this.rhs.clear();
-    this.setRhs(this.goal, 0);
-    const key = this.calculateKey(this.goal);
-    this.openList.push({ key, state: { ...this.goal } });
-    this.openSet.add(pointKey(this.goal.x, this.goal.y));
-  }
-
-  calculateKey(state) {
-    const minVal = Math.min(this.getG(state), this.getRhs(state));
-    return [minVal + this.heuristic(this.start, state) + this.km, minVal];
-  }
-
-  heuristic(a, b) {
-    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-  }
-
-  getG(state) {
-    const key = pointKey(state.x, state.y);
-    return this.g.has(key) ? this.g.get(key) : Infinity;
-  }
-
-  setG(state, value) {
-    this.g.set(pointKey(state.x, state.y), value);
-  }
-
-  getRhs(state) {
-    const key = pointKey(state.x, state.y);
-    return this.rhs.has(key) ? this.rhs.get(key) : Infinity;
-  }
-
-  setRhs(state, value) {
-    this.rhs.set(pointKey(state.x, state.y), value);
-  }
-
-  statesEqual(a, b) {
-    return a.x === b.x && a.y === b.y;
-  }
-
-  keyLess(a, b) {
-    if (a[0] < b[0] - EPSILON) return true;
-    if (a[0] > b[0] + EPSILON) return false;
-    return a[1] < b[1] - EPSILON;
-  }
-
-  nearlyEqual(a, b) {
-    if (!isFinite(a) && !isFinite(b)) return true;
-    return Math.abs(a - b) < EPSILON;
-  }
-
-  peekOpen() {
-    let best = null;
-    for (const entry of this.openList) {
-      const key = pointKey(entry.state.x, entry.state.y);
-      if (!this.openSet.has(key)) continue;
-      if (!best || this.keyLess(entry.key, best.key)) {
-        best = entry;
-      }
-    }
-    return best;
-  }
-
-  extractMin() {
-    let bestIndex = -1;
-    let bestEntry = null;
-    for (let i = 0; i < this.openList.length; i += 1) {
-      const entry = this.openList[i];
-      const key = pointKey(entry.state.x, entry.state.y);
-      if (!this.openSet.has(key)) continue;
-      if (!bestEntry || this.keyLess(entry.key, bestEntry.key)) {
-        bestEntry = entry;
-        bestIndex = i;
-      }
-    }
-    if (bestIndex === -1) {
-      return null;
-    }
-    this.openList.splice(bestIndex, 1);
-    this.openSet.delete(pointKey(bestEntry.state.x, bestEntry.state.y));
-    return bestEntry;
-  }
-
-  updateVertex(state) {
-    const keyStr = pointKey(state.x, state.y);
-
-    if (!this.statesEqual(state, this.goal)) {
-      let rhs = Infinity;
-      for (const [nx, ny, cost] of this.world.getNeighbors(state.x, state.y)) {
-        if (this.world.isFree(nx, ny)) {
-          rhs = Math.min(rhs, cost + this.getG({ x: nx, y: ny }));
-        }
-      }
-      this.setRhs(state, rhs);
-    }
-
-    if (this.openSet.has(keyStr)) {
-      this.openSet.delete(keyStr);
-    }
-
-    if (!this.nearlyEqual(this.getG(state), this.getRhs(state))) {
-      const key = this.calculateKey(state);
-      this.openList.push({ key, state: { ...state } });
-      this.openSet.add(keyStr);
-    }
-  }
-
-  computeShortestPath() {
-    const maxIterations = this.world.width * this.world.height * 100;
-    let iterations = 0;
-
-    while (true) {
-      const top = this.peekOpen();
-      const startKey = this.calculateKey(this.start);
-
-      if (!top) {
-        break;
-      }
-
-      if (!this.keyLess(top.key, startKey) && this.nearlyEqual(this.getRhs(this.start), this.getG(this.start))) {
-        return { success: true, reason: "path_found" };
-      }
-
-      const current = this.extractMin();
-      if (!current) {
-        break;
-      }
-
-      iterations += 1;
-      if (iterations > maxIterations) {
-        return { success: false, reason: `max_iterations_exceeded (${maxIterations})` };
-      }
-
-      const { key: kOld, state } = current;
-      const kNew = this.calculateKey(state);
-
-      if (this.keyLess(kOld, kNew)) {
-        this.openList.push({ key: kNew, state: { ...state } });
-        this.openSet.add(pointKey(state.x, state.y));
-      } else if (this.getG(state) > this.getRhs(state)) {
-        this.setG(state, this.getRhs(state));
-        for (const [nx, ny] of this.world.getNeighbors(state.x, state.y)) {
-          if (this.world.isFree(nx, ny)) {
-            this.updateVertex({ x: nx, y: ny });
-          }
-        }
-      } else {
-        this.setG(state, Infinity);
-        this.updateVertex(state);
-        for (const [nx, ny] of this.world.getNeighbors(state.x, state.y)) {
-          if (this.world.isFree(nx, ny)) {
-            this.updateVertex({ x: nx, y: ny });
-          }
-        }
-      }
-    }
-
-    if (!isFinite(this.getG(this.start))) {
-      return { success: false, reason: "no_path_exists" };
-    }
-
-    if (!this.nearlyEqual(this.getG(this.start), this.getRhs(this.start))) {
-      return { success: false, reason: "inconsistent_state" };
-    }
-
-    return { success: true, reason: "path_found" };
-  }
-
-  getPath() {
-    if (!isFinite(this.getG(this.start))) {
-      return [];
-    }
-
-    const path = [{ ...this.start }];
-    let current = { ...this.start };
-    const maxSteps = this.world.width * this.world.height;
-
-    for (let steps = 0; steps < maxSteps; steps += 1) {
-      if (this.statesEqual(current, this.goal)) {
-        return path;
-      }
-
-      let bestNeighbor = null;
-      let bestCost = Infinity;
-
-      for (const [nx, ny, cost] of this.world.getNeighbors(current.x, current.y)) {
-        if (!this.world.isFree(nx, ny)) continue;
-        const totalCost = cost + this.getG({ x: nx, y: ny });
-        if (totalCost < bestCost - EPSILON) {
-          bestCost = totalCost;
-          bestNeighbor = { x: nx, y: ny };
-        }
-      }
-
-      if (!bestNeighbor) {
-        break;
-      }
-
-      path.push(bestNeighbor);
-      current = bestNeighbor;
-    }
-
-    return path;
-  }
+function collectFootprintKeys(x, y) {
+  const keys = [];
+  forEachFootprintCell(x, y, (fx, fy) => {
+    keys.push(pointKey(fx, fy));
+  });
+  return keys;
 }
 
-function buildInitialObstacleRects() {
-  const base = [
-    { x: 6, y: 4, width: 7, height: 1 },
-    { x: 12, y: 4, width: 1, height: 5 },
-    { x: 9, y: 8, width: 3, height: 1 }
-  ];
-  let counter = 1;
-  return base.map(rect => ({ ...rect, id: `ob-${counter++}` }));
+function areaContainsFootprint(area, x, y) {
+  if (!area) return false;
+  const withinX = x >= area.x && x + SLIPBOT_WIDTH <= area.x + area.width;
+  const withinY = y >= area.y && y + SLIPBOT_HEIGHT <= area.y + area.height;
+  return withinX && withinY;
 }
 
-function expandRectangles(rects) {
-  const occupied = new Set();
-  rects.forEach(rect => {
-    for (let dx = 0; dx < rect.width; dx += 1) {
-      for (let dy = 0; dy < rect.height; dy += 1) {
-        const x = rect.x + dx;
-        const y = rect.y + dy;
-        occupied.add(pointKey(x, y));
-      }
+function footprintWithinGrid(x, y) {
+  return x >= 0 && y >= 0 && x + SLIPBOT_WIDTH <= GRID_WIDTH && y + SLIPBOT_HEIGHT <= GRID_HEIGHT;
+}
+
+function isFootprintFree(x, y, area, blockedSet) {
+  if (!footprintWithinGrid(x, y)) return false;
+  if (!areaContainsFootprint(area, x, y)) return false;
+  let free = true;
+  forEachFootprintCell(x, y, (cx, cy) => {
+    if (!free) return;
+    if (blockedSet.has(pointKey(cx, cy))) {
+      free = false;
     }
   });
-  return occupied;
+  return free;
 }
 
-function rectContains(rect, x, y) {
-  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+function reconstructPath(cameFrom, currentKey, nodeLookup) {
+  const path = [];
+  let key = currentKey;
+  while (key) {
+    const node = nodeLookup.get(key);
+    if (!node) break;
+    path.push(node);
+    key = cameFrom.get(key) ?? null;
+  }
+  return path.reverse();
 }
 
-function computeBoundsFromAnchor(anchor, target) {
-  const clampedX = Math.max(0, Math.min(GRID_WIDTH - 1, target.x));
-  const clampedY = Math.max(0, Math.min(GRID_HEIGHT - 1, target.y));
-  const minX = Math.min(anchor.x, clampedX);
-  const minY = Math.min(anchor.y, clampedY);
-  const maxX = Math.max(anchor.x, clampedX);
-  const maxY = Math.max(anchor.y, clampedY);
-  return {
-    x: minX,
-    y: minY,
-    width: maxX - minX + 1,
-    height: maxY - minY + 1
-  };
+function heuristic(a, b) {
+  const ax = a.x + SLIPBOT_WIDTH / 2;
+  const ay = a.y + SLIPBOT_HEIGHT / 2;
+  const bx = b.x + SLIPBOT_WIDTH / 2;
+  const by = b.y + SLIPBOT_HEIGHT / 2;
+  return Math.abs(ax - bx) + Math.abs(ay - by);
+}
+
+function planAStar(start, goal, area, blockedSet) {
+  if (!start || !goal) return null;
+  if (!isFootprintFree(goal.x, goal.y, area, blockedSet)) return null;
+  if (!isFootprintFree(start.x, start.y, area, blockedSet)) return null;
+
+  const startKey = pointKey(start.x, start.y);
+  const goalKey = pointKey(goal.x, goal.y);
+
+  const openMap = new Map([[startKey, { ...start }]]);
+  const cameFrom = new Map();
+  const nodeLookup = new Map([[startKey, { ...start }]]);
+  const gScore = new Map([[startKey, 0]]);
+  const fScore = new Map([[startKey, heuristic(start, goal)]]);
+  const closedSet = new Set();
+
+  const maxIterations = GRID_WIDTH * GRID_HEIGHT * 10;
+  let iterations = 0;
+
+  while (openMap.size > 0 && iterations < maxIterations) {
+    iterations += 1;
+    let currentKey = null;
+    let currentNode = null;
+    let bestScore = Infinity;
+
+    for (const [key, node] of openMap.entries()) {
+      const score = fScore.get(key) ?? Infinity;
+      if (score < bestScore) {
+        bestScore = score;
+        currentKey = key;
+        currentNode = node;
+      }
+    }
+
+    if (!currentNode || currentKey === null) {
+      break;
+    }
+
+    if (currentKey === goalKey) {
+      return reconstructPath(cameFrom, currentKey, nodeLookup);
+    }
+
+    openMap.delete(currentKey);
+    closedSet.add(currentKey);
+
+    const currentG = gScore.get(currentKey) ?? Infinity;
+
+    for (const { dx, dy } of DIRECTIONS) {
+      const neighbor = { x: currentNode.x + dx, y: currentNode.y + dy };
+      if (!footprintWithinGrid(neighbor.x, neighbor.y)) continue;
+      if (!isFootprintFree(neighbor.x, neighbor.y, area, blockedSet)) continue;
+
+      const neighborKey = pointKey(neighbor.x, neighbor.y);
+      if (closedSet.has(neighborKey)) continue;
+
+      const tentativeG = currentG + 1;
+      const neighborG = gScore.get(neighborKey);
+
+      if (neighborG === undefined || tentativeG < neighborG) {
+        cameFrom.set(neighborKey, currentKey);
+        nodeLookup.set(neighborKey, neighbor);
+        gScore.set(neighborKey, tentativeG);
+        fScore.set(neighborKey, tentativeG + heuristic(neighbor, goal));
+        openMap.set(neighborKey, neighbor);
+      }
+    }
+  }
+
+  return null;
+}
+
+function createInitialSlipbots() {
+  return [
+    {
+      id: "slipbot-1",
+      name: "SlipBot A",
+      color: "#38bdf8",
+      position: { x: TRAILER_BASE_X, y: TRAILER_BASE_Y },
+      status: "waiting"
+    },
+    {
+      id: "slipbot-2",
+      name: "SlipBot B",
+      color: "#22c55e",
+      position: { x: TRAILER_BASE_X + TRAILER_SPACING, y: TRAILER_BASE_Y },
+      status: "waiting"
+    },
+    {
+      id: "slipbot-3",
+      name: "SlipBot C",
+      color: "#f97316",
+      position: { x: TRAILER_BASE_X + 2 * TRAILER_SPACING, y: TRAILER_BASE_Y },
+      status: "waiting"
+    }
+  ];
 }
 
 function SimulatorV2() {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
-  const robotPosRef = useRef({ x: 2, y: 2 });
-  const targetRef = useRef(null);
-  const robotImageRef = useRef(null);
-  const editSessionRef = useRef(null);
-  const pointerCellRef = useRef(null);
-  const nextRectIdRef = useRef(buildInitialObstacleRects().length + 1);
+  const areaAnchorRef = useRef(null);
 
-  const [robotPosition, setRobotPosition] = useState(robotPosRef.current);
-  const [target, setTarget] = useState(null);
+  const [allowedArea, setAllowedArea] = useState(DEFAULT_ALLOWED_AREA);
+  const [isDefiningArea, setIsDefiningArea] = useState(false);
+  const [draftArea, setDraftArea] = useState(null);
+  const [obstacleKeys, setObstacleKeys] = useState([]);
+  const [parkingAssignments, setParkingAssignments] = useState([]);
+  const [hoverCell, setHoverCell] = useState(null);
+  const [slipbots, setSlipbots] = useState(() => createInitialSlipbots());
+  const [status, setStatus] = useState(
+    "Define the workspace, right-click to place obstacles, then choose three parking locations."
+  );
   const [currentPath, setCurrentPath] = useState([]);
-  const [isMoving, setIsMoving] = useState(false);
-  const [status, setStatus] = useState("Select a target cell to command the Slipbot.");
-  const [obstacleRects, setObstacleRects] = useState(() => buildInitialObstacleRects());
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [activeRectId, setActiveRectId] = useState(null);
-  const [robotImageLoaded, setRobotImageLoaded] = useState(false);
+  const [sequenceState, setSequenceState] = useState({ running: false, activeBotId: null, queueIndex: -1 });
+
+  const obstacleSet = useMemo(() => new Set(obstacleKeys), [obstacleKeys]);
+  const isSequenceActive = sequenceState.running;
+
+  const slipbotsRef = useRef(slipbots);
+  const allowedAreaRef = useRef(allowedArea);
+  const obstacleSetRef = useRef(obstacleSet);
+
+  useEffect(() => {
+    slipbotsRef.current = slipbots;
+  }, [slipbots]);
+
+  useEffect(() => {
+    allowedAreaRef.current = allowedArea;
+  }, [allowedArea]);
+
+  useEffect(() => {
+    obstacleSetRef.current = obstacleSet;
+  }, [obstacleSet]);
+
+  const canvasWidth = useMemo(() => GRID_WIDTH * CELL_SIZE, []);
+  const canvasHeight = useMemo(() => GRID_HEIGHT * CELL_SIZE, []);
 
   const clearAnimation = useCallback(() => {
     if (animationRef.current) {
@@ -350,118 +240,20 @@ function SimulatorV2() {
     };
   }, [clearAnimation]);
 
-  useEffect(() => {
-    const img = new Image();
-    img.src = "/Slipbot.png";
-    img.onload = () => {
-      robotImageRef.current = img;
-      setRobotImageLoaded(true);
+  const computeWorkspaceFromCell = useCallback(cell => {
+    if (!cell || !areaAnchorRef.current) return null;
+    const anchor = areaAnchorRef.current;
+    const minX = Math.min(anchor.x, cell.x);
+    const minY = Math.min(anchor.y, cell.y);
+    const maxX = Math.max(anchor.x, cell.x);
+    const maxY = Math.max(anchor.y, cell.y);
+    return {
+      x: minX,
+      y: minY,
+      width: maxX - minX + 1,
+      height: maxY - minY + 1
     };
-    img.onerror = () => {
-      robotImageRef.current = null;
-      setRobotImageLoaded(false);
-    };
-    robotImageRef.current = img;
   }, []);
-
-  useEffect(() => {
-    robotPosRef.current = robotPosition;
-  }, [robotPosition]);
-
-  const animatePath = useCallback(
-    path => {
-      clearAnimation();
-      setCurrentPath(path);
-
-      if (!path || path.length <= 1) {
-        setIsMoving(false);
-        return;
-      }
-
-      setIsMoving(true);
-      let index = 1;
-
-      const step = () => {
-        const nextPoint = path[index];
-        setRobotPosition({ x: nextPoint.x, y: nextPoint.y });
-        index += 1;
-        if (index < path.length) {
-          animationRef.current = setTimeout(step, ANIMATION_DELAY_MS);
-        } else {
-          animationRef.current = null;
-          setIsMoving(false);
-          setStatus("Arrived at target. Select a new destination or adjust obstacles.");
-        }
-      };
-
-      animationRef.current = setTimeout(step, ANIMATION_DELAY_MS);
-    },
-    [clearAnimation]
-  );
-
-  const obstacleCells = useMemo(() => expandRectangles(obstacleRects), [obstacleRects]);
-
-  const planPath = useCallback(
-    (start, goal, options = { animate: true, silent: false }) => {
-      const { animate = true, silent = false } = options;
-      const world = new GridWorld(GRID_WIDTH, GRID_HEIGHT, obstacleCells);
-      if (!world.isFree(goal.x, goal.y)) {
-        setStatus("Target cell is blocked. Choose a free cell.");
-        return [];
-      }
-      if (!world.isFree(start.x, start.y)) {
-        setStatus("Robot is blocked by an obstacle. Clear the cell to move.");
-        return [];
-      }
-
-      const planner = new DStarLitePlanner(world);
-      planner.initialize(start, goal);
-      const result = planner.computeShortestPath();
-
-      if (!result.success) {
-        setCurrentPath([]);
-        if (!silent) {
-          setStatus("No valid path found. Adjust obstacles and try again.");
-        }
-        return [];
-      }
-
-      const path = planner.getPath();
-      if (path.length === 0) {
-        setCurrentPath([]);
-        if (!silent) {
-          setStatus("No valid path found. Adjust obstacles and try again.");
-        }
-        return [];
-      }
-
-      if (path.length === 1) {
-        clearAnimation();
-        const single = path.map(({ x, y }) => ({ x, y }));
-        setCurrentPath(single);
-        setIsMoving(false);
-        if (!silent) {
-          setStatus("Slipbot is already at the goal. Choose another target to keep moving.");
-        }
-        return path;
-      }
-
-      if (!silent) {
-        setStatus("Path planned using D* Lite. Executing movement...");
-      }
-      const normalized = path.map(({ x, y }) => ({ x, y }));
-      if (animate) {
-        animatePath(normalized);
-      } else {
-        setCurrentPath(normalized);
-      }
-      return path;
-    },
-    [animatePath, clearAnimation, obstacleCells]
-  );
-
-  const canvasWidth = useMemo(() => GRID_WIDTH * CELL_SIZE, []);
-  const canvasHeight = useMemo(() => GRID_HEIGHT * CELL_SIZE, []);
 
   const getCellFromEvent = useCallback(event => {
     const canvas = canvasRef.current;
@@ -476,126 +268,255 @@ function SimulatorV2() {
     return { x, y };
   }, []);
 
-  const setTargetCell = useCallback(
+  const clampTopLeft = useCallback(
     cell => {
-      if (!cell) return;
-      const key = pointKey(cell.x, cell.y);
-      if (obstacleCells.has(key)) {
-        setStatus("Target cell is blocked. Choose a free cell.");
-        return;
-      }
-      targetRef.current = { x: cell.x, y: cell.y };
-      setTarget({ x: cell.x, y: cell.y });
-      planPath(robotPosRef.current, { x: cell.x, y: cell.y }, { animate: true });
+      if (!cell) return null;
+      const area = draftArea ?? allowedArea;
+      if (!area) return null;
+      const maxX = area.x + area.width - SLIPBOT_WIDTH;
+      const maxY = area.y + area.height - SLIPBOT_HEIGHT;
+      const clampedX = Math.max(area.x, Math.min(cell.x, maxX));
+      const clampedY = Math.max(area.y, Math.min(cell.y, maxY));
+      return { x: clampedX, y: clampedY };
     },
-    [obstacleCells, planPath]
+    [allowedArea, draftArea]
   );
 
   const handlePointerDown = useCallback(
     event => {
-      event.preventDefault();
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (isSequenceActive) return;
+      if (event.button !== 0) return;
       const cell = getCellFromEvent(event);
       if (!cell) return;
 
-      if (isEditMode) {
-        canvas.setPointerCapture(event.pointerId);
-        pointerCellRef.current = cell;
-        const existingRect = obstacleRects.find(rect => rectContains(rect, cell.x, cell.y));
-        if (existingRect) {
-          editSessionRef.current = {
-            rectId: existingRect.id,
-            anchor: cell
-          };
-          setActiveRectId(existingRect.id);
-        } else {
-          const newRect = {
-            id: `ob-${nextRectIdRef.current}`,
-            x: cell.x,
-            y: cell.y,
-            width: 1,
-            height: 1
-          };
-          nextRectIdRef.current += 1;
-          setObstacleRects(prev => [...prev, newRect]);
-          editSessionRef.current = {
-            rectId: newRect.id,
-            anchor: cell
-          };
-          setActiveRectId(newRect.id);
-        }
-        setStatus("Editing obstacles. Drag to stretch or shrink the selected block.");
-      } else {
-        setTargetCell(cell);
+      if (isDefiningArea) {
+        areaAnchorRef.current = cell;
+        setDraftArea({ x: cell.x, y: cell.y, width: 1, height: 1 });
+        setStatus("Drag to size the allowable workspace.");
+        return;
       }
+
+      if (parkingAssignments.length >= 3) {
+        setStatus("Parking slots already defined. Clear them to choose new targets.");
+        return;
+      }
+
+      if (!allowedArea) return;
+      const insideX = cell.x >= allowedArea.x && cell.x < allowedArea.x + allowedArea.width;
+      const insideY = cell.y >= allowedArea.y && cell.y < allowedArea.y + allowedArea.height;
+      if (!insideX || !insideY) {
+        setStatus("Parking targets must be inside the workspace.");
+        return;
+      }
+
+      const targetTopLeft = clampTopLeft(cell);
+      if (!targetTopLeft) return;
+      if (!areaContainsFootprint(allowedArea, targetTopLeft.x, targetTopLeft.y)) {
+        setStatus("Parking targets must be fully inside the workspace.");
+        return;
+      }
+
+      const candidateKeys = collectFootprintKeys(targetTopLeft.x, targetTopLeft.y);
+      const overlappingObstacle = candidateKeys.some(key => obstacleSet.has(key));
+      if (overlappingObstacle) {
+        setStatus("Parking slot overlaps an obstacle. Choose a clear space.");
+        return;
+      }
+
+      const overlappingExisting = parkingAssignments.some(assignment => {
+        const ax = assignment.position.x;
+        const ay = assignment.position.y;
+        return !(
+          targetTopLeft.x + SLIPBOT_WIDTH <= ax ||
+          ax + SLIPBOT_WIDTH <= targetTopLeft.x ||
+          targetTopLeft.y + SLIPBOT_HEIGHT <= ay ||
+          ay + SLIPBOT_HEIGHT <= targetTopLeft.y
+        );
+      });
+
+      if (overlappingExisting) {
+        setStatus("Parking slots cannot overlap.");
+        return;
+      }
+
+      const newAssignments = [
+        ...parkingAssignments,
+        { id: `slot-${parkingAssignments.length + 1}`, position: targetTopLeft }
+      ];
+      setParkingAssignments(newAssignments);
+      setStatus(`Parking slot ${newAssignments.length} positioned at (${targetTopLeft.x}, ${targetTopLeft.y}).`);
     },
-    [getCellFromEvent, isEditMode, obstacleRects, setTargetCell]
+    [
+      allowedArea,
+      clampTopLeft,
+      getCellFromEvent,
+      isDefiningArea,
+      isSequenceActive,
+      obstacleSet,
+      parkingAssignments
+    ]
   );
 
   const handlePointerMove = useCallback(
     event => {
-      if (!isEditMode) return;
-      const session = editSessionRef.current;
-      if (!session) return;
-
       const cell = getCellFromEvent(event);
-      if (!cell) return;
-
-      const previous = pointerCellRef.current;
-      if (previous && previous.x === cell.x && previous.y === cell.y) {
+      if (isDefiningArea) {
+        if (!cell || !areaAnchorRef.current) return;
+        const workspace = computeWorkspaceFromCell(cell);
+        if (workspace) {
+          setDraftArea(workspace);
+        }
         return;
       }
 
-      pointerCellRef.current = cell;
-      setObstacleRects(prev =>
-        prev.map(rect => {
-          if (rect.id !== session.rectId) return rect;
-          return { ...rect, ...computeBoundsFromAnchor(session.anchor, cell) };
+      if (!isSequenceActive && parkingAssignments.length < 3) {
+        setHoverCell(cell ? clampTopLeft(cell) : null);
+      } else {
+        setHoverCell(null);
+      }
+    },
+    [
+      clampTopLeft,
+      computeWorkspaceFromCell,
+      getCellFromEvent,
+      isDefiningArea,
+      isSequenceActive,
+      parkingAssignments.length
+    ]
+  );
+
+  const finalizeWorkspace = useCallback(
+    workspace => {
+      if (!workspace) return;
+      if (workspace.width < SLIPBOT_WIDTH || workspace.height < SLIPBOT_HEIGHT) {
+        setStatus("Workspace must be at least 8ft wide and 17ft tall.");
+        return;
+      }
+
+      const allInside = slipbotsRef.current.every(bot =>
+        areaContainsFootprint(workspace, bot.position.x, bot.position.y)
+      );
+      if (!allInside) {
+        setStatus("Workspace must include the trailer and all SlipBots.");
+        return;
+      }
+
+      setAllowedArea(workspace);
+      setStatus("Workspace updated. Right-click to add obstacles or choose parking slots.");
+      setObstacleKeys(prev =>
+        prev.filter(key => {
+          const [sx, sy] = key.split(",").map(Number);
+          return (
+            sx >= workspace.x &&
+            sx < workspace.x + workspace.width &&
+            sy >= workspace.y &&
+            sy < workspace.y + workspace.height
+          );
         })
       );
+      setParkingAssignments(prev =>
+        prev.filter(assignment => areaContainsFootprint(workspace, assignment.position.x, assignment.position.y))
+      );
     },
-    [getCellFromEvent, isEditMode]
+    []
   );
 
-  const endEditSession = useCallback(() => {
-    editSessionRef.current = null;
-    pointerCellRef.current = null;
-    setActiveRectId(null);
-  }, []);
+  const handlePointerUp = useCallback(() => {
+    if (isDefiningArea && draftArea) {
+      finalizeWorkspace(draftArea);
+    }
+    areaAnchorRef.current = null;
+    setDraftArea(null);
+  }, [draftArea, finalizeWorkspace, isDefiningArea]);
 
-  const handlePointerUp = useCallback(
+  const handleContextMenu = useCallback(
     event => {
-      if (!isEditMode) return;
-      const canvas = canvasRef.current;
-      if (canvas && canvas.hasPointerCapture?.(event.pointerId)) {
-        canvas.releasePointerCapture(event.pointerId);
+      event.preventDefault();
+      if (isSequenceActive) return;
+      const cell = getCellFromEvent(event);
+      if (!cell || !allowedArea) return;
+      const { x, y } = cell;
+      if (x < allowedArea.x || x >= allowedArea.x + allowedArea.width) {
+        setStatus("Obstacles must be inside the workspace.");
+        return;
       }
-      if (editSessionRef.current) {
-        setObstacleRects(prev => prev.filter(rect => rect.width > 0 && rect.height > 0));
-        setStatus(TOGGLE_STATUS_MESSAGE);
+      if (y < allowedArea.y || y >= allowedArea.y + allowedArea.height) {
+        setStatus("Obstacles must be inside the workspace.");
+        return;
       }
-      endEditSession();
+
+      const conflictsSlipbot = slipbotsRef.current.some(bot =>
+        x >= bot.position.x &&
+        x < bot.position.x + SLIPBOT_WIDTH &&
+        y >= bot.position.y &&
+        y < bot.position.y + SLIPBOT_HEIGHT
+      );
+      if (conflictsSlipbot) {
+        setStatus("Cannot place an obstacle on top of a SlipBot.");
+        return;
+      }
+
+      const conflictsParking = parkingAssignments.some(assignment =>
+        x >= assignment.position.x &&
+        x < assignment.position.x + SLIPBOT_WIDTH &&
+        y >= assignment.position.y &&
+        y < assignment.position.y + SLIPBOT_HEIGHT
+      );
+      if (conflictsParking) {
+        setStatus("Obstacles cannot overlap parking slots.");
+        return;
+      }
+
+      setObstacleKeys(prev => {
+        const key = pointKey(x, y);
+        if (prev.includes(key)) {
+          return prev.filter(item => item !== key);
+        }
+        return [...prev, key];
+      });
+      setStatus("Obstacle map updated.");
     },
-    [endEditSession, isEditMode]
+    [allowedArea, getCellFromEvent, isSequenceActive, parkingAssignments]
   );
 
-  const handlePointerLeave = useCallback(
-    event => {
-      if (!isEditMode) return;
-      const canvas = canvasRef.current;
-      if (canvas && canvas.hasPointerCapture?.(event.pointerId)) {
-        canvas.releasePointerCapture(event.pointerId);
+  const toggleWorkspaceMode = useCallback(() => {
+    if (isSequenceActive) return;
+    setIsDefiningArea(prev => {
+      const next = !prev;
+      if (next) {
+        setStatus("Click and drag to define the workspace where SlipBots are allowed.");
+      } else {
+        setStatus("Workspace lock restored. Define parking slots or adjust obstacles.");
+        areaAnchorRef.current = null;
+        setDraftArea(null);
       }
-      if (editSessionRef.current) {
-        setStatus(TOGGLE_STATUS_MESSAGE);
-      }
-      endEditSession();
-    },
-    [endEditSession, isEditMode]
-  );
+      return next;
+    });
+  }, [isSequenceActive]);
 
-  useEffect(() => {
+  const handleClearParking = useCallback(() => {
+    if (isSequenceActive) return;
+    setParkingAssignments([]);
+    setStatus("Parking slots cleared. Click inside the workspace to set new targets.");
+  }, [isSequenceActive]);
+
+  const handleResetEnvironment = useCallback(() => {
+    clearAnimation();
+    setAllowedArea(DEFAULT_ALLOWED_AREA);
+    setIsDefiningArea(false);
+    setDraftArea(null);
+    setObstacleKeys([]);
+    setParkingAssignments([]);
+    setHoverCell(null);
+    const resetBots = createInitialSlipbots();
+    setSlipbots(resetBots);
+    slipbotsRef.current = resetBots;
+    setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
+    setCurrentPath([]);
+    setStatus("Environment reset. Define the workspace and select three parking slots.");
+  }, [clearAnimation]);
+
+  const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -605,75 +526,114 @@ function SimulatorV2() {
     ctx.fillStyle = "#020617";
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.16)";
     ctx.lineWidth = 1;
-    for (let x = 0; x <= GRID_WIDTH; x += 1) {
+    for (let gx = 0; gx <= GRID_WIDTH; gx += 1) {
+      const px = gx * CELL_SIZE;
       ctx.beginPath();
-      ctx.moveTo(x * CELL_SIZE, 0);
-      ctx.lineTo(x * CELL_SIZE, canvasHeight);
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, canvasHeight);
       ctx.stroke();
     }
-    for (let y = 0; y <= GRID_HEIGHT; y += 1) {
+    for (let gy = 0; gy <= GRID_HEIGHT; gy += 1) {
+      const py = gy * CELL_SIZE;
       ctx.beginPath();
-      ctx.moveTo(0, y * CELL_SIZE);
-      ctx.lineTo(canvasWidth, y * CELL_SIZE);
+      ctx.moveTo(0, py);
+      ctx.lineTo(canvasWidth, py);
       ctx.stroke();
     }
 
-    obstacleRects.forEach(rect => {
-      const left = rect.x * CELL_SIZE;
-      const top = rect.y * CELL_SIZE;
-      const width = rect.width * CELL_SIZE;
-      const height = rect.height * CELL_SIZE;
+    const area = draftArea ?? allowedArea;
+    if (area) {
+      ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
+      ctx.fillRect(area.x * CELL_SIZE, area.y * CELL_SIZE, area.width * CELL_SIZE, area.height * CELL_SIZE);
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.6)";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(area.x * CELL_SIZE, area.y * CELL_SIZE, area.width * CELL_SIZE, area.height * CELL_SIZE);
 
-      ctx.fillStyle = "rgba(51, 65, 85, 0.9)";
-      ctx.fillRect(left, top, width, height);
+      ctx.fillStyle = "rgba(148, 163, 184, 0.85)";
+      ctx.font = "14px 'Inter', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`${area.width} ft`,
+        area.x * CELL_SIZE + (area.width * CELL_SIZE) / 2,
+        area.y * CELL_SIZE - 6
+      );
+      ctx.save();
+      ctx.translate(area.x * CELL_SIZE - 8, area.y * CELL_SIZE + (area.height * CELL_SIZE) / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText(`${area.height} ft`, 0, 0);
+      ctx.restore();
+    }
 
-      const isActive = rect.id === activeRectId && isEditMode;
-      ctx.strokeStyle = isActive ? "#38bdf8" : "rgba(148, 163, 184, 0.45)";
-      ctx.lineWidth = isActive ? 3 : 1.8;
-      ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
+    ctx.fillStyle = "rgba(226, 232, 240, 0.08)";
+    ctx.fillRect(
+      TRAILER_BASE_X * CELL_SIZE - CELL_SIZE * 0.5,
+      (TRAILER_BASE_Y - 1) * CELL_SIZE,
+      (SLIPBOT_WIDTH * 3 + TRAILER_SPACING - SLIPBOT_WIDTH) * CELL_SIZE + CELL_SIZE,
+      (SLIPBOT_HEIGHT + 2) * CELL_SIZE
+    );
 
-      if (isEditMode) {
-        ctx.font = "600 13px 'Inter', sans-serif";
-        const lineHeight = 16;
-        const lineOne = `${rect.width}ft × ${rect.height}ft`;
-        const area = rect.width * rect.height;
-        const lineTwo = `${area}ft²`;
-        const metricsOne = ctx.measureText(lineOne);
-        const metricsTwo = ctx.measureText(lineTwo);
-        const textWidth = Math.max(metricsOne.width, metricsTwo.width);
-        const paddingX = 8;
-        const paddingY = 6;
-        const boxWidth = textWidth + paddingX * 2;
-        const boxHeight = lineHeight * 2 + paddingY * 2 - 6;
-        const centerX = left + width / 2;
-        const centerY = top + height / 2;
-        const boxLeft = centerX - boxWidth / 2;
-        const boxTop = centerY - boxHeight / 2;
-
-        ctx.fillStyle = "rgba(15, 23, 42, 0.78)";
-        ctx.fillRect(boxLeft, boxTop, boxWidth, boxHeight);
-        ctx.strokeStyle = rect.id === activeRectId ? "#38bdf8" : "rgba(148, 163, 184, 0.35)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(boxLeft, boxTop, boxWidth, boxHeight);
-        ctx.fillStyle = "#e2e8f0";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(lineOne, centerX, centerY - lineHeight / 2);
-        ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
-        ctx.fillText(lineTwo, centerX, centerY + lineHeight / 2);
-      }
+    ctx.fillStyle = "rgba(248, 113, 113, 0.6)";
+    obstacleKeys.forEach(key => {
+      const [ox, oy] = key.split(",").map(Number);
+      ctx.fillRect(ox * CELL_SIZE, oy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
     });
 
-    if (currentPath && currentPath.length > 1) {
-      ctx.strokeStyle = "#38bdf8";
+    parkingAssignments.forEach((assignment, index) => {
+      ctx.fillStyle = "rgba(34, 197, 94, 0.22)";
+      ctx.fillRect(
+        assignment.position.x * CELL_SIZE,
+        assignment.position.y * CELL_SIZE,
+        SLIPBOT_WIDTH * CELL_SIZE,
+        SLIPBOT_HEIGHT * CELL_SIZE
+      );
+      ctx.strokeStyle = "rgba(34, 197, 94, 0.6)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        assignment.position.x * CELL_SIZE,
+        assignment.position.y * CELL_SIZE,
+        SLIPBOT_WIDTH * CELL_SIZE,
+        SLIPBOT_HEIGHT * CELL_SIZE
+      );
+      ctx.fillStyle = "rgba(226, 232, 240, 0.92)";
+      ctx.font = "16px 'Inter', sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText(
+        `Slot ${index + 1}`,
+        assignment.position.x * CELL_SIZE + 8,
+        assignment.position.y * CELL_SIZE + 6
+      );
+    });
+
+    if (hoverCell && parkingAssignments.length < 3 && !isSequenceActive) {
+      ctx.fillStyle = "rgba(250, 204, 21, 0.18)";
+      ctx.fillRect(
+        hoverCell.x * CELL_SIZE,
+        hoverCell.y * CELL_SIZE,
+        SLIPBOT_WIDTH * CELL_SIZE,
+        SLIPBOT_HEIGHT * CELL_SIZE
+      );
+      ctx.strokeStyle = "rgba(250, 204, 21, 0.6)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        hoverCell.x * CELL_SIZE,
+        hoverCell.y * CELL_SIZE,
+        SLIPBOT_WIDTH * CELL_SIZE,
+        SLIPBOT_HEIGHT * CELL_SIZE
+      );
+    }
+
+    if (currentPath.length > 1) {
+      const activeBot = slipbotsRef.current.find(bot => bot.id === sequenceState.activeBotId);
+      ctx.strokeStyle = activeBot ? activeBot.color : "#38bdf8";
       ctx.lineWidth = 4;
       ctx.beginPath();
-      currentPath.forEach(({ x, y }, index) => {
-        const cx = x * CELL_SIZE + CELL_SIZE / 2;
-        const cy = y * CELL_SIZE + CELL_SIZE / 2;
-        if (index === 0) {
+      currentPath.forEach((step, idx) => {
+        const cx = step.x * CELL_SIZE + (SLIPBOT_WIDTH * CELL_SIZE) / 2;
+        const cy = step.y * CELL_SIZE + (SLIPBOT_HEIGHT * CELL_SIZE) / 2;
+        if (idx === 0) {
           ctx.moveTo(cx, cy);
         } else {
           ctx.lineTo(cx, cy);
@@ -682,121 +642,214 @@ function SimulatorV2() {
       ctx.stroke();
     }
 
-    if (target) {
-      ctx.fillStyle = "#f97316";
-      const tx = target.x * CELL_SIZE + CELL_SIZE / 2;
-      const ty = target.y * CELL_SIZE + CELL_SIZE / 2;
-      ctx.beginPath();
-      ctx.arc(tx, ty, CELL_SIZE * 0.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    const rx = robotPosition.x * CELL_SIZE + CELL_SIZE / 2;
-    const ry = robotPosition.y * CELL_SIZE + CELL_SIZE / 2;
-    const robotRadius = CELL_SIZE * 0.45;
-    if (robotImageRef.current && (robotImageLoaded || robotImageRef.current.complete)) {
-      const size = CELL_SIZE * 0.9;
-      ctx.drawImage(robotImageRef.current, rx - size / 2, ry - size / 2, size, size);
-    } else {
-      ctx.fillStyle = "#22c55e";
-      ctx.beginPath();
-      ctx.arc(rx, ry, robotRadius * 0.7, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.strokeStyle = "rgba(15, 23, 42, 0.65)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(rx, ry, robotRadius, 0, Math.PI * 2);
-    ctx.stroke();
+    slipbots.forEach(bot => {
+      ctx.fillStyle = `${bot.color}cc`;
+      ctx.fillRect(
+        bot.position.x * CELL_SIZE,
+        bot.position.y * CELL_SIZE,
+        SLIPBOT_WIDTH * CELL_SIZE,
+        SLIPBOT_HEIGHT * CELL_SIZE
+      );
+      ctx.strokeStyle = bot.color;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(
+        bot.position.x * CELL_SIZE,
+        bot.position.y * CELL_SIZE,
+        SLIPBOT_WIDTH * CELL_SIZE,
+        SLIPBOT_HEIGHT * CELL_SIZE
+      );
+      ctx.fillStyle = "#0f172a";
+      ctx.font = "15px 'Inter', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(
+        bot.name.replace("SlipBot ", ""),
+        bot.position.x * CELL_SIZE + (SLIPBOT_WIDTH * CELL_SIZE) / 2,
+        bot.position.y * CELL_SIZE + (SLIPBOT_HEIGHT * CELL_SIZE) / 2
+      );
+    });
   }, [
-    activeRectId,
+    allowedArea,
     canvasHeight,
     canvasWidth,
     currentPath,
-    isEditMode,
-    obstacleRects,
-    robotImageLoaded,
-    robotPosition,
-    target
+    draftArea,
+    hoverCell,
+    isSequenceActive,
+    obstacleKeys,
+    parkingAssignments,
+    sequenceState.activeBotId,
+    slipbots
   ]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const handleContextMenu = event => {
-      event.preventDefault();
-    };
-    canvas.addEventListener("contextmenu", handleContextMenu);
-    return () => {
-      canvas.removeEventListener("contextmenu", handleContextMenu);
-    };
-  }, []);
+    drawScene();
+  }, [drawScene]);
 
-  useEffect(() => {
-    if (!targetRef.current) return;
-    planPath(robotPosRef.current, targetRef.current, { animate: false, silent: isEditMode });
-    if (isEditMode) {
-      setStatus("Editing obstacles. Drag to stretch or shrink the selected block.");
-    }
-  }, [isEditMode, planPath, obstacleCells]);
-
-  const handleToggleEditMode = useCallback(() => {
-    setIsEditMode(prev => {
-      const next = !prev;
-      if (!next) {
-        editSessionRef.current = null;
-        pointerCellRef.current = null;
-        setActiveRectId(null);
-        setStatus("Edit mode disabled. Select a target cell to command the Slipbot.");
-      } else {
-        setStatus("Edit mode enabled. Tap to place an obstacle, then drag to resize it.");
-      }
-      return next;
+  const buildBlockedSetForBot = useCallback(botId => {
+    const blocked = new Set(obstacleSetRef.current);
+    slipbotsRef.current.forEach(bot => {
+      if (bot.id === botId) return;
+      forEachFootprintCell(bot.position.x, bot.position.y, (bx, by) => {
+        blocked.add(pointKey(bx, by));
+      });
     });
+    return blocked;
   }, []);
 
-  const handleReset = useCallback(() => {
-    clearAnimation();
-    const start = { x: 2, y: 2 };
-    robotPosRef.current = start;
-    setRobotPosition(start);
-    setTarget(null);
-    targetRef.current = null;
-    setCurrentPath([]);
-    const initialRects = buildInitialObstacleRects();
-    setObstacleRects(initialRects);
-    nextRectIdRef.current = initialRects.length + 1;
-    setIsEditMode(false);
-    setActiveRectId(null);
-    setStatus("Environment reset. Select a target cell to command the Slipbot.");
-  }, [clearAnimation]);
+  const animateSlipbot = useCallback(
+    (botId, path, onComplete) => {
+      clearAnimation();
+      if (!path || path.length <= 1) {
+        onComplete();
+        return;
+      }
+      let index = 1;
+      const step = () => {
+        const nextPoint = path[index];
+        setSlipbots(prev =>
+          prev.map(bot =>
+            bot.id === botId ? { ...bot, position: { x: nextPoint.x, y: nextPoint.y } } : bot
+          )
+        );
+        index += 1;
+        if (index < path.length) {
+          animationRef.current = setTimeout(step, ANIMATION_DELAY_MS);
+        } else {
+          animationRef.current = null;
+          onComplete();
+        }
+      };
+      animationRef.current = setTimeout(step, ANIMATION_DELAY_MS);
+    },
+    [clearAnimation]
+  );
+
+  const runQueue = useCallback(
+    (queue, index) => {
+      if (index >= queue.length) {
+        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
+        setCurrentPath([]);
+        setStatus("All SlipBots are parked. Great work!");
+        return;
+      }
+
+      const entry = queue[index];
+      const bot = slipbotsRef.current.find(item => item.id === entry.botId);
+      if (!bot) {
+        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
+        setStatus("Unexpected error locating SlipBot.");
+        return;
+      }
+
+      const area = allowedAreaRef.current;
+      const blocked = buildBlockedSetForBot(bot.id);
+      const path = planAStar(bot.position, entry.target.position, area, blocked);
+
+      if (!path) {
+        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
+        setCurrentPath([]);
+        setStatus(
+          `${bot.name} could not find a path to its parking slot. Adjust the workspace or obstacles and try again.`
+        );
+        return;
+      }
+
+      setSequenceState({ running: true, activeBotId: bot.id, queueIndex: index });
+      setCurrentPath(path);
+      setSlipbots(prev => prev.map(item => (item.id === bot.id ? { ...item, status: "moving" } : item)));
+      setStatus(`${bot.name} is exiting the trailer and navigating to slot ${index + 1}.`);
+
+      animateSlipbot(bot.id, path, () => {
+        setSlipbots(prev =>
+          prev.map(item =>
+            item.id === bot.id
+              ? { ...item, position: entry.target.position, status: "parked" }
+              : item
+          )
+        );
+        setCurrentPath([]);
+        setStatus(`${bot.name} parked successfully.`);
+        runQueue(queue, index + 1);
+      });
+    },
+    [animateSlipbot, buildBlockedSetForBot]
+  );
+
+  const handleExitSlipbots = useCallback(() => {
+    if (parkingAssignments.length !== 3) {
+      setStatus("Select three parking slots before commanding the exit sequence.");
+      return;
+    }
+    if (isSequenceActive) return;
+
+    const allWaiting = slipbotsRef.current.every(bot => bot.status === "waiting");
+    if (!allWaiting) {
+      setStatus("Reset the environment to run the exit sequence again.");
+      return;
+    }
+
+    const queue = [...slipbotsRef.current]
+      .sort((a, b) => a.position.x - b.position.x)
+      .map((bot, idx) => ({ botId: bot.id, target: parkingAssignments[idx] }));
+
+    const allInside = queue.every(entry =>
+      areaContainsFootprint(allowedAreaRef.current, entry.target.position.x, entry.target.position.y)
+    );
+    if (!allInside) {
+      setStatus("All parking slots must remain inside the workspace.");
+      return;
+    }
+
+    const anyBlocked = queue.some(entry => {
+      const keys = collectFootprintKeys(entry.target.position.x, entry.target.position.y);
+      return keys.some(key => obstacleSetRef.current.has(key));
+    });
+    if (anyBlocked) {
+      setStatus("Clear obstacles from each parking slot before launching the exit sequence.");
+      return;
+    }
+
+    setStatus("Starting the SlipBot exit sequence.");
+    runQueue(queue, 0);
+  }, [isSequenceActive, parkingAssignments, runQueue]);
+
+  const slipbotSummary = useMemo(
+    () =>
+      slipbots.map(bot => {
+        const statusText =
+          bot.status === "waiting" ? "Queued in trailer" : bot.status === "moving" ? "In motion" : "Parked";
+        return { ...bot, statusText };
+      }),
+    [slipbots]
+  );
 
   return (
     <div className="simulator-wrapper">
       <div className="simulator-header">
-        <h1>Slipbot Simulator V2</h1>
+        <h1>SlipBot Simulator V2</h1>
         <p>
-          Powered by a D* Lite path planner adapted from the multi-robot playground. Use the edit switch to
-          sculpt obstacles on the 1&nbsp;ft grid, then tap a target cell to command the Slipbot.
+          Configure a workspace, sprinkle in obstacles, and watch three SlipBots exit the trailer one at a time to their
+          assigned parking slots. Each SlipBot is 17&nbsp;ft × 8&nbsp;ft and must avoid obstacles, walls, and the other
+          robots.
         </p>
       </div>
       <div className="simulator-layout">
         <div className="canvas-container">
           <div className="canvas-toolbar">
             <div className="toggle-group">
-              <span className="toggle-text">Obstacle edit mode</span>
+              <span className="toggle-text">Workspace edit</span>
               <button
                 type="button"
-                className={`toggle-switch ${isEditMode ? "active" : ""}`}
-                onClick={handleToggleEditMode}
-                aria-pressed={isEditMode}
+                className={`toggle-switch ${isDefiningArea ? "active" : ""}`}
+                onClick={toggleWorkspaceMode}
+                aria-pressed={isDefiningArea}
               >
                 <span className="toggle-thumb" />
               </button>
-              <span className="toggle-state">{isEditMode ? "On" : "Off"}</span>
+              <span className="toggle-state">{isDefiningArea ? "Drag" : "Locked"}</span>
             </div>
-            <span className="grid-note">Each square represents 1&nbsp;ft × 1&nbsp;ft.</span>
+            <span className="grid-note">Left click: parking slot • Right click: obstacle</span>
           </div>
           <canvas
             ref={canvasRef}
@@ -806,12 +859,20 @@ function SimulatorV2() {
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerLeave}
-            onPointerCancel={handlePointerLeave}
+            onPointerLeave={() => setHoverCell(null)}
+            onPointerCancel={() => setHoverCell(null)}
+            onContextMenu={handleContextMenu}
           />
           <div className="canvas-footer">
-            <button className="simulator-button" onClick={handleReset}>
+            <button className="simulator-button" onClick={handleResetEnvironment}>
               Reset environment
+            </button>
+            <button
+              className="simulator-button secondary"
+              onClick={handleClearParking}
+              disabled={parkingAssignments.length === 0 || isSequenceActive}
+            >
+              Clear parking slots
             </button>
             <Link className="simulator-button secondary" to="/">
               Back to home
@@ -823,35 +884,59 @@ function SimulatorV2() {
           <p className="status-text">{status}</p>
           <div className="info-grid">
             <div>
-              <span className="label">Slipbot position</span>
+              <span className="label">Workspace origin</span>
               <span className="value">
-                ({robotPosition.x}, {robotPosition.y})
+                ({allowedArea.x}, {allowedArea.y})
               </span>
             </div>
             <div>
-              <span className="label">Target</span>
+              <span className="label">Workspace size</span>
               <span className="value">
-                {target ? `(${target.x}, ${target.y})` : "—"}
+                {allowedArea.width} × {allowedArea.height} ft
               </span>
             </div>
             <div>
-              <span className="label">Path length</span>
-              <span className="value">{currentPath.length > 0 ? currentPath.length - 1 : 0} steps</span>
+              <span className="label">Obstacles</span>
+              <span className="value">{obstacleKeys.length}</span>
             </div>
             <div>
-              <span className="label">Movement</span>
-              <span className="value">{isMoving ? "Executing" : "Idle"}</span>
+              <span className="label">Parking slots</span>
+              <span className="value">{parkingAssignments.length} / 3</span>
             </div>
+          </div>
+          <div className="slipbot-panel">
+            <h3>SlipBot queue</h3>
+            <ul className="slipbot-list">
+              {slipbotSummary.map(bot => (
+                <li key={bot.id} className="slipbot-list-item">
+                  <span className="slipbot-swatch" style={{ background: bot.color }} />
+                  <div>
+                    <div className="slipbot-name">{bot.name}</div>
+                    <div className="slipbot-status">{bot.statusText}</div>
+                    <div className="slipbot-position">
+                      ({bot.position.x}, {bot.position.y})
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
           <div className="hint-panel">
             <h3>How to use</h3>
             <ul>
-              <li>Toggle edit mode to add, stretch, or shrink rectangular obstacles.</li>
-              <li>Dimensions (length, width, and area) are shown while editing to help plan clearances.</li>
-              <li>Disable edit mode and tap any free cell to set the goal target.</li>
-              <li>The Slipbot replans instantly and can accept new destinations mid-move.</li>
+              <li>Toggle workspace edit to drag out the allowed operating area. Dimensions are shown as you size it.</li>
+              <li>Right-click within the workspace to drop 1&nbsp;ft obstacles that SlipBots must avoid.</li>
+              <li>Left-click inside the workspace to define three parking slots sized for a 17&nbsp;ft × 8&nbsp;ft SlipBot.</li>
+              <li>Once slots are ready, launch the exit sequence. SlipBots leave the trailer closest-first and avoid one another.</li>
             </ul>
           </div>
+          <button
+            className="simulator-button launch"
+            onClick={handleExitSlipbots}
+            disabled={parkingAssignments.length !== 3 || isSequenceActive}
+          >
+            Exit SlipBots
+          </button>
         </aside>
       </div>
     </div>
