@@ -50,6 +50,83 @@
   background: #020617;
 }
 
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 16px;
+  padding: 0.75rem 1.1rem;
+  box-shadow: 0 18px 32px rgba(2, 6, 23, 0.45);
+  width: 100%;
+  max-width: 800px;
+}
+
+.toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.toggle-text {
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.toggle-switch {
+  width: 52px;
+  height: 28px;
+  border-radius: 9999px;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.toggle-switch .toggle-thumb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.4);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.toggle-switch.active {
+  background: linear-gradient(120deg, #38bdf8, #22c55e);
+  border-color: transparent;
+}
+
+.toggle-switch.active .toggle-thumb {
+  transform: translateX(24px);
+  background: #0f172a;
+}
+
+.toggle-switch:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.85);
+  outline-offset: 3px;
+}
+
+.toggle-state {
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 0.9);
+  min-width: 2.25rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+.grid-note {
+  font-size: 0.85rem;
+  color: rgba(148, 163, 184, 0.9);
+}
+
 .canvas-footer {
   display: flex;
   gap: 0.75rem;

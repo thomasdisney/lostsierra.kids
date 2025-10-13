@@ -7,6 +7,8 @@ const GRID_HEIGHT = 14;
 const CELL_SIZE = 40;
 const ANIMATION_DELAY_MS = 220;
 const EPSILON = 1e-6;
+const TOGGLE_STATUS_MESSAGE =
+  "Obstacle updated. Adjust more or exit edit mode to command the Slipbot.";
 
 function pointKey(x, y) {
   return `${x},${y}`;
@@ -272,26 +274,47 @@ class DStarLitePlanner {
   }
 }
 
-function buildInitialObstacles() {
-  const preset = [
-    [6, 4],
-    [7, 4],
-    [8, 4],
-    [9, 4],
-    [10, 4],
-    [11, 4],
-    [12, 4],
-    [12, 5],
-    [12, 6],
-    [12, 7],
-    [12, 8],
-    [11, 8],
-    [10, 8],
-    [9, 8]
+function buildInitialObstacleRects() {
+  const base = [
+    { x: 6, y: 4, width: 7, height: 1 },
+    { x: 12, y: 4, width: 1, height: 5 },
+    { x: 9, y: 8, width: 3, height: 1 }
   ];
-  const initial = new Set();
-  preset.forEach(([x, y]) => initial.add(pointKey(x, y)));
-  return initial;
+  let counter = 1;
+  return base.map(rect => ({ ...rect, id: `ob-${counter++}` }));
+}
+
+function expandRectangles(rects) {
+  const occupied = new Set();
+  rects.forEach(rect => {
+    for (let dx = 0; dx < rect.width; dx += 1) {
+      for (let dy = 0; dy < rect.height; dy += 1) {
+        const x = rect.x + dx;
+        const y = rect.y + dy;
+        occupied.add(pointKey(x, y));
+      }
+    }
+  });
+  return occupied;
+}
+
+function rectContains(rect, x, y) {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
+
+function computeBoundsFromAnchor(anchor, target) {
+  const clampedX = Math.max(0, Math.min(GRID_WIDTH - 1, target.x));
+  const clampedY = Math.max(0, Math.min(GRID_HEIGHT - 1, target.y));
+  const minX = Math.min(anchor.x, clampedX);
+  const minY = Math.min(anchor.y, clampedY);
+  const maxX = Math.max(anchor.x, clampedX);
+  const maxY = Math.max(anchor.y, clampedY);
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX + 1,
+    height: maxY - minY + 1
+  };
 }
 
 function SimulatorV2() {
@@ -299,13 +322,20 @@ function SimulatorV2() {
   const animationRef = useRef(null);
   const robotPosRef = useRef({ x: 2, y: 2 });
   const targetRef = useRef(null);
+  const robotImageRef = useRef(null);
+  const editSessionRef = useRef(null);
+  const pointerCellRef = useRef(null);
+  const nextRectIdRef = useRef(buildInitialObstacleRects().length + 1);
 
   const [robotPosition, setRobotPosition] = useState(robotPosRef.current);
   const [target, setTarget] = useState(null);
   const [currentPath, setCurrentPath] = useState([]);
   const [isMoving, setIsMoving] = useState(false);
   const [status, setStatus] = useState("Select a target cell to command the Slipbot.");
-  const [obstacles, setObstacles] = useState(() => buildInitialObstacles());
+  const [obstacleRects, setObstacleRects] = useState(() => buildInitialObstacleRects());
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [activeRectId, setActiveRectId] = useState(null);
+  const [robotImageLoaded, setRobotImageLoaded] = useState(false);
 
   const clearAnimation = useCallback(() => {
     if (animationRef.current) {
@@ -319,6 +349,20 @@ function SimulatorV2() {
       clearAnimation();
     };
   }, [clearAnimation]);
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = "/slipbot.png";
+    img.onload = () => {
+      robotImageRef.current = img;
+      setRobotImageLoaded(true);
+    };
+    img.onerror = () => {
+      robotImageRef.current = null;
+      setRobotImageLoaded(false);
+    };
+    robotImageRef.current = img;
+  }, []);
 
   useEffect(() => {
     robotPosRef.current = robotPosition;
@@ -355,9 +399,12 @@ function SimulatorV2() {
     [clearAnimation]
   );
 
+  const obstacleCells = useMemo(() => expandRectangles(obstacleRects), [obstacleRects]);
+
   const planPath = useCallback(
-    (start, goal, { animate } = { animate: true }) => {
-      const world = new GridWorld(GRID_WIDTH, GRID_HEIGHT, obstacles);
+    (start, goal, options = { animate: true, silent: false }) => {
+      const { animate = true, silent = false } = options;
+      const world = new GridWorld(GRID_WIDTH, GRID_HEIGHT, obstacleCells);
       if (!world.isFree(goal.x, goal.y)) {
         setStatus("Target cell is blocked. Choose a free cell.");
         return [];
@@ -373,14 +420,18 @@ function SimulatorV2() {
 
       if (!result.success) {
         setCurrentPath([]);
-        setStatus("No valid path found. Adjust obstacles and try again.");
+        if (!silent) {
+          setStatus("No valid path found. Adjust obstacles and try again.");
+        }
         return [];
       }
 
       const path = planner.getPath();
       if (path.length === 0) {
         setCurrentPath([]);
-        setStatus("No valid path found. Adjust obstacles and try again.");
+        if (!silent) {
+          setStatus("No valid path found. Adjust obstacles and try again.");
+        }
         return [];
       }
 
@@ -389,11 +440,15 @@ function SimulatorV2() {
         const single = path.map(({ x, y }) => ({ x, y }));
         setCurrentPath(single);
         setIsMoving(false);
-        setStatus("Slipbot is already at the goal. Choose another target to keep moving.");
+        if (!silent) {
+          setStatus("Slipbot is already at the goal. Choose another target to keep moving.");
+        }
         return path;
       }
 
-      setStatus("Path planned using D* Lite. Executing movement...");
+      if (!silent) {
+        setStatus("Path planned using D* Lite. Executing movement...");
+      }
       const normalized = path.map(({ x, y }) => ({ x, y }));
       if (animate) {
         animatePath(normalized);
@@ -402,52 +457,143 @@ function SimulatorV2() {
       }
       return path;
     },
-    [animatePath, clearAnimation, obstacles]
+    [animatePath, clearAnimation, obstacleCells]
   );
 
   const canvasWidth = useMemo(() => GRID_WIDTH * CELL_SIZE, []);
   const canvasHeight = useMemo(() => GRID_HEIGHT * CELL_SIZE, []);
 
-  const handleCanvasClick = useCallback(
+  const getCellFromEvent = useCallback(event => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = event.clientX ?? 0;
+    const clientY = event.clientY ?? 0;
+    const x = Math.floor((clientX - rect.left) / CELL_SIZE);
+    const y = Math.floor((clientY - rect.top) / CELL_SIZE);
+    if (Number.isNaN(x) || Number.isNaN(y)) return null;
+    if (x < 0 || y < 0 || x >= GRID_WIDTH || y >= GRID_HEIGHT) return null;
+    return { x, y };
+  }, []);
+
+  const setTargetCell = useCallback(
+    cell => {
+      if (!cell) return;
+      const key = pointKey(cell.x, cell.y);
+      if (obstacleCells.has(key)) {
+        setStatus("Target cell is blocked. Choose a free cell.");
+        return;
+      }
+      targetRef.current = { x: cell.x, y: cell.y };
+      setTarget({ x: cell.x, y: cell.y });
+      planPath(robotPosRef.current, { x: cell.x, y: cell.y }, { animate: true });
+    },
+    [obstacleCells, planPath]
+  );
+
+  const handlePointerDown = useCallback(
     event => {
+      event.preventDefault();
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = Math.floor(((event.clientX ?? 0) - rect.left) / CELL_SIZE);
-      const y = Math.floor(((event.clientY ?? 0) - rect.top) / CELL_SIZE);
-      if (x < 0 || y < 0 || x >= GRID_WIDTH || y >= GRID_HEIGHT) return;
+      const cell = getCellFromEvent(event);
+      if (!cell) return;
 
-      const key = pointKey(x, y);
-      if (event.shiftKey) {
-        if (robotPosRef.current.x === x && robotPosRef.current.y === y) {
-          setStatus("Cannot place an obstacle on the Slipbot.");
-          return;
+      if (isEditMode) {
+        canvas.setPointerCapture(event.pointerId);
+        pointerCellRef.current = cell;
+        const existingRect = obstacleRects.find(rect => rectContains(rect, cell.x, cell.y));
+        if (existingRect) {
+          editSessionRef.current = {
+            rectId: existingRect.id,
+            anchor: cell
+          };
+          setActiveRectId(existingRect.id);
+        } else {
+          const newRect = {
+            id: `ob-${nextRectIdRef.current}`,
+            x: cell.x,
+            y: cell.y,
+            width: 1,
+            height: 1
+          };
+          nextRectIdRef.current += 1;
+          setObstacleRects(prev => [...prev, newRect]);
+          editSessionRef.current = {
+            rectId: newRect.id,
+            anchor: cell
+          };
+          setActiveRectId(newRect.id);
         }
-        setObstacles(prev => {
-          const next = new Set(prev);
-          if (next.has(key)) {
-            next.delete(key);
-            setStatus("Obstacle removed. Replanning...");
-          } else {
-            next.add(key);
-            setStatus("Obstacle added. Replanning...");
-          }
-          return next;
-        });
+        setStatus("Editing obstacles. Drag to stretch or shrink the selected block.");
+      } else {
+        setTargetCell(cell);
+      }
+    },
+    [getCellFromEvent, isEditMode, obstacleRects, setTargetCell]
+  );
+
+  const handlePointerMove = useCallback(
+    event => {
+      if (!isEditMode) return;
+      const session = editSessionRef.current;
+      if (!session) return;
+
+      const cell = getCellFromEvent(event);
+      if (!cell) return;
+
+      const previous = pointerCellRef.current;
+      if (previous && previous.x === cell.x && previous.y === cell.y) {
         return;
       }
 
-      targetRef.current = { x, y };
-      setTarget({ x, y });
-      planPath(robotPosRef.current, { x, y }, { animate: true });
+      pointerCellRef.current = cell;
+      setObstacleRects(prev =>
+        prev.map(rect => {
+          if (rect.id !== session.rectId) return rect;
+          return { ...rect, ...computeBoundsFromAnchor(session.anchor, cell) };
+        })
+      );
     },
-    [planPath]
+    [getCellFromEvent, isEditMode]
   );
 
-  useEffect(() => {
-    if (!targetRef.current) return;
-    planPath(robotPosRef.current, targetRef.current, { animate: true });
-  }, [obstacles, planPath]);
+  const endEditSession = useCallback(() => {
+    editSessionRef.current = null;
+    pointerCellRef.current = null;
+    setActiveRectId(null);
+  }, []);
+
+  const handlePointerUp = useCallback(
+    event => {
+      if (!isEditMode) return;
+      const canvas = canvasRef.current;
+      if (canvas && canvas.hasPointerCapture?.(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+      }
+      if (editSessionRef.current) {
+        setObstacleRects(prev => prev.filter(rect => rect.width > 0 && rect.height > 0));
+        setStatus(TOGGLE_STATUS_MESSAGE);
+      }
+      endEditSession();
+    },
+    [endEditSession, isEditMode]
+  );
+
+  const handlePointerLeave = useCallback(
+    event => {
+      if (!isEditMode) return;
+      const canvas = canvasRef.current;
+      if (canvas && canvas.hasPointerCapture?.(event.pointerId)) {
+        canvas.releasePointerCapture(event.pointerId);
+      }
+      if (editSessionRef.current) {
+        setStatus(TOGGLE_STATUS_MESSAGE);
+      }
+      endEditSession();
+    },
+    [endEditSession, isEditMode]
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -474,11 +620,51 @@ function SimulatorV2() {
       ctx.stroke();
     }
 
-    ctx.fillStyle = "#334155";
-    for (const key of obstacles) {
-      const [ox, oy] = key.split(",").map(Number);
-      ctx.fillRect(ox * CELL_SIZE, oy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-    }
+    obstacleRects.forEach(rect => {
+      const left = rect.x * CELL_SIZE;
+      const top = rect.y * CELL_SIZE;
+      const width = rect.width * CELL_SIZE;
+      const height = rect.height * CELL_SIZE;
+
+      ctx.fillStyle = "rgba(51, 65, 85, 0.9)";
+      ctx.fillRect(left, top, width, height);
+
+      const isActive = rect.id === activeRectId && isEditMode;
+      ctx.strokeStyle = isActive ? "#38bdf8" : "rgba(148, 163, 184, 0.45)";
+      ctx.lineWidth = isActive ? 3 : 1.8;
+      ctx.strokeRect(left + 0.5, top + 0.5, width - 1, height - 1);
+
+      if (isEditMode) {
+        ctx.font = "600 13px 'Inter', sans-serif";
+        const lineHeight = 16;
+        const lineOne = `${rect.width}ft × ${rect.height}ft`;
+        const area = rect.width * rect.height;
+        const lineTwo = `${area}ft²`;
+        const metricsOne = ctx.measureText(lineOne);
+        const metricsTwo = ctx.measureText(lineTwo);
+        const textWidth = Math.max(metricsOne.width, metricsTwo.width);
+        const paddingX = 8;
+        const paddingY = 6;
+        const boxWidth = textWidth + paddingX * 2;
+        const boxHeight = lineHeight * 2 + paddingY * 2 - 6;
+        const centerX = left + width / 2;
+        const centerY = top + height / 2;
+        const boxLeft = centerX - boxWidth / 2;
+        const boxTop = centerY - boxHeight / 2;
+
+        ctx.fillStyle = "rgba(15, 23, 42, 0.78)";
+        ctx.fillRect(boxLeft, boxTop, boxWidth, boxHeight);
+        ctx.strokeStyle = rect.id === activeRectId ? "#38bdf8" : "rgba(148, 163, 184, 0.35)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(boxLeft, boxTop, boxWidth, boxHeight);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(lineOne, centerX, centerY - lineHeight / 2);
+        ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
+        ctx.fillText(lineTwo, centerX, centerY + lineHeight / 2);
+      }
+    });
 
     if (currentPath && currentPath.length > 1) {
       ctx.strokeStyle = "#38bdf8";
@@ -507,14 +693,33 @@ function SimulatorV2() {
 
     const rx = robotPosition.x * CELL_SIZE + CELL_SIZE / 2;
     const ry = robotPosition.y * CELL_SIZE + CELL_SIZE / 2;
-    ctx.fillStyle = "#22c55e";
+    const robotRadius = CELL_SIZE * 0.45;
+    if (robotImageRef.current && (robotImageLoaded || robotImageRef.current.complete)) {
+      const size = CELL_SIZE * 0.9;
+      ctx.drawImage(robotImageRef.current, rx - size / 2, ry - size / 2, size, size);
+    } else {
+      ctx.fillStyle = "#22c55e";
+      ctx.beginPath();
+      ctx.arc(rx, ry, robotRadius * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.65)";
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(rx, ry, CELL_SIZE * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = 3;
+    ctx.arc(rx, ry, robotRadius, 0, Math.PI * 2);
     ctx.stroke();
-  }, [canvasHeight, canvasWidth, currentPath, obstacles, robotPosition, target]);
+  }, [
+    activeRectId,
+    canvasHeight,
+    canvasWidth,
+    currentPath,
+    isEditMode,
+    obstacleRects,
+    robotImageLoaded,
+    robotPosition,
+    target
+  ]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -528,6 +733,29 @@ function SimulatorV2() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!targetRef.current) return;
+    planPath(robotPosRef.current, targetRef.current, { animate: false, silent: isEditMode });
+    if (isEditMode) {
+      setStatus("Editing obstacles. Drag to stretch or shrink the selected block.");
+    }
+  }, [isEditMode, planPath, obstacleCells]);
+
+  const handleToggleEditMode = useCallback(() => {
+    setIsEditMode(prev => {
+      const next = !prev;
+      if (!next) {
+        editSessionRef.current = null;
+        pointerCellRef.current = null;
+        setActiveRectId(null);
+        setStatus("Edit mode disabled. Select a target cell to command the Slipbot.");
+      } else {
+        setStatus("Edit mode enabled. Tap to place an obstacle, then drag to resize it.");
+      }
+      return next;
+    });
+  }, []);
+
   const handleReset = useCallback(() => {
     clearAnimation();
     const start = { x: 2, y: 2 };
@@ -536,7 +764,11 @@ function SimulatorV2() {
     setTarget(null);
     targetRef.current = null;
     setCurrentPath([]);
-    setObstacles(buildInitialObstacles());
+    const initialRects = buildInitialObstacleRects();
+    setObstacleRects(initialRects);
+    nextRectIdRef.current = initialRects.length + 1;
+    setIsEditMode(false);
+    setActiveRectId(null);
     setStatus("Environment reset. Select a target cell to command the Slipbot.");
   }, [clearAnimation]);
 
@@ -545,18 +777,37 @@ function SimulatorV2() {
       <div className="simulator-header">
         <h1>Slipbot Simulator V2</h1>
         <p>
-          Powered by a D* Lite path planner adapted from the multi-robot playground. Use shift+click to
-          toggle obstacles and left click to choose a destination.
+          Powered by a D* Lite path planner adapted from the multi-robot playground. Use the edit switch to
+          sculpt obstacles on the 1&nbsp;ft grid, then tap a target cell to command the Slipbot.
         </p>
       </div>
       <div className="simulator-layout">
         <div className="canvas-container">
+          <div className="canvas-toolbar">
+            <div className="toggle-group">
+              <span className="toggle-text">Obstacle edit mode</span>
+              <button
+                type="button"
+                className={`toggle-switch ${isEditMode ? "active" : ""}`}
+                onClick={handleToggleEditMode}
+                aria-pressed={isEditMode}
+              >
+                <span className="toggle-thumb" />
+              </button>
+              <span className="toggle-state">{isEditMode ? "On" : "Off"}</span>
+            </div>
+            <span className="grid-note">Each square represents 1&nbsp;ft × 1&nbsp;ft.</span>
+          </div>
           <canvas
             ref={canvasRef}
             className="simulator-canvas"
             width={canvasWidth}
             height={canvasHeight}
-            onClick={handleCanvasClick}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
+            onPointerCancel={handlePointerLeave}
           />
           <div className="canvas-footer">
             <button className="simulator-button" onClick={handleReset}>
@@ -595,10 +846,10 @@ function SimulatorV2() {
           <div className="hint-panel">
             <h3>How to use</h3>
             <ul>
-              <li>Left click on any free cell to set the goal target.</li>
-              <li>The Slipbot immediately replans and follows the D* Lite path.</li>
-              <li>Shift + click to add or remove obstacles and watch the live replanning.</li>
-              <li>Click new destinations at any time—even mid-move—for continuous operation.</li>
+              <li>Toggle edit mode to add, stretch, or shrink rectangular obstacles.</li>
+              <li>Dimensions (length, width, and area) are shown while editing to help plan clearances.</li>
+              <li>Disable edit mode and tap any free cell to set the goal target.</li>
+              <li>The Slipbot replans instantly and can accept new destinations mid-move.</li>
             </ul>
           </div>
         </aside>
