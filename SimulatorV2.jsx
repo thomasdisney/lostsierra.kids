@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom";
 import "./SimulatorV2.css";
 
-const GRID_WIDTH = 32;
-const GRID_HEIGHT = 28;
-const CELL_SIZE = 40;
+const GRID_WIDTH = 100;
+const GRID_HEIGHT = 200;
+const CELL_SIZE = 6;
 const SLIPBOT_WIDTH = 8;
 const SLIPBOT_HEIGHT = 17;
 const ANIMATION_DELAY_MS = 220;
@@ -16,9 +16,10 @@ const DEFAULT_ALLOWED_AREA = {
   height: GRID_HEIGHT - 2
 };
 
-const TRAILER_BASE_X = 2;
-const TRAILER_BASE_Y = GRID_HEIGHT - SLIPBOT_HEIGHT - 1;
-const TRAILER_SPACING = SLIPBOT_WIDTH + 2;
+const SLIPBOT_COUNT = 3;
+const TRAILER_CLEARANCE = 1;
+const TRAILER_DEFAULT_X = 4;
+const TRAILER_DEFAULT_Y = GRID_HEIGHT - SLIPBOT_HEIGHT * SLIPBOT_COUNT - 4;
 
 const DIRECTIONS = [
   { dx: 1, dy: 0 },
@@ -161,27 +162,29 @@ function planAStar(start, goal, area, blockedSet) {
   return null;
 }
 
-function createInitialSlipbots() {
+const DEFAULT_TRAILER_ORIGIN = { x: TRAILER_DEFAULT_X, y: TRAILER_DEFAULT_Y };
+
+function createInitialSlipbots(origin = DEFAULT_TRAILER_ORIGIN) {
   return [
     {
       id: "slipbot-1",
       name: "SlipBot A",
       color: "#38bdf8",
-      position: { x: TRAILER_BASE_X, y: TRAILER_BASE_Y },
+      position: { x: origin.x, y: origin.y },
       status: "waiting"
     },
     {
       id: "slipbot-2",
       name: "SlipBot B",
       color: "#22c55e",
-      position: { x: TRAILER_BASE_X + TRAILER_SPACING, y: TRAILER_BASE_Y },
+      position: { x: origin.x, y: origin.y + SLIPBOT_HEIGHT },
       status: "waiting"
     },
     {
       id: "slipbot-3",
       name: "SlipBot C",
       color: "#f97316",
-      position: { x: TRAILER_BASE_X + 2 * TRAILER_SPACING, y: TRAILER_BASE_Y },
+      position: { x: origin.x, y: origin.y + 2 * SLIPBOT_HEIGHT },
       status: "waiting"
     }
   ];
@@ -196,21 +199,37 @@ function SimulatorV2() {
   const [isDefiningArea, setIsDefiningArea] = useState(false);
   const [draftArea, setDraftArea] = useState(null);
   const [obstacleKeys, setObstacleKeys] = useState([]);
+  const [obstacleSlipbots, setObstacleSlipbots] = useState([]);
   const [parkingAssignments, setParkingAssignments] = useState([]);
   const [hoverCell, setHoverCell] = useState(null);
   const [slipbots, setSlipbots] = useState(() => createInitialSlipbots());
+  const [trailerOrigin, setTrailerOrigin] = useState(DEFAULT_TRAILER_ORIGIN);
+  const [trailerPreview, setTrailerPreview] = useState(null);
+  const [obstacleSlipbotPreview, setObstacleSlipbotPreview] = useState(null);
   const [status, setStatus] = useState(
-    "Define the workspace, right-click to place obstacles, then choose three parking locations."
+    "Define the workspace, position the trailer, right-click to place obstacles, then choose three parking locations."
   );
   const [currentPath, setCurrentPath] = useState([]);
   const [sequenceState, setSequenceState] = useState({ running: false, activeBotId: null, queueIndex: -1 });
+  const [isPlacingTrailer, setIsPlacingTrailer] = useState(false);
+  const [isAddingObstacleSlipbot, setIsAddingObstacleSlipbot] = useState(false);
 
   const obstacleSet = useMemo(() => new Set(obstacleKeys), [obstacleKeys]);
+  const obstacleSlipbotSet = useMemo(() => {
+    const set = new Set();
+    obstacleSlipbots.forEach(item => {
+      forEachFootprintCell(item.position.x, item.position.y, (fx, fy) => {
+        set.add(pointKey(fx, fy));
+      });
+    });
+    return set;
+  }, [obstacleSlipbots]);
   const isSequenceActive = sequenceState.running;
 
   const slipbotsRef = useRef(slipbots);
   const allowedAreaRef = useRef(allowedArea);
   const obstacleSetRef = useRef(obstacleSet);
+  const obstacleSlipbotSetRef = useRef(obstacleSlipbotSet);
 
   useEffect(() => {
     slipbotsRef.current = slipbots;
@@ -223,6 +242,10 @@ function SimulatorV2() {
   useEffect(() => {
     obstacleSetRef.current = obstacleSet;
   }, [obstacleSet]);
+
+  useEffect(() => {
+    obstacleSlipbotSetRef.current = obstacleSlipbotSet;
+  }, [obstacleSlipbotSet]);
 
   const canvasWidth = useMemo(() => GRID_WIDTH * CELL_SIZE, []);
   const canvasHeight = useMemo(() => GRID_HEIGHT * CELL_SIZE, []);
@@ -282,12 +305,114 @@ function SimulatorV2() {
     [allowedArea, draftArea]
   );
 
+  const clampTrailerOrigin = useCallback(cell => {
+    if (!cell) return null;
+    const maxX = GRID_WIDTH - SLIPBOT_WIDTH - TRAILER_CLEARANCE;
+    const maxY = GRID_HEIGHT - SLIPBOT_HEIGHT * SLIPBOT_COUNT - TRAILER_CLEARANCE;
+    const clampedX = Math.max(TRAILER_CLEARANCE, Math.min(cell.x, maxX));
+    const clampedY = Math.max(TRAILER_CLEARANCE, Math.min(cell.y, maxY));
+    return { x: clampedX, y: clampedY };
+  }, []);
+
+  const clampObstacleSlipbot = useCallback(
+    cell => {
+      if (!cell) return null;
+      const area = draftArea ?? allowedArea;
+      if (!area) return null;
+      const maxX = area.x + area.width - SLIPBOT_WIDTH;
+      const maxY = area.y + area.height - SLIPBOT_HEIGHT;
+      const clampedX = Math.max(area.x, Math.min(cell.x, maxX));
+      const clampedY = Math.max(area.y, Math.min(cell.y, maxY));
+      return { x: clampedX, y: clampedY };
+    },
+    [allowedArea, draftArea]
+  );
+
   const handlePointerDown = useCallback(
     event => {
       if (isSequenceActive) return;
       if (event.button !== 0) return;
       const cell = getCellFromEvent(event);
       if (!cell) return;
+
+      if (isPlacingTrailer) {
+        const origin = clampTrailerOrigin(cell);
+        if (!origin || !allowedArea) return;
+        const staged = createInitialSlipbots(origin);
+        const insideWorkspace = staged.every(bot =>
+          areaContainsFootprint(allowedArea, bot.position.x, bot.position.y)
+        );
+        if (!insideWorkspace) {
+          setStatus("Trailer must be positioned within the workspace bounds.");
+          return;
+        }
+        const trailerFootprints = staged.flatMap(bot => collectFootprintKeys(bot.position.x, bot.position.y));
+        const overlapsObstacles = trailerFootprints.some(
+          key => obstacleSet.has(key) || obstacleSlipbotSet.has(key)
+        );
+        if (overlapsObstacles) {
+          setStatus("Trailer placement overlaps an existing obstacle. Choose a clear spot.");
+          return;
+        }
+        const parkingFootprints = parkingAssignments.flatMap(assignment =>
+          collectFootprintKeys(assignment.position.x, assignment.position.y)
+        );
+        const overlapsParking = trailerFootprints.some(key => parkingFootprints.includes(key));
+        if (overlapsParking) {
+          setStatus("Trailer cannot overlap a planned parking slot.");
+          return;
+        }
+        setTrailerOrigin(origin);
+        setSlipbots(staged);
+        slipbotsRef.current = staged;
+        setTrailerPreview(null);
+        setIsPlacingTrailer(false);
+        setStatus(`Trailer positioned at (${origin.x}, ${origin.y}). SlipBots staged nose to tail.`);
+        return;
+      }
+
+      if (isAddingObstacleSlipbot) {
+        if (!allowedArea) return;
+        const origin = clampObstacleSlipbot(cell);
+        if (!origin) return;
+        if (!areaContainsFootprint(allowedArea, origin.x, origin.y)) {
+          setStatus("Obstacle SlipBots must be inside the workspace.");
+          return;
+        }
+        const candidateKeys = collectFootprintKeys(origin.x, origin.y);
+        const slipbotKeys = new Set();
+        slipbotsRef.current.forEach(bot => {
+          collectFootprintKeys(bot.position.x, bot.position.y).forEach(key => slipbotKeys.add(key));
+        });
+        const parkingKeys = new Set();
+        parkingAssignments.forEach(assignment => {
+          collectFootprintKeys(assignment.position.x, assignment.position.y).forEach(key => parkingKeys.add(key));
+        });
+        const overlaps = candidateKeys.some(key => {
+          if (obstacleSet.has(key)) return true;
+          if (obstacleSlipbotSet.has(key)) return true;
+          return slipbotKeys.has(key);
+        });
+        if (overlaps) {
+          setStatus("Placement overlaps another SlipBot or obstacle. Choose a clear space.");
+          return;
+        }
+        const overlapsParking = candidateKeys.some(key => parkingKeys.has(key));
+        if (overlapsParking) {
+          setStatus("SlipBot obstacle cannot overlap a parking slot.");
+          return;
+        }
+        setObstacleSlipbots(prev => [
+          ...prev,
+          {
+            id: `obstacle-slipbot-${Date.now()}`,
+            position: origin
+          }
+        ]);
+        setObstacleSlipbotPreview(null);
+        setStatus(`Obstacle SlipBot added at (${origin.x}, ${origin.y}).`);
+        return;
+      }
 
       if (isDefiningArea) {
         areaAnchorRef.current = cell;
@@ -317,7 +442,15 @@ function SimulatorV2() {
       }
 
       const candidateKeys = collectFootprintKeys(targetTopLeft.x, targetTopLeft.y);
-      const overlappingObstacle = candidateKeys.some(key => obstacleSet.has(key));
+      const slipbotKeys = new Set();
+      slipbotsRef.current.forEach(bot => {
+        collectFootprintKeys(bot.position.x, bot.position.y).forEach(key => slipbotKeys.add(key));
+      });
+      const overlappingObstacle = candidateKeys.some(key => {
+        if (obstacleSet.has(key)) return true;
+        if (obstacleSlipbotSet.has(key)) return true;
+        return slipbotKeys.has(key);
+      });
       if (overlappingObstacle) {
         setStatus("Parking slot overlaps an obstacle. Choose a clear space.");
         return;
@@ -352,7 +485,16 @@ function SimulatorV2() {
       getCellFromEvent,
       isDefiningArea,
       isSequenceActive,
+      allowedArea,
+      clampObstacleSlipbot,
+      clampTrailerOrigin,
+      getCellFromEvent,
+      isAddingObstacleSlipbot,
+      isDefiningArea,
+      isPlacingTrailer,
+      isSequenceActive,
       obstacleSet,
+      obstacleSlipbotSet,
       parkingAssignments
     ]
   );
@@ -369,6 +511,16 @@ function SimulatorV2() {
         return;
       }
 
+      if (isPlacingTrailer) {
+        setTrailerPreview(cell ? clampTrailerOrigin(cell) : null);
+        return;
+      }
+
+      if (isAddingObstacleSlipbot) {
+        setObstacleSlipbotPreview(cell ? clampObstacleSlipbot(cell) : null);
+        return;
+      }
+
       if (!isSequenceActive && parkingAssignments.length < 3) {
         setHoverCell(cell ? clampTopLeft(cell) : null);
       } else {
@@ -377,9 +529,13 @@ function SimulatorV2() {
     },
     [
       clampTopLeft,
+      clampTrailerOrigin,
+      clampObstacleSlipbot,
       computeWorkspaceFromCell,
       getCellFromEvent,
+      isAddingObstacleSlipbot,
       isDefiningArea,
+      isPlacingTrailer,
       isSequenceActive,
       parkingAssignments.length
     ]
@@ -414,6 +570,11 @@ function SimulatorV2() {
           );
         })
       );
+      setObstacleSlipbots(prev =>
+        prev.filter(item =>
+          areaContainsFootprint(workspace, item.position.x, item.position.y)
+        )
+      );
       setParkingAssignments(prev =>
         prev.filter(assignment => areaContainsFootprint(workspace, assignment.position.x, assignment.position.y))
       );
@@ -429,10 +590,17 @@ function SimulatorV2() {
     setDraftArea(null);
   }, [draftArea, finalizeWorkspace, isDefiningArea]);
 
+  const handlePointerLeave = useCallback(() => {
+    setHoverCell(null);
+    setTrailerPreview(null);
+    setObstacleSlipbotPreview(null);
+  }, []);
+
   const handleContextMenu = useCallback(
     event => {
       event.preventDefault();
       if (isSequenceActive) return;
+      if (isPlacingTrailer || isAddingObstacleSlipbot) return;
       const cell = getCellFromEvent(event);
       if (!cell || !allowedArea) return;
       const { x, y } = cell;
@@ -456,6 +624,17 @@ function SimulatorV2() {
         return;
       }
 
+      const conflictsSlipbotObstacle = obstacleSlipbots.some(bot =>
+        x >= bot.position.x &&
+        x < bot.position.x + SLIPBOT_WIDTH &&
+        y >= bot.position.y &&
+        y < bot.position.y + SLIPBOT_HEIGHT
+      );
+      if (conflictsSlipbotObstacle) {
+        setStatus("Cannot place an obstacle on top of a SlipBot obstacle.");
+        return;
+      }
+
       const conflictsParking = parkingAssignments.some(assignment =>
         x >= assignment.position.x &&
         x < assignment.position.x + SLIPBOT_WIDTH &&
@@ -476,7 +655,15 @@ function SimulatorV2() {
       });
       setStatus("Obstacle map updated.");
     },
-    [allowedArea, getCellFromEvent, isSequenceActive, parkingAssignments]
+    [
+      allowedArea,
+      getCellFromEvent,
+      isAddingObstacleSlipbot,
+      isPlacingTrailer,
+      isSequenceActive,
+      obstacleSlipbots,
+      parkingAssignments
+    ]
   );
 
   const toggleWorkspaceMode = useCallback(() => {
@@ -484,11 +671,53 @@ function SimulatorV2() {
     setIsDefiningArea(prev => {
       const next = !prev;
       if (next) {
+        setIsPlacingTrailer(false);
+        setIsAddingObstacleSlipbot(false);
+        setTrailerPreview(null);
+        setObstacleSlipbotPreview(null);
         setStatus("Click and drag to define the workspace where SlipBots are allowed.");
       } else {
         setStatus("Workspace lock restored. Define parking slots or adjust obstacles.");
         areaAnchorRef.current = null;
         setDraftArea(null);
+      }
+      return next;
+    });
+  }, [isSequenceActive]);
+
+  const toggleTrailerPlacement = useCallback(() => {
+    if (isSequenceActive) return;
+    setIsPlacingTrailer(prev => {
+      const next = !prev;
+      if (next) {
+        setIsDefiningArea(false);
+        setIsAddingObstacleSlipbot(false);
+        areaAnchorRef.current = null;
+        setDraftArea(null);
+        setObstacleSlipbotPreview(null);
+        setStatus("Click on the canvas to position the trailer. SlipBots will align nose to tail.");
+      } else {
+        setStatus("Trailer placement mode exited.");
+        setTrailerPreview(null);
+      }
+      return next;
+    });
+  }, [isSequenceActive]);
+
+  const toggleObstacleSlipbotMode = useCallback(() => {
+    if (isSequenceActive) return;
+    setIsAddingObstacleSlipbot(prev => {
+      const next = !prev;
+      if (next) {
+        setIsDefiningArea(false);
+        setIsPlacingTrailer(false);
+        areaAnchorRef.current = null;
+        setDraftArea(null);
+        setTrailerPreview(null);
+        setStatus("Click inside the workspace to add a stationary SlipBot obstacle.");
+      } else {
+        setStatus("SlipBot obstacle placement mode exited.");
+        setObstacleSlipbotPreview(null);
       }
       return next;
     });
@@ -506,14 +735,20 @@ function SimulatorV2() {
     setIsDefiningArea(false);
     setDraftArea(null);
     setObstacleKeys([]);
+    setObstacleSlipbots([]);
     setParkingAssignments([]);
     setHoverCell(null);
     const resetBots = createInitialSlipbots();
     setSlipbots(resetBots);
     slipbotsRef.current = resetBots;
+    setTrailerOrigin(DEFAULT_TRAILER_ORIGIN);
+    setTrailerPreview(null);
+    setObstacleSlipbotPreview(null);
+    setIsPlacingTrailer(false);
+    setIsAddingObstacleSlipbot(false);
     setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
     setCurrentPath([]);
-    setStatus("Environment reset. Define the workspace and select three parking slots.");
+    setStatus("Environment reset. Define the workspace, position the trailer, and select three parking slots.");
   }, [clearAnimation]);
 
   const drawScene = useCallback(() => {
@@ -525,23 +760,6 @@ function SimulatorV2() {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
     ctx.fillStyle = "#020617";
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.16)";
-    ctx.lineWidth = 1;
-    for (let gx = 0; gx <= GRID_WIDTH; gx += 1) {
-      const px = gx * CELL_SIZE;
-      ctx.beginPath();
-      ctx.moveTo(px, 0);
-      ctx.lineTo(px, canvasHeight);
-      ctx.stroke();
-    }
-    for (let gy = 0; gy <= GRID_HEIGHT; gy += 1) {
-      const py = gy * CELL_SIZE;
-      ctx.beginPath();
-      ctx.moveTo(0, py);
-      ctx.lineTo(canvasWidth, py);
-      ctx.stroke();
-    }
 
     const area = draftArea ?? allowedArea;
     if (area) {
@@ -566,19 +784,85 @@ function SimulatorV2() {
       ctx.restore();
     }
 
-    ctx.fillStyle = "rgba(226, 232, 240, 0.08)";
-    ctx.fillRect(
-      TRAILER_BASE_X * CELL_SIZE - CELL_SIZE * 0.5,
-      (TRAILER_BASE_Y - 1) * CELL_SIZE,
-      (SLIPBOT_WIDTH * 3 + TRAILER_SPACING - SLIPBOT_WIDTH) * CELL_SIZE + CELL_SIZE,
-      (SLIPBOT_HEIGHT + 2) * CELL_SIZE
-    );
+    const renderTrailerBounds = (origin, options = {}) => {
+      if (!origin) return;
+      const padding = options.padding ?? TRAILER_CLEARANCE;
+      const alpha = options.alpha ?? 0.12;
+      const strokeAlpha = options.strokeAlpha ?? 0.5;
+      const topLeftX = (origin.x - padding) * CELL_SIZE;
+      const topLeftY = (origin.y - padding) * CELL_SIZE;
+      const width = (SLIPBOT_WIDTH + padding * 2) * CELL_SIZE;
+      const height = (SLIPBOT_HEIGHT * SLIPBOT_COUNT + padding * 2) * CELL_SIZE;
+      ctx.fillStyle = `rgba(148, 163, 184, ${alpha})`;
+      ctx.fillRect(topLeftX, topLeftY, width, height);
+      ctx.strokeStyle = `rgba(226, 232, 240, ${strokeAlpha})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(topLeftX, topLeftY, width, height);
+      if (options.dashed) {
+        ctx.save();
+        ctx.setLineDash([6, 6]);
+        ctx.strokeStyle = `rgba(148, 163, 184, ${strokeAlpha + 0.1})`;
+        ctx.strokeRect(
+          origin.x * CELL_SIZE,
+          origin.y * CELL_SIZE,
+          SLIPBOT_WIDTH * CELL_SIZE,
+          SLIPBOT_HEIGHT * SLIPBOT_COUNT * CELL_SIZE
+        );
+        ctx.restore();
+      }
+    };
+
+    renderTrailerBounds(trailerOrigin, { padding: TRAILER_CLEARANCE, alpha: 0.08, strokeAlpha: 0.38 });
+    if (trailerPreview) {
+      renderTrailerBounds(trailerPreview, { padding: TRAILER_CLEARANCE, alpha: 0.18, strokeAlpha: 0.6, dashed: true });
+    }
 
     ctx.fillStyle = "rgba(248, 113, 113, 0.6)";
     obstacleKeys.forEach(key => {
       const [ox, oy] = key.split(",").map(Number);
       ctx.fillRect(ox * CELL_SIZE, oy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
     });
+
+    obstacleSlipbots.forEach((bot, index) => {
+      ctx.fillStyle = "rgba(148, 163, 184, 0.28)";
+      ctx.fillRect(
+        bot.position.x * CELL_SIZE,
+        bot.position.y * CELL_SIZE,
+        SLIPBOT_WIDTH * CELL_SIZE,
+        SLIPBOT_HEIGHT * CELL_SIZE
+      );
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.7)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        bot.position.x * CELL_SIZE,
+        bot.position.y * CELL_SIZE,
+        SLIPBOT_WIDTH * CELL_SIZE,
+        SLIPBOT_HEIGHT * CELL_SIZE
+      );
+      ctx.fillStyle = "rgba(226, 232, 240, 0.88)";
+      ctx.font = "13px 'Inter', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(
+        `Obs ${index + 1}`,
+        bot.position.x * CELL_SIZE + (SLIPBOT_WIDTH * CELL_SIZE) / 2,
+        bot.position.y * CELL_SIZE + (SLIPBOT_HEIGHT * CELL_SIZE) / 2
+      );
+    });
+
+    if (obstacleSlipbotPreview) {
+      ctx.save();
+      ctx.setLineDash([6, 6]);
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.8)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        obstacleSlipbotPreview.x * CELL_SIZE,
+        obstacleSlipbotPreview.y * CELL_SIZE,
+        SLIPBOT_WIDTH * CELL_SIZE,
+        SLIPBOT_HEIGHT * CELL_SIZE
+      );
+      ctx.restore();
+    }
 
     parkingAssignments.forEach((assignment, index) => {
       ctx.fillStyle = "rgba(34, 197, 94, 0.22)";
@@ -677,9 +961,13 @@ function SimulatorV2() {
     hoverCell,
     isSequenceActive,
     obstacleKeys,
+    obstacleSlipbotPreview,
+    obstacleSlipbots,
     parkingAssignments,
     sequenceState.activeBotId,
-    slipbots
+    slipbots,
+    trailerOrigin,
+    trailerPreview
   ]);
 
   useEffect(() => {
@@ -688,6 +976,7 @@ function SimulatorV2() {
 
   const buildBlockedSetForBot = useCallback(botId => {
     const blocked = new Set(obstacleSetRef.current);
+    obstacleSlipbotSetRef.current.forEach(key => blocked.add(key));
     slipbotsRef.current.forEach(bot => {
       if (bot.id === botId) return;
       forEachFootprintCell(bot.position.x, bot.position.y, (bx, by) => {
@@ -837,19 +1126,41 @@ function SimulatorV2() {
       <div className="simulator-layout">
         <div className="canvas-container">
           <div className="canvas-toolbar">
-            <div className="toggle-group">
-              <span className="toggle-text">Workspace edit</span>
+            <div className="toolbar-row">
+              <div className="toggle-group">
+                <span className="toggle-text">Workspace edit</span>
+                <button
+                  type="button"
+                  className={`toggle-switch ${isDefiningArea ? "active" : ""}`}
+                  onClick={toggleWorkspaceMode}
+                  aria-pressed={isDefiningArea}
+                >
+                  <span className="toggle-thumb" />
+                </button>
+                <span className="toggle-state">{isDefiningArea ? "Drag" : "Locked"}</span>
+              </div>
+              <span className="grid-note">Left click: parking slot • Right click: 1&nbsp;ft obstacle</span>
+            </div>
+            <div className="toolbar-actions">
               <button
                 type="button"
-                className={`toggle-switch ${isDefiningArea ? "active" : ""}`}
-                onClick={toggleWorkspaceMode}
-                aria-pressed={isDefiningArea}
+                className={`simulator-button secondary ${isPlacingTrailer ? "active" : ""}`}
+                onClick={toggleTrailerPlacement}
+                aria-pressed={isPlacingTrailer}
+                disabled={isSequenceActive}
               >
-                <span className="toggle-thumb" />
+                Place trailer
               </button>
-              <span className="toggle-state">{isDefiningArea ? "Drag" : "Locked"}</span>
+              <button
+                type="button"
+                className={`simulator-button secondary ${isAddingObstacleSlipbot ? "active" : ""}`}
+                onClick={toggleObstacleSlipbotMode}
+                aria-pressed={isAddingObstacleSlipbot}
+                disabled={isSequenceActive}
+              >
+                Add SlipBot
+              </button>
             </div>
-            <span className="grid-note">Left click: parking slot • Right click: obstacle</span>
           </div>
           <canvas
             ref={canvasRef}
@@ -859,8 +1170,8 @@ function SimulatorV2() {
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onPointerLeave={() => setHoverCell(null)}
-            onPointerCancel={() => setHoverCell(null)}
+            onPointerLeave={handlePointerLeave}
+            onPointerCancel={handlePointerLeave}
             onContextMenu={handleContextMenu}
           />
           <div className="canvas-footer">
@@ -896,8 +1207,18 @@ function SimulatorV2() {
               </span>
             </div>
             <div>
+              <span className="label">Trailer origin</span>
+              <span className="value">
+                ({trailerOrigin.x}, {trailerOrigin.y})
+              </span>
+            </div>
+            <div>
               <span className="label">Obstacles</span>
               <span className="value">{obstacleKeys.length}</span>
+            </div>
+            <div>
+              <span className="label">Obstacle SlipBots</span>
+              <span className="value">{obstacleSlipbots.length}</span>
             </div>
             <div>
               <span className="label">Parking slots</span>
@@ -925,6 +1246,8 @@ function SimulatorV2() {
             <h3>How to use</h3>
             <ul>
               <li>Toggle workspace edit to drag out the allowed operating area. Dimensions are shown as you size it.</li>
+              <li>Use <strong>Place trailer</strong> to reposition the staged SlipBots. Click once inside the workspace to park the trailer nose to tail.</li>
+              <li>Use <strong>Add SlipBot</strong> to drop stationary SlipBot obstacles for path-planning experiments.</li>
               <li>Right-click within the workspace to drop 1&nbsp;ft obstacles that SlipBots must avoid.</li>
               <li>Left-click inside the workspace to define three parking slots sized for a 17&nbsp;ft × 8&nbsp;ft SlipBot.</li>
               <li>Once slots are ready, launch the exit sequence. SlipBots leave the trailer closest-first and avoid one another.</li>
