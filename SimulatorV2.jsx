@@ -9,14 +9,80 @@ const SLIPBOT_WIDTH = 8;
 const SLIPBOT_HEIGHT = 17;
 const ANIMATION_DELAY_MS = 220;
 
+const SLIPBOT_COUNT = 3;
+
+const ORIENTATION_SEQUENCE = ["north", "east"];
+
+const ORIENTATION_CONFIG = {
+  north: {
+    width: SLIPBOT_WIDTH,
+    height: SLIPBOT_HEIGHT,
+    exitVector: { x: 0, y: -1 },
+    exitSteps: SLIPBOT_HEIGHT,
+    botOffset(index) {
+      return { x: 0, y: index * SLIPBOT_HEIGHT };
+    },
+    trailerSize: {
+      width: SLIPBOT_WIDTH,
+      height: SLIPBOT_HEIGHT * SLIPBOT_COUNT
+    }
+  },
+  east: {
+    width: SLIPBOT_HEIGHT,
+    height: SLIPBOT_WIDTH,
+    exitVector: { x: 1, y: 0 },
+    exitSteps: SLIPBOT_HEIGHT,
+    botOffset(index) {
+      return { x: (SLIPBOT_COUNT - index - 1) * SLIPBOT_HEIGHT, y: 0 };
+    },
+    trailerSize: {
+      width: SLIPBOT_HEIGHT * SLIPBOT_COUNT,
+      height: SLIPBOT_WIDTH
+    }
+  }
+};
+
+function normalizeOrientation(orientation) {
+  if (!orientation) return "north";
+  return ORIENTATION_SEQUENCE.includes(orientation) ? orientation : "north";
+}
+
+function rotateOrientation(current) {
+  const index = ORIENTATION_SEQUENCE.indexOf(normalizeOrientation(current));
+  const nextIndex = (index + 1) % ORIENTATION_SEQUENCE.length;
+  return ORIENTATION_SEQUENCE[nextIndex];
+}
+
+function getOrientationDimensions(orientation) {
+  const key = normalizeOrientation(orientation);
+  const config = ORIENTATION_CONFIG[key];
+  return { width: config.width, height: config.height };
+}
+
+function describeOrientation(orientation) {
+  const key = normalizeOrientation(orientation);
+  const label = key === "north" ? "north" : "east";
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function getTrailerDimensions(orientation) {
+  const key = normalizeOrientation(orientation);
+  const config = ORIENTATION_CONFIG[key];
+  return { ...config.trailerSize };
+}
+
+function getOrientationExitConfig(orientation) {
+  const key = normalizeOrientation(orientation);
+  const config = ORIENTATION_CONFIG[key];
+  return { vector: { ...config.exitVector }, steps: config.exitSteps };
+}
+
 const DEFAULT_ALLOWED_AREA = {
   x: 1,
   y: 1,
   width: GRID_WIDTH - 2,
   height: GRID_HEIGHT - 2
 };
-
-const SLIPBOT_COUNT = 3;
 const TRAILER_CLEARANCE = 1;
 const TRAILER_DEFAULT_X = 4;
 const TRAILER_DEFAULT_Y = GRID_HEIGHT - SLIPBOT_HEIGHT * SLIPBOT_COUNT - 4;
@@ -32,38 +98,42 @@ function pointKey(x, y) {
   return `${x},${y}`;
 }
 
-function forEachFootprintCell(x, y, callback) {
-  for (let dx = 0; dx < SLIPBOT_WIDTH; dx += 1) {
-    for (let dy = 0; dy < SLIPBOT_HEIGHT; dy += 1) {
+function forEachFootprintCell(x, y, width, height, callback) {
+  for (let dx = 0; dx < width; dx += 1) {
+    for (let dy = 0; dy < height; dy += 1) {
       callback(x + dx, y + dy);
     }
   }
 }
 
-function collectFootprintKeys(x, y) {
+function collectFootprintKeys(x, y, orientation) {
   const keys = [];
-  forEachFootprintCell(x, y, (fx, fy) => {
+  const { width, height } = getOrientationDimensions(orientation);
+  forEachFootprintCell(x, y, width, height, (fx, fy) => {
     keys.push(pointKey(fx, fy));
   });
   return keys;
 }
 
-function areaContainsFootprint(area, x, y) {
+function areaContainsFootprint(area, x, y, orientation) {
   if (!area) return false;
-  const withinX = x >= area.x && x + SLIPBOT_WIDTH <= area.x + area.width;
-  const withinY = y >= area.y && y + SLIPBOT_HEIGHT <= area.y + area.height;
+  const { width, height } = getOrientationDimensions(orientation);
+  const withinX = x >= area.x && x + width <= area.x + area.width;
+  const withinY = y >= area.y && y + height <= area.y + area.height;
   return withinX && withinY;
 }
 
-function footprintWithinGrid(x, y) {
-  return x >= 0 && y >= 0 && x + SLIPBOT_WIDTH <= GRID_WIDTH && y + SLIPBOT_HEIGHT <= GRID_HEIGHT;
+function footprintWithinGrid(x, y, orientation) {
+  const { width, height } = getOrientationDimensions(orientation);
+  return x >= 0 && y >= 0 && x + width <= GRID_WIDTH && y + height <= GRID_HEIGHT;
 }
 
-function isFootprintFree(x, y, area, blockedSet) {
-  if (!footprintWithinGrid(x, y)) return false;
-  if (!areaContainsFootprint(area, x, y)) return false;
+function isFootprintFree(x, y, orientation, area, blockedSet) {
+  if (!footprintWithinGrid(x, y, orientation)) return false;
+  if (!areaContainsFootprint(area, x, y, orientation)) return false;
+  const { width, height } = getOrientationDimensions(orientation);
   let free = true;
-  forEachFootprintCell(x, y, (cx, cy) => {
+  forEachFootprintCell(x, y, width, height, (cx, cy) => {
     if (!free) return;
     if (blockedSet.has(pointKey(cx, cy))) {
       free = false;
@@ -84,18 +154,19 @@ function reconstructPath(cameFrom, currentKey, nodeLookup) {
   return path.reverse();
 }
 
-function heuristic(a, b) {
-  const ax = a.x + SLIPBOT_WIDTH / 2;
-  const ay = a.y + SLIPBOT_HEIGHT / 2;
-  const bx = b.x + SLIPBOT_WIDTH / 2;
-  const by = b.y + SLIPBOT_HEIGHT / 2;
+function heuristic(a, b, orientation) {
+  const { width, height } = getOrientationDimensions(orientation);
+  const ax = a.x + width / 2;
+  const ay = a.y + height / 2;
+  const bx = b.x + width / 2;
+  const by = b.y + height / 2;
   return Math.abs(ax - bx) + Math.abs(ay - by);
 }
 
-function planAStar(start, goal, area, blockedSet) {
+function planAStar(start, goal, orientation, area, blockedSet) {
   if (!start || !goal) return null;
-  if (!isFootprintFree(goal.x, goal.y, area, blockedSet)) return null;
-  if (!isFootprintFree(start.x, start.y, area, blockedSet)) return null;
+  if (!isFootprintFree(goal.x, goal.y, orientation, area, blockedSet)) return null;
+  if (!isFootprintFree(start.x, start.y, orientation, area, blockedSet)) return null;
 
   const startKey = pointKey(start.x, start.y);
   const goalKey = pointKey(goal.x, goal.y);
@@ -104,7 +175,7 @@ function planAStar(start, goal, area, blockedSet) {
   const cameFrom = new Map();
   const nodeLookup = new Map([[startKey, { ...start }]]);
   const gScore = new Map([[startKey, 0]]);
-  const fScore = new Map([[startKey, heuristic(start, goal)]]);
+  const fScore = new Map([[startKey, heuristic(start, goal, orientation)]]);
   const closedSet = new Set();
 
   const maxIterations = GRID_WIDTH * GRID_HEIGHT * 10;
@@ -140,8 +211,8 @@ function planAStar(start, goal, area, blockedSet) {
 
     for (const { dx, dy } of DIRECTIONS) {
       const neighbor = { x: currentNode.x + dx, y: currentNode.y + dy };
-      if (!footprintWithinGrid(neighbor.x, neighbor.y)) continue;
-      if (!isFootprintFree(neighbor.x, neighbor.y, area, blockedSet)) continue;
+      if (!footprintWithinGrid(neighbor.x, neighbor.y, orientation)) continue;
+      if (!isFootprintFree(neighbor.x, neighbor.y, orientation, area, blockedSet)) continue;
 
       const neighborKey = pointKey(neighbor.x, neighbor.y);
       if (closedSet.has(neighborKey)) continue;
@@ -153,7 +224,7 @@ function planAStar(start, goal, area, blockedSet) {
         cameFrom.set(neighborKey, currentKey);
         nodeLookup.set(neighborKey, neighbor);
         gScore.set(neighborKey, tentativeG);
-        fScore.set(neighborKey, tentativeG + heuristic(neighbor, goal));
+        fScore.set(neighborKey, tentativeG + heuristic(neighbor, goal, orientation));
         openMap.set(neighborKey, neighbor);
       }
     }
@@ -164,27 +235,41 @@ function planAStar(start, goal, area, blockedSet) {
 
 const DEFAULT_TRAILER_ORIGIN = { x: TRAILER_DEFAULT_X, y: TRAILER_DEFAULT_Y };
 
-function createInitialSlipbots(origin = DEFAULT_TRAILER_ORIGIN) {
+function createInitialSlipbots(origin = DEFAULT_TRAILER_ORIGIN, orientation = "north") {
+  const key = normalizeOrientation(orientation);
+  const config = ORIENTATION_CONFIG[key];
   return [
     {
       id: "slipbot-1",
       name: "SlipBot A",
       color: "#38bdf8",
-      position: { x: origin.x, y: origin.y },
+      position: {
+        x: origin.x + config.botOffset(0).x,
+        y: origin.y + config.botOffset(0).y
+      },
+      orientation: key,
       status: "waiting"
     },
     {
       id: "slipbot-2",
       name: "SlipBot B",
       color: "#22c55e",
-      position: { x: origin.x, y: origin.y + SLIPBOT_HEIGHT },
+      position: {
+        x: origin.x + config.botOffset(1).x,
+        y: origin.y + config.botOffset(1).y
+      },
+      orientation: key,
       status: "waiting"
     },
     {
       id: "slipbot-3",
       name: "SlipBot C",
       color: "#f97316",
-      position: { x: origin.x, y: origin.y + 2 * SLIPBOT_HEIGHT },
+      position: {
+        x: origin.x + config.botOffset(2).x,
+        y: origin.y + config.botOffset(2).y
+      },
+      orientation: key,
       status: "waiting"
     }
   ];
@@ -202,7 +287,10 @@ function SimulatorV2() {
   const [obstacleSlipbots, setObstacleSlipbots] = useState([]);
   const [parkingAssignments, setParkingAssignments] = useState([]);
   const [hoverCell, setHoverCell] = useState(null);
-  const [slipbots, setSlipbots] = useState(() => createInitialSlipbots());
+  const [trailerOrientation, setTrailerOrientation] = useState("north");
+  const [parkingSlotOrientation, setParkingSlotOrientation] = useState("north");
+  const [obstacleSlipbotOrientation, setObstacleSlipbotOrientation] = useState("north");
+  const [slipbots, setSlipbots] = useState(() => createInitialSlipbots(DEFAULT_TRAILER_ORIGIN, "north"));
   const [trailerOrigin, setTrailerOrigin] = useState(DEFAULT_TRAILER_ORIGIN);
   const [trailerPreview, setTrailerPreview] = useState(null);
   const [obstacleSlipbotPreview, setObstacleSlipbotPreview] = useState(null);
@@ -218,7 +306,8 @@ function SimulatorV2() {
   const obstacleSlipbotSet = useMemo(() => {
     const set = new Set();
     obstacleSlipbots.forEach(item => {
-      forEachFootprintCell(item.position.x, item.position.y, (fx, fy) => {
+      const dims = getOrientationDimensions(item.orientation);
+      forEachFootprintCell(item.position.x, item.position.y, dims.width, dims.height, (fx, fy) => {
         set.add(pointKey(fx, fy));
       });
     });
@@ -292,12 +381,13 @@ function SimulatorV2() {
   }, []);
 
   const clampTopLeft = useCallback(
-    cell => {
+    (cell, orientation) => {
       if (!cell) return null;
       const area = draftArea ?? allowedArea;
       if (!area) return null;
-      const maxX = area.x + area.width - SLIPBOT_WIDTH;
-      const maxY = area.y + area.height - SLIPBOT_HEIGHT;
+      const dims = getOrientationDimensions(orientation);
+      const maxX = area.x + area.width - dims.width;
+      const maxY = area.y + area.height - dims.height;
       const clampedX = Math.max(area.x, Math.min(cell.x, maxX));
       const clampedY = Math.max(area.y, Math.min(cell.y, maxY));
       return { x: clampedX, y: clampedY };
@@ -305,22 +395,24 @@ function SimulatorV2() {
     [allowedArea, draftArea]
   );
 
-  const clampTrailerOrigin = useCallback(cell => {
+  const clampTrailerOrigin = useCallback((cell, orientation) => {
     if (!cell) return null;
-    const maxX = GRID_WIDTH - SLIPBOT_WIDTH - TRAILER_CLEARANCE;
-    const maxY = GRID_HEIGHT - SLIPBOT_HEIGHT * SLIPBOT_COUNT - TRAILER_CLEARANCE;
+    const dims = getTrailerDimensions(orientation);
+    const maxX = GRID_WIDTH - dims.width - TRAILER_CLEARANCE;
+    const maxY = GRID_HEIGHT - dims.height - TRAILER_CLEARANCE;
     const clampedX = Math.max(TRAILER_CLEARANCE, Math.min(cell.x, maxX));
     const clampedY = Math.max(TRAILER_CLEARANCE, Math.min(cell.y, maxY));
     return { x: clampedX, y: clampedY };
   }, []);
 
   const clampObstacleSlipbot = useCallback(
-    cell => {
+    (cell, orientation) => {
       if (!cell) return null;
       const area = draftArea ?? allowedArea;
       if (!area) return null;
-      const maxX = area.x + area.width - SLIPBOT_WIDTH;
-      const maxY = area.y + area.height - SLIPBOT_HEIGHT;
+      const dims = getOrientationDimensions(orientation);
+      const maxX = area.x + area.width - dims.width;
+      const maxY = area.y + area.height - dims.height;
       const clampedX = Math.max(area.x, Math.min(cell.x, maxX));
       const clampedY = Math.max(area.y, Math.min(cell.y, maxY));
       return { x: clampedX, y: clampedY };
@@ -336,17 +428,19 @@ function SimulatorV2() {
       if (!cell) return;
 
       if (isPlacingTrailer) {
-        const origin = clampTrailerOrigin(cell);
+        const origin = clampTrailerOrigin(cell, trailerOrientation);
         if (!origin || !allowedArea) return;
-        const staged = createInitialSlipbots(origin);
+        const staged = createInitialSlipbots(origin, trailerOrientation);
         const insideWorkspace = staged.every(bot =>
-          areaContainsFootprint(allowedArea, bot.position.x, bot.position.y)
+          areaContainsFootprint(allowedArea, bot.position.x, bot.position.y, bot.orientation)
         );
         if (!insideWorkspace) {
           setStatus("Trailer must be positioned within the workspace bounds.");
           return;
         }
-        const trailerFootprints = staged.flatMap(bot => collectFootprintKeys(bot.position.x, bot.position.y));
+        const trailerFootprints = staged.flatMap(bot =>
+          collectFootprintKeys(bot.position.x, bot.position.y, bot.orientation)
+        );
         const overlapsObstacles = trailerFootprints.some(
           key => obstacleSet.has(key) || obstacleSlipbotSet.has(key)
         );
@@ -355,9 +449,10 @@ function SimulatorV2() {
           return;
         }
         const parkingFootprints = parkingAssignments.flatMap(assignment =>
-          collectFootprintKeys(assignment.position.x, assignment.position.y)
+          collectFootprintKeys(assignment.position.x, assignment.position.y, assignment.orientation)
         );
-        const overlapsParking = trailerFootprints.some(key => parkingFootprints.includes(key));
+        const parkingFootprintSet = new Set(parkingFootprints);
+        const overlapsParking = trailerFootprints.some(key => parkingFootprintSet.has(key));
         if (overlapsParking) {
           setStatus("Trailer cannot overlap a planned parking slot.");
           return;
@@ -367,26 +462,34 @@ function SimulatorV2() {
         slipbotsRef.current = staged;
         setTrailerPreview(null);
         setIsPlacingTrailer(false);
-        setStatus(`Trailer positioned at (${origin.x}, ${origin.y}). SlipBots staged nose to tail.`);
+        setStatus(
+          `Trailer positioned at (${origin.x}, ${origin.y}) facing ${describeOrientation(
+            trailerOrientation
+          )}. SlipBots staged nose to tail.`
+        );
         return;
       }
 
       if (isAddingObstacleSlipbot) {
         if (!allowedArea) return;
-        const origin = clampObstacleSlipbot(cell);
+        const origin = clampObstacleSlipbot(cell, obstacleSlipbotOrientation);
         if (!origin) return;
-        if (!areaContainsFootprint(allowedArea, origin.x, origin.y)) {
+        if (!areaContainsFootprint(allowedArea, origin.x, origin.y, obstacleSlipbotOrientation)) {
           setStatus("Obstacle SlipBots must be inside the workspace.");
           return;
         }
-        const candidateKeys = collectFootprintKeys(origin.x, origin.y);
+        const candidateKeys = collectFootprintKeys(origin.x, origin.y, obstacleSlipbotOrientation);
         const slipbotKeys = new Set();
         slipbotsRef.current.forEach(bot => {
-          collectFootprintKeys(bot.position.x, bot.position.y).forEach(key => slipbotKeys.add(key));
+          collectFootprintKeys(bot.position.x, bot.position.y, bot.orientation).forEach(key =>
+            slipbotKeys.add(key)
+          );
         });
         const parkingKeys = new Set();
         parkingAssignments.forEach(assignment => {
-          collectFootprintKeys(assignment.position.x, assignment.position.y).forEach(key => parkingKeys.add(key));
+          collectFootprintKeys(assignment.position.x, assignment.position.y, assignment.orientation).forEach(key =>
+            parkingKeys.add(key)
+          );
         });
         const overlaps = candidateKeys.some(key => {
           if (obstacleSet.has(key)) return true;
@@ -406,11 +509,14 @@ function SimulatorV2() {
           ...prev,
           {
             id: `obstacle-slipbot-${Date.now()}`,
-            position: origin
+            position: origin,
+            orientation: obstacleSlipbotOrientation
           }
         ]);
         setObstacleSlipbotPreview(null);
-        setStatus(`Obstacle SlipBot added at (${origin.x}, ${origin.y}).`);
+        setStatus(
+          `Obstacle SlipBot added at (${origin.x}, ${origin.y}) facing ${describeOrientation(obstacleSlipbotOrientation)}.`
+        );
         return;
       }
 
@@ -434,17 +540,18 @@ function SimulatorV2() {
         return;
       }
 
-      const targetTopLeft = clampTopLeft(cell);
+      const targetTopLeft = clampTopLeft(cell, parkingSlotOrientation);
       if (!targetTopLeft) return;
-      if (!areaContainsFootprint(allowedArea, targetTopLeft.x, targetTopLeft.y)) {
+      if (!areaContainsFootprint(allowedArea, targetTopLeft.x, targetTopLeft.y, parkingSlotOrientation)) {
         setStatus("Parking targets must be fully inside the workspace.");
         return;
       }
 
-      const candidateKeys = collectFootprintKeys(targetTopLeft.x, targetTopLeft.y);
+      const candidateKeys = collectFootprintKeys(targetTopLeft.x, targetTopLeft.y, parkingSlotOrientation);
+      const candidateKeySet = new Set(candidateKeys);
       const slipbotKeys = new Set();
       slipbotsRef.current.forEach(bot => {
-        collectFootprintKeys(bot.position.x, bot.position.y).forEach(key => slipbotKeys.add(key));
+        collectFootprintKeys(bot.position.x, bot.position.y, bot.orientation).forEach(key => slipbotKeys.add(key));
       });
       const overlappingObstacle = candidateKeys.some(key => {
         if (obstacleSet.has(key)) return true;
@@ -457,14 +564,12 @@ function SimulatorV2() {
       }
 
       const overlappingExisting = parkingAssignments.some(assignment => {
-        const ax = assignment.position.x;
-        const ay = assignment.position.y;
-        return !(
-          targetTopLeft.x + SLIPBOT_WIDTH <= ax ||
-          ax + SLIPBOT_WIDTH <= targetTopLeft.x ||
-          targetTopLeft.y + SLIPBOT_HEIGHT <= ay ||
-          ay + SLIPBOT_HEIGHT <= targetTopLeft.y
+        const existingKeys = collectFootprintKeys(
+          assignment.position.x,
+          assignment.position.y,
+          assignment.orientation
         );
+        return existingKeys.some(key => candidateKeySet.has(key));
       });
 
       if (overlappingExisting) {
@@ -474,10 +579,18 @@ function SimulatorV2() {
 
       const newAssignments = [
         ...parkingAssignments,
-        { id: `slot-${parkingAssignments.length + 1}`, position: targetTopLeft }
+        {
+          id: `slot-${parkingAssignments.length + 1}`,
+          position: targetTopLeft,
+          orientation: parkingSlotOrientation
+        }
       ];
       setParkingAssignments(newAssignments);
-      setStatus(`Parking slot ${newAssignments.length} positioned at (${targetTopLeft.x}, ${targetTopLeft.y}).`);
+      setStatus(
+        `Parking slot ${newAssignments.length} positioned at (${targetTopLeft.x}, ${targetTopLeft.y}) facing ${describeOrientation(
+          parkingSlotOrientation
+        )}.`
+      );
     },
     [
       allowedArea,
@@ -512,17 +625,26 @@ function SimulatorV2() {
       }
 
       if (isPlacingTrailer) {
-        setTrailerPreview(cell ? clampTrailerOrigin(cell) : null);
+        setTrailerPreview(cell ? clampTrailerOrigin(cell, trailerOrientation) : null);
         return;
       }
 
       if (isAddingObstacleSlipbot) {
-        setObstacleSlipbotPreview(cell ? clampObstacleSlipbot(cell) : null);
+        setObstacleSlipbotPreview(
+          cell ? clampObstacleSlipbot(cell, obstacleSlipbotOrientation) : null
+        );
         return;
       }
 
       if (!isSequenceActive && parkingAssignments.length < 3) {
-        setHoverCell(cell ? clampTopLeft(cell) : null);
+        setHoverCell(
+          cell
+            ? {
+                position: clampTopLeft(cell, parkingSlotOrientation),
+                orientation: parkingSlotOrientation
+              }
+            : null
+        );
       } else {
         setHoverCell(null);
       }
@@ -537,7 +659,10 @@ function SimulatorV2() {
       isDefiningArea,
       isPlacingTrailer,
       isSequenceActive,
-      parkingAssignments.length
+      obstacleSlipbotOrientation,
+      parkingAssignments.length,
+      parkingSlotOrientation,
+      trailerOrientation
     ]
   );
 
@@ -550,7 +675,7 @@ function SimulatorV2() {
       }
 
       const allInside = slipbotsRef.current.every(bot =>
-        areaContainsFootprint(workspace, bot.position.x, bot.position.y)
+        areaContainsFootprint(workspace, bot.position.x, bot.position.y, bot.orientation)
       );
       if (!allInside) {
         setStatus("Workspace must include the trailer and all SlipBots.");
@@ -572,11 +697,18 @@ function SimulatorV2() {
       );
       setObstacleSlipbots(prev =>
         prev.filter(item =>
-          areaContainsFootprint(workspace, item.position.x, item.position.y)
+          areaContainsFootprint(workspace, item.position.x, item.position.y, item.orientation)
         )
       );
       setParkingAssignments(prev =>
-        prev.filter(assignment => areaContainsFootprint(workspace, assignment.position.x, assignment.position.y))
+        prev.filter(assignment =>
+          areaContainsFootprint(
+            workspace,
+            assignment.position.x,
+            assignment.position.y,
+            assignment.orientation
+          )
+        )
       );
     },
     []
@@ -613,34 +745,43 @@ function SimulatorV2() {
         return;
       }
 
-      const conflictsSlipbot = slipbotsRef.current.some(bot =>
-        x >= bot.position.x &&
-        x < bot.position.x + SLIPBOT_WIDTH &&
-        y >= bot.position.y &&
-        y < bot.position.y + SLIPBOT_HEIGHT
-      );
+      const conflictsSlipbot = slipbotsRef.current.some(bot => {
+        const dims = getOrientationDimensions(bot.orientation);
+        return (
+          x >= bot.position.x &&
+          x < bot.position.x + dims.width &&
+          y >= bot.position.y &&
+          y < bot.position.y + dims.height
+        );
+      });
       if (conflictsSlipbot) {
         setStatus("Cannot place an obstacle on top of a SlipBot.");
         return;
       }
 
-      const conflictsSlipbotObstacle = obstacleSlipbots.some(bot =>
-        x >= bot.position.x &&
-        x < bot.position.x + SLIPBOT_WIDTH &&
-        y >= bot.position.y &&
-        y < bot.position.y + SLIPBOT_HEIGHT
-      );
+      const conflictsSlipbotObstacle = obstacleSlipbots.some(bot => {
+        const dims = getOrientationDimensions(bot.orientation);
+        return (
+          x >= bot.position.x &&
+          x < bot.position.x + dims.width &&
+          y >= bot.position.y &&
+          y < bot.position.y + dims.height
+        );
+      });
       if (conflictsSlipbotObstacle) {
         setStatus("Cannot place an obstacle on top of a SlipBot obstacle.");
         return;
       }
 
-      const conflictsParking = parkingAssignments.some(assignment =>
-        x >= assignment.position.x &&
-        x < assignment.position.x + SLIPBOT_WIDTH &&
-        y >= assignment.position.y &&
-        y < assignment.position.y + SLIPBOT_HEIGHT
-      );
+      const conflictsParking = parkingAssignments.some(assignment => {
+        const dims = getOrientationDimensions(assignment.orientation);
+        return (
+          x >= assignment.position.x &&
+          x < assignment.position.x + dims.width &&
+          y >= assignment.position.y &&
+          y < assignment.position.y + dims.height
+        );
+      });
       if (conflictsParking) {
         setStatus("Obstacles cannot overlap parking slots.");
         return;
@@ -695,14 +836,18 @@ function SimulatorV2() {
         areaAnchorRef.current = null;
         setDraftArea(null);
         setObstacleSlipbotPreview(null);
-        setStatus("Click on the canvas to position the trailer. SlipBots will align nose to tail.");
+        setStatus(
+          `Click on the canvas to position the trailer. SlipBots will align nose to tail facing ${describeOrientation(
+            trailerOrientation
+          )}.`
+        );
       } else {
         setStatus("Trailer placement mode exited.");
         setTrailerPreview(null);
       }
       return next;
     });
-  }, [isSequenceActive]);
+  }, [isSequenceActive, trailerOrientation]);
 
   const toggleObstacleSlipbotMode = useCallback(() => {
     if (isSequenceActive) return;
@@ -714,14 +859,92 @@ function SimulatorV2() {
         areaAnchorRef.current = null;
         setDraftArea(null);
         setTrailerPreview(null);
-        setStatus("Click inside the workspace to add a stationary SlipBot obstacle.");
+        setStatus(
+          `Click inside the workspace to add a stationary SlipBot obstacle facing ${describeOrientation(
+            obstacleSlipbotOrientation
+          )}.`
+        );
       } else {
         setStatus("SlipBot obstacle placement mode exited.");
         setObstacleSlipbotPreview(null);
       }
       return next;
     });
-  }, [isSequenceActive]);
+  }, [isSequenceActive, obstacleSlipbotOrientation]);
+
+  const handleRotateTrailer = useCallback(() => {
+    if (isSequenceActive) return;
+    if (!allowedArea) {
+      setStatus("Define the workspace before rotating the trailer.");
+      return;
+    }
+    const nextOrientation = rotateOrientation(trailerOrientation);
+    const origin = clampTrailerOrigin(trailerOrigin, nextOrientation);
+    if (!origin) return;
+
+    const staged = createInitialSlipbots(origin, nextOrientation);
+    const insideWorkspace = staged.every(bot =>
+      areaContainsFootprint(allowedArea, bot.position.x, bot.position.y, bot.orientation)
+    );
+    if (!insideWorkspace) {
+      setStatus("Rotating the trailer would move SlipBots outside the workspace bounds.");
+      return;
+    }
+
+    const trailerFootprints = staged.flatMap(bot =>
+      collectFootprintKeys(bot.position.x, bot.position.y, bot.orientation)
+    );
+    const overlapsObstacles = trailerFootprints.some(
+      key => obstacleSet.has(key) || obstacleSlipbotSet.has(key)
+    );
+    if (overlapsObstacles) {
+      setStatus("Clear nearby obstacles before rotating the trailer into this orientation.");
+      return;
+    }
+
+    const parkingKeys = new Set(
+      parkingAssignments.flatMap(assignment =>
+        collectFootprintKeys(assignment.position.x, assignment.position.y, assignment.orientation)
+      )
+    );
+    const overlapsParking = trailerFootprints.some(key => parkingKeys.has(key));
+    if (overlapsParking) {
+      setStatus("Rotating the trailer now would overlap a parking slot.");
+      return;
+    }
+
+    setTrailerOrigin(origin);
+    setTrailerOrientation(nextOrientation);
+    setSlipbots(staged);
+    slipbotsRef.current = staged;
+    setTrailerPreview(null);
+    setStatus(`Trailer rotated to face ${describeOrientation(nextOrientation)}.`);
+  }, [
+    allowedArea,
+    clampTrailerOrigin,
+    isSequenceActive,
+    obstacleSet,
+    obstacleSlipbotSet,
+    parkingAssignments,
+    trailerOrientation,
+    trailerOrigin
+  ]);
+
+  const handleRotateParkingOrientation = useCallback(() => {
+    if (isSequenceActive) return;
+    const next = rotateOrientation(parkingSlotOrientation);
+    setParkingSlotOrientation(next);
+    setHoverCell(null);
+    setStatus(`Parking slot template rotated to ${describeOrientation(next)}.`);
+  }, [isSequenceActive, parkingSlotOrientation]);
+
+  const handleRotateObstacleOrientation = useCallback(() => {
+    if (isSequenceActive) return;
+    const next = rotateOrientation(obstacleSlipbotOrientation);
+    setObstacleSlipbotOrientation(next);
+    setObstacleSlipbotPreview(null);
+    setStatus(`SlipBot obstacle template rotated to ${describeOrientation(next)}.`);
+  }, [isSequenceActive, obstacleSlipbotOrientation]);
 
   const handleClearParking = useCallback(() => {
     if (isSequenceActive) return;
@@ -738,10 +961,13 @@ function SimulatorV2() {
     setObstacleSlipbots([]);
     setParkingAssignments([]);
     setHoverCell(null);
-    const resetBots = createInitialSlipbots();
+    const resetBots = createInitialSlipbots(DEFAULT_TRAILER_ORIGIN, "north");
     setSlipbots(resetBots);
     slipbotsRef.current = resetBots;
     setTrailerOrigin(DEFAULT_TRAILER_ORIGIN);
+    setTrailerOrientation("north");
+    setParkingSlotOrientation("north");
+    setObstacleSlipbotOrientation("north");
     setTrailerPreview(null);
     setObstacleSlipbotPreview(null);
     setIsPlacingTrailer(false);
@@ -784,15 +1010,16 @@ function SimulatorV2() {
       ctx.restore();
     }
 
-    const renderTrailerBounds = (origin, options = {}) => {
+    const renderTrailerBounds = (origin, orientation, options = {}) => {
       if (!origin) return;
       const padding = options.padding ?? TRAILER_CLEARANCE;
       const alpha = options.alpha ?? 0.12;
       const strokeAlpha = options.strokeAlpha ?? 0.5;
+      const trailerDims = getTrailerDimensions(orientation);
       const topLeftX = (origin.x - padding) * CELL_SIZE;
       const topLeftY = (origin.y - padding) * CELL_SIZE;
-      const width = (SLIPBOT_WIDTH + padding * 2) * CELL_SIZE;
-      const height = (SLIPBOT_HEIGHT * SLIPBOT_COUNT + padding * 2) * CELL_SIZE;
+      const width = (trailerDims.width + padding * 2) * CELL_SIZE;
+      const height = (trailerDims.height + padding * 2) * CELL_SIZE;
       ctx.fillStyle = `rgba(148, 163, 184, ${alpha})`;
       ctx.fillRect(topLeftX, topLeftY, width, height);
       ctx.strokeStyle = `rgba(226, 232, 240, ${strokeAlpha})`;
@@ -805,16 +1032,25 @@ function SimulatorV2() {
         ctx.strokeRect(
           origin.x * CELL_SIZE,
           origin.y * CELL_SIZE,
-          SLIPBOT_WIDTH * CELL_SIZE,
-          SLIPBOT_HEIGHT * SLIPBOT_COUNT * CELL_SIZE
+          trailerDims.width * CELL_SIZE,
+          trailerDims.height * CELL_SIZE
         );
         ctx.restore();
       }
     };
 
-    renderTrailerBounds(trailerOrigin, { padding: TRAILER_CLEARANCE, alpha: 0.08, strokeAlpha: 0.38 });
+    renderTrailerBounds(trailerOrigin, trailerOrientation, {
+      padding: TRAILER_CLEARANCE,
+      alpha: 0.08,
+      strokeAlpha: 0.38
+    });
     if (trailerPreview) {
-      renderTrailerBounds(trailerPreview, { padding: TRAILER_CLEARANCE, alpha: 0.18, strokeAlpha: 0.6, dashed: true });
+      renderTrailerBounds(trailerPreview, trailerOrientation, {
+        padding: TRAILER_CLEARANCE,
+        alpha: 0.18,
+        strokeAlpha: 0.6,
+        dashed: true
+      });
     }
 
     ctx.fillStyle = "rgba(248, 113, 113, 0.6)";
@@ -824,20 +1060,21 @@ function SimulatorV2() {
     });
 
     obstacleSlipbots.forEach((bot, index) => {
+      const dims = getOrientationDimensions(bot.orientation);
       ctx.fillStyle = "rgba(148, 163, 184, 0.28)";
       ctx.fillRect(
         bot.position.x * CELL_SIZE,
         bot.position.y * CELL_SIZE,
-        SLIPBOT_WIDTH * CELL_SIZE,
-        SLIPBOT_HEIGHT * CELL_SIZE
+        dims.width * CELL_SIZE,
+        dims.height * CELL_SIZE
       );
       ctx.strokeStyle = "rgba(148, 163, 184, 0.7)";
       ctx.lineWidth = 2;
       ctx.strokeRect(
         bot.position.x * CELL_SIZE,
         bot.position.y * CELL_SIZE,
-        SLIPBOT_WIDTH * CELL_SIZE,
-        SLIPBOT_HEIGHT * CELL_SIZE
+        dims.width * CELL_SIZE,
+        dims.height * CELL_SIZE
       );
       ctx.fillStyle = "rgba(226, 232, 240, 0.88)";
       ctx.font = "13px 'Inter', sans-serif";
@@ -845,12 +1082,13 @@ function SimulatorV2() {
       ctx.textBaseline = "middle";
       ctx.fillText(
         `Obs ${index + 1}`,
-        bot.position.x * CELL_SIZE + (SLIPBOT_WIDTH * CELL_SIZE) / 2,
-        bot.position.y * CELL_SIZE + (SLIPBOT_HEIGHT * CELL_SIZE) / 2
+        bot.position.x * CELL_SIZE + (dims.width * CELL_SIZE) / 2,
+        bot.position.y * CELL_SIZE + (dims.height * CELL_SIZE) / 2
       );
     });
 
     if (obstacleSlipbotPreview) {
+      const dims = getOrientationDimensions(obstacleSlipbotOrientation);
       ctx.save();
       ctx.setLineDash([6, 6]);
       ctx.strokeStyle = "rgba(148, 163, 184, 0.8)";
@@ -858,27 +1096,28 @@ function SimulatorV2() {
       ctx.strokeRect(
         obstacleSlipbotPreview.x * CELL_SIZE,
         obstacleSlipbotPreview.y * CELL_SIZE,
-        SLIPBOT_WIDTH * CELL_SIZE,
-        SLIPBOT_HEIGHT * CELL_SIZE
+        dims.width * CELL_SIZE,
+        dims.height * CELL_SIZE
       );
       ctx.restore();
     }
 
     parkingAssignments.forEach((assignment, index) => {
+      const dims = getOrientationDimensions(assignment.orientation);
       ctx.fillStyle = "rgba(34, 197, 94, 0.22)";
       ctx.fillRect(
         assignment.position.x * CELL_SIZE,
         assignment.position.y * CELL_SIZE,
-        SLIPBOT_WIDTH * CELL_SIZE,
-        SLIPBOT_HEIGHT * CELL_SIZE
+        dims.width * CELL_SIZE,
+        dims.height * CELL_SIZE
       );
       ctx.strokeStyle = "rgba(34, 197, 94, 0.6)";
       ctx.lineWidth = 2;
       ctx.strokeRect(
         assignment.position.x * CELL_SIZE,
         assignment.position.y * CELL_SIZE,
-        SLIPBOT_WIDTH * CELL_SIZE,
-        SLIPBOT_HEIGHT * CELL_SIZE
+        dims.width * CELL_SIZE,
+        dims.height * CELL_SIZE
       );
       ctx.fillStyle = "rgba(226, 232, 240, 0.92)";
       ctx.font = "16px 'Inter', sans-serif";
@@ -892,31 +1131,33 @@ function SimulatorV2() {
     });
 
     if (hoverCell && parkingAssignments.length < 3 && !isSequenceActive) {
+      const dims = getOrientationDimensions(hoverCell.orientation);
       ctx.fillStyle = "rgba(250, 204, 21, 0.18)";
       ctx.fillRect(
-        hoverCell.x * CELL_SIZE,
-        hoverCell.y * CELL_SIZE,
-        SLIPBOT_WIDTH * CELL_SIZE,
-        SLIPBOT_HEIGHT * CELL_SIZE
+        hoverCell.position.x * CELL_SIZE,
+        hoverCell.position.y * CELL_SIZE,
+        dims.width * CELL_SIZE,
+        dims.height * CELL_SIZE
       );
       ctx.strokeStyle = "rgba(250, 204, 21, 0.6)";
       ctx.lineWidth = 2;
       ctx.strokeRect(
-        hoverCell.x * CELL_SIZE,
-        hoverCell.y * CELL_SIZE,
-        SLIPBOT_WIDTH * CELL_SIZE,
-        SLIPBOT_HEIGHT * CELL_SIZE
+        hoverCell.position.x * CELL_SIZE,
+        hoverCell.position.y * CELL_SIZE,
+        dims.width * CELL_SIZE,
+        dims.height * CELL_SIZE
       );
     }
 
     if (currentPath.length > 1) {
       const activeBot = slipbotsRef.current.find(bot => bot.id === sequenceState.activeBotId);
+      const activeDims = getOrientationDimensions(activeBot?.orientation ?? "north");
       ctx.strokeStyle = activeBot ? activeBot.color : "#38bdf8";
       ctx.lineWidth = 4;
       ctx.beginPath();
       currentPath.forEach((step, idx) => {
-        const cx = step.x * CELL_SIZE + (SLIPBOT_WIDTH * CELL_SIZE) / 2;
-        const cy = step.y * CELL_SIZE + (SLIPBOT_HEIGHT * CELL_SIZE) / 2;
+        const cx = step.x * CELL_SIZE + (activeDims.width * CELL_SIZE) / 2;
+        const cy = step.y * CELL_SIZE + (activeDims.height * CELL_SIZE) / 2;
         if (idx === 0) {
           ctx.moveTo(cx, cy);
         } else {
@@ -927,20 +1168,21 @@ function SimulatorV2() {
     }
 
     slipbots.forEach(bot => {
+      const dims = getOrientationDimensions(bot.orientation);
       ctx.fillStyle = `${bot.color}cc`;
       ctx.fillRect(
         bot.position.x * CELL_SIZE,
         bot.position.y * CELL_SIZE,
-        SLIPBOT_WIDTH * CELL_SIZE,
-        SLIPBOT_HEIGHT * CELL_SIZE
+        dims.width * CELL_SIZE,
+        dims.height * CELL_SIZE
       );
       ctx.strokeStyle = bot.color;
       ctx.lineWidth = 3;
       ctx.strokeRect(
         bot.position.x * CELL_SIZE,
         bot.position.y * CELL_SIZE,
-        SLIPBOT_WIDTH * CELL_SIZE,
-        SLIPBOT_HEIGHT * CELL_SIZE
+        dims.width * CELL_SIZE,
+        dims.height * CELL_SIZE
       );
       ctx.fillStyle = "#0f172a";
       ctx.font = "15px 'Inter', sans-serif";
@@ -948,8 +1190,8 @@ function SimulatorV2() {
       ctx.textBaseline = "middle";
       ctx.fillText(
         bot.name.replace("SlipBot ", ""),
-        bot.position.x * CELL_SIZE + (SLIPBOT_WIDTH * CELL_SIZE) / 2,
-        bot.position.y * CELL_SIZE + (SLIPBOT_HEIGHT * CELL_SIZE) / 2
+        bot.position.x * CELL_SIZE + (dims.width * CELL_SIZE) / 2,
+        bot.position.y * CELL_SIZE + (dims.height * CELL_SIZE) / 2
       );
     });
   }, [
@@ -961,12 +1203,14 @@ function SimulatorV2() {
     hoverCell,
     isSequenceActive,
     obstacleKeys,
+    obstacleSlipbotOrientation,
     obstacleSlipbotPreview,
     obstacleSlipbots,
     parkingAssignments,
     sequenceState.activeBotId,
     slipbots,
     trailerOrigin,
+    trailerOrientation,
     trailerPreview
   ]);
 
@@ -974,12 +1218,44 @@ function SimulatorV2() {
     drawScene();
   }, [drawScene]);
 
+  const computeExitSegment = useCallback(
+    bot => {
+      const orientation = normalizeOrientation(bot.orientation);
+      const trailerKey = normalizeOrientation(trailerOrientation);
+      if (orientation !== trailerKey) {
+        return null;
+      }
+      const exitConfig = getOrientationExitConfig(trailerKey);
+      const trailerDims = getTrailerDimensions(trailerKey);
+      const dims = getOrientationDimensions(orientation);
+
+      let distanceToOpening = 0;
+      if (trailerKey === "north") {
+        distanceToOpening = bot.position.y - trailerOrigin.y;
+      } else if (trailerKey === "east") {
+        const frontTopLeftX = trailerOrigin.x + trailerDims.width - dims.width;
+        distanceToOpening = frontTopLeftX - bot.position.x;
+      }
+
+      const totalSteps = distanceToOpening + exitConfig.steps;
+      const segment = [{ x: bot.position.x, y: bot.position.y }];
+      let current = { x: bot.position.x, y: bot.position.y };
+      for (let i = 0; i < totalSteps; i += 1) {
+        current = { x: current.x + exitConfig.vector.x, y: current.y + exitConfig.vector.y };
+        segment.push(current);
+      }
+      return segment;
+    },
+    [trailerOrigin, trailerOrientation]
+  );
+
   const buildBlockedSetForBot = useCallback(botId => {
     const blocked = new Set(obstacleSetRef.current);
     obstacleSlipbotSetRef.current.forEach(key => blocked.add(key));
     slipbotsRef.current.forEach(bot => {
       if (bot.id === botId) return;
-      forEachFootprintCell(bot.position.x, bot.position.y, (bx, by) => {
+      const dims = getOrientationDimensions(bot.orientation);
+      forEachFootprintCell(bot.position.x, bot.position.y, dims.width, dims.height, (bx, by) => {
         blocked.add(pointKey(bx, by));
       });
     });
@@ -1033,9 +1309,36 @@ function SimulatorV2() {
 
       const area = allowedAreaRef.current;
       const blocked = buildBlockedSetForBot(bot.id);
-      const path = planAStar(bot.position, entry.target.position, area, blocked);
+      const exitSegment = computeExitSegment(bot);
+      if (!exitSegment || exitSegment.length < 2) {
+        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
+        setStatus("Unable to compute a straight-line exit for the active SlipBot.");
+        return;
+      }
 
-      if (!path) {
+      const corridorClear = exitSegment.every((step, idx) => {
+        if (idx === 0) return true;
+        return isFootprintFree(step.x, step.y, bot.orientation, area, blocked);
+      });
+      if (!corridorClear) {
+        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
+        setCurrentPath([]);
+        setStatus(
+          `${bot.name} cannot leave the trailer without crossing an obstacle. Clear the exit lane and try again.`
+        );
+        return;
+      }
+
+      const exitComplete = exitSegment[exitSegment.length - 1];
+      const navigationPath = planAStar(
+        exitComplete,
+        entry.target.position,
+        bot.orientation,
+        area,
+        blocked
+      );
+
+      if (!navigationPath) {
         setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
         setCurrentPath([]);
         setStatus(
@@ -1043,6 +1346,10 @@ function SimulatorV2() {
         );
         return;
       }
+
+      const path = navigationPath.length > 0
+        ? [...exitSegment, ...navigationPath.slice(1)]
+        : exitSegment;
 
       setSequenceState({ running: true, activeBotId: bot.id, queueIndex: index });
       setCurrentPath(path);
@@ -1053,7 +1360,12 @@ function SimulatorV2() {
         setSlipbots(prev =>
           prev.map(item =>
             item.id === bot.id
-              ? { ...item, position: entry.target.position, status: "parked" }
+              ? {
+                  ...item,
+                  position: entry.target.position,
+                  orientation: entry.target.orientation,
+                  status: "parked"
+                }
               : item
           )
         );
@@ -1062,7 +1374,7 @@ function SimulatorV2() {
         runQueue(queue, index + 1);
       });
     },
-    [animateSlipbot, buildBlockedSetForBot]
+    [animateSlipbot, buildBlockedSetForBot, computeExitSegment]
   );
 
   const handleExitSlipbots = useCallback(() => {
@@ -1078,12 +1390,32 @@ function SimulatorV2() {
       return;
     }
 
-    const queue = [...slipbotsRef.current]
-      .sort((a, b) => a.position.x - b.position.x)
-      .map((bot, idx) => ({ botId: bot.id, target: parkingAssignments[idx] }));
+    const waitingBots = slipbotsRef.current.filter(bot => bot.status === "waiting");
+    const sortedWaiting = [...waitingBots].sort((a, b) => {
+      const orientation = normalizeOrientation(trailerOrientation);
+      if (orientation === "north") {
+        return a.position.y - b.position.y;
+      }
+      return b.position.x - a.position.x;
+    });
+
+    if (sortedWaiting.length !== parkingAssignments.length) {
+      setStatus("Mismatch between waiting SlipBots and parking assignments. Reset and try again.");
+      return;
+    }
+
+    const queue = sortedWaiting.map((bot, idx) => ({
+      botId: bot.id,
+      target: parkingAssignments[idx]
+    }));
 
     const allInside = queue.every(entry =>
-      areaContainsFootprint(allowedAreaRef.current, entry.target.position.x, entry.target.position.y)
+      areaContainsFootprint(
+        allowedAreaRef.current,
+        entry.target.position.x,
+        entry.target.position.y,
+        entry.target.orientation
+      )
     );
     if (!allInside) {
       setStatus("All parking slots must remain inside the workspace.");
@@ -1091,7 +1423,11 @@ function SimulatorV2() {
     }
 
     const anyBlocked = queue.some(entry => {
-      const keys = collectFootprintKeys(entry.target.position.x, entry.target.position.y);
+      const keys = collectFootprintKeys(
+        entry.target.position.x,
+        entry.target.position.y,
+        entry.target.orientation
+      );
       return keys.some(key => obstacleSetRef.current.has(key));
     });
     if (anyBlocked) {
@@ -1099,9 +1435,17 @@ function SimulatorV2() {
       return;
     }
 
+    const orientationAligned = queue.every(
+      entry => normalizeOrientation(entry.target.orientation) === normalizeOrientation(trailerOrientation)
+    );
+    if (!orientationAligned) {
+      setStatus("Rotate the trailer or parking slots so their orientations match before starting the exit sequence.");
+      return;
+    }
+
     setStatus("Starting the SlipBot exit sequence.");
     runQueue(queue, 0);
-  }, [isSequenceActive, parkingAssignments, runQueue]);
+  }, [isSequenceActive, parkingAssignments, runQueue, trailerOrientation]);
 
   const slipbotSummary = useMemo(
     () =>
@@ -1153,12 +1497,36 @@ function SimulatorV2() {
               </button>
               <button
                 type="button"
+                className="simulator-button secondary"
+                onClick={handleRotateTrailer}
+                disabled={isSequenceActive}
+              >
+                Rotate trailer ({describeOrientation(trailerOrientation)})
+              </button>
+              <button
+                type="button"
                 className={`simulator-button secondary ${isAddingObstacleSlipbot ? "active" : ""}`}
                 onClick={toggleObstacleSlipbotMode}
                 aria-pressed={isAddingObstacleSlipbot}
                 disabled={isSequenceActive}
               >
                 Add SlipBot
+              </button>
+              <button
+                type="button"
+                className="simulator-button secondary"
+                onClick={handleRotateObstacleOrientation}
+                disabled={isSequenceActive}
+              >
+                Rotate SlipBot ({describeOrientation(obstacleSlipbotOrientation)})
+              </button>
+              <button
+                type="button"
+                className="simulator-button secondary"
+                onClick={handleRotateParkingOrientation}
+                disabled={isSequenceActive}
+              >
+                Rotate slot ({describeOrientation(parkingSlotOrientation)})
               </button>
             </div>
           </div>
@@ -1213,6 +1581,10 @@ function SimulatorV2() {
               </span>
             </div>
             <div>
+              <span className="label">Trailer orientation</span>
+              <span className="value">{describeOrientation(trailerOrientation)}</span>
+            </div>
+            <div>
               <span className="label">Obstacles</span>
               <span className="value">{obstacleKeys.length}</span>
             </div>
@@ -1223,6 +1595,14 @@ function SimulatorV2() {
             <div>
               <span className="label">Parking slots</span>
               <span className="value">{parkingAssignments.length} / 3</span>
+            </div>
+            <div>
+              <span className="label">Slot template</span>
+              <span className="value">{describeOrientation(parkingSlotOrientation)}</span>
+            </div>
+            <div>
+              <span className="label">SlipBot obstacle</span>
+              <span className="value">{describeOrientation(obstacleSlipbotOrientation)}</span>
             </div>
           </div>
           <div className="slipbot-panel">
@@ -1237,6 +1617,7 @@ function SimulatorV2() {
                     <div className="slipbot-position">
                       ({bot.position.x}, {bot.position.y})
                     </div>
+                    <div className="slipbot-orientation">Facing {describeOrientation(bot.orientation)}</div>
                   </div>
                 </li>
               ))}
@@ -1248,6 +1629,7 @@ function SimulatorV2() {
               <li>Toggle workspace edit to drag out the allowed operating area. Dimensions are shown as you size it.</li>
               <li>Use <strong>Place trailer</strong> to reposition the staged SlipBots. Click once inside the workspace to park the trailer nose to tail.</li>
               <li>Use <strong>Add SlipBot</strong> to drop stationary SlipBot obstacles for path-planning experiments.</li>
+              <li>Use the rotate controls to align the trailer, parking slot template, and obstacle SlipBots with your layout.</li>
               <li>Right-click within the workspace to drop 1&nbsp;ft obstacles that SlipBots must avoid.</li>
               <li>Left-click inside the workspace to define three parking slots sized for a 17&nbsp;ft × 8&nbsp;ft SlipBot.</li>
               <li>Once slots are ready, launch the exit sequence. SlipBots leave the trailer closest-first and avoid one another.</li>
