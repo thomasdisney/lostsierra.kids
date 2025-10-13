@@ -352,7 +352,7 @@ function SimulatorV2() {
 
   useEffect(() => {
     const img = new Image();
-    img.src = "/slipbot.png";
+    img.src = "/Slipbot.png";
     img.onload = () => {
       robotImageRef.current = img;
       setRobotImageLoaded(true);
