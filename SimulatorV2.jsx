@@ -10,9 +10,6 @@ const SLIPBOT_WIDTH = 8;
 const TRAILER_LENGTH = SLIPBOT_LENGTH * 3 + 6;
 const TRAILER_WIDTH = SLIPBOT_WIDTH + 6;
 
-const HANDLE_DISTANCE_PX = 28;
-const HANDLE_RADIUS_PX = 14;
-
 const SLIPBOT_COLORS = ["#38bdf8", "#22c55e", "#f97316", "#c084fc", "#facc15"];
 
 function degToRad(degrees) {
@@ -113,6 +110,13 @@ function rectanglesOverlap(rectA, rectB) {
   return axes.every(axis => overlapOnAxis(axis, polygonA, polygonB));
 }
 
+function smallestAngleDelta(current, start) {
+  let delta = current - start;
+  while (delta > 180) delta -= 360;
+  while (delta < -180) delta += 360;
+  return delta;
+}
+
 function isSlipbotPlacementValid(candidate, slipbots, ignoreId) {
   const { width, height, rotation } = candidate;
   const clamped = clampCenterToBounds(candidate.center, width, height, rotation);
@@ -138,19 +142,6 @@ function isSlipbotPlacementValid(candidate, slipbots, ignoreId) {
     }
   }
   return true;
-}
-
-function getRotationHandlePosition(entity) {
-  const centerPx = {
-    x: entity.center.x * CELL_SIZE,
-    y: entity.center.y * CELL_SIZE
-  };
-  const angle = degToRad(entity.rotation - 90);
-  const distance = (entity.height / 2) * CELL_SIZE + HANDLE_DISTANCE_PX;
-  return {
-    x: centerPx.x + Math.cos(angle) * distance,
-    y: centerPx.y + Math.sin(angle) * distance
-  };
 }
 
 function drawRoundedRectPath(ctx, x, y, width, height, radius) {
@@ -304,17 +295,6 @@ function SimulatorV2() {
     }
     ctx.restore();
 
-    const drawRotationHandle = (entity, active = false) => {
-      const handle = getRotationHandlePosition(entity);
-      ctx.beginPath();
-      ctx.arc(handle.x, handle.y, HANDLE_RADIUS_PX, 0, Math.PI * 2);
-      ctx.fillStyle = active ? "rgba(56, 189, 248, 0.9)" : "rgba(148, 163, 184, 0.85)";
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "rgba(15, 23, 42, 0.65)";
-      ctx.stroke();
-    };
-
     parkingSlots.forEach(slot => {
       ctx.save();
       ctx.translate(slot.center.x * CELL_SIZE, slot.center.y * CELL_SIZE);
@@ -330,7 +310,6 @@ function SimulatorV2() {
       ctx.stroke();
       ctx.restore();
       ctx.setLineDash([]);
-      drawRotationHandle(slot, selectedEntity?.type === "parking" && selectedEntity.id === slot.id);
     });
 
     ctx.save();
@@ -345,7 +324,6 @@ function SimulatorV2() {
     ctx.strokeStyle = "rgba(45, 212, 191, 0.9)";
     ctx.stroke();
     ctx.restore();
-    drawRotationHandle(trailer, selectedEntity?.type === "trailer");
 
     slipbots.forEach(bot => {
       const isSelected = selectedEntity?.type === "slipbot" && selectedEntity.id === bot.id;
@@ -367,7 +345,6 @@ function SimulatorV2() {
       ctx.strokeStyle = "rgba(15, 23, 42, 0.85)";
       ctx.stroke();
       ctx.restore();
-      drawRotationHandle(bot, isSelected);
     });
   }, [parkingSlots, selectedEntity, slipbots, trailer]);
 
@@ -379,45 +356,23 @@ function SimulatorV2() {
     pointer => {
       if (!pointer) return null;
       const gridPoint = { x: pointer.x, y: pointer.y };
-      const pixelPoint = { x: pointer.px, y: pointer.py };
 
-      for (let i = slipbots.length - 1; i >= 0; i -= 1) {
-        const bot = slipbots[i];
-        const handle = getRotationHandlePosition(bot);
-        const distance = Math.hypot(pixelPoint.x - handle.x, pixelPoint.y - handle.y);
-        if (distance <= HANDLE_RADIUS_PX) {
-          return { type: "slipbot", id: bot.id, mode: "rotate" };
-        }
-      }
       for (let i = slipbots.length - 1; i >= 0; i -= 1) {
         const bot = slipbots[i];
         if (pointInRectangle(bot, gridPoint)) {
-          return { type: "slipbot", id: bot.id, mode: "drag" };
+          return { type: "slipbot", id: bot.id };
         }
       }
 
-      for (let i = parkingSlots.length - 1; i >= 0; i -= 1) {
-        const slot = parkingSlots[i];
-        const handle = getRotationHandlePosition(slot);
-        const distance = Math.hypot(pixelPoint.x - handle.x, pixelPoint.y - handle.y);
-        if (distance <= HANDLE_RADIUS_PX) {
-          return { type: "parking", id: slot.id, mode: "rotate" };
-        }
-      }
       for (let i = parkingSlots.length - 1; i >= 0; i -= 1) {
         const slot = parkingSlots[i];
         if (pointInRectangle(slot, gridPoint)) {
-          return { type: "parking", id: slot.id, mode: "drag" };
+          return { type: "parking", id: slot.id };
         }
       }
 
-      const trailerHandle = getRotationHandlePosition(trailer);
-      const trailerDistance = Math.hypot(pixelPoint.x - trailerHandle.x, pixelPoint.y - trailerHandle.y);
-      if (trailerDistance <= HANDLE_RADIUS_PX) {
-        return { type: "trailer", id: trailer.id, mode: "rotate" };
-      }
       if (pointInRectangle(trailer, gridPoint)) {
-        return { type: "trailer", id: trailer.id, mode: "drag" };
+        return { type: "trailer", id: trailer.id };
       }
       return null;
     },
@@ -450,7 +405,8 @@ function SimulatorV2() {
         canvas.setPointerCapture(event.pointerId);
       }
 
-      if (hit.mode === "rotate") {
+      const rotateGesture = event.shiftKey || event.button === 2 || event.buttons === 2;
+      if (rotateGesture) {
         const centerPx = {
           x: entity.center.x * CELL_SIZE,
           y: entity.center.y * CELL_SIZE
@@ -461,7 +417,8 @@ function SimulatorV2() {
           mode: "rotate",
           entityType: hit.type,
           id: hit.id,
-          rotationOffset: normalizeAngle(entity.rotation - angle)
+          startAngle: angle,
+          startRotation: entity.rotation
         };
       } else {
         const radians = degToRad(entity.rotation);
@@ -577,7 +534,8 @@ function SimulatorV2() {
             y: trailer.center.y * CELL_SIZE
           };
           const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
-          const rotation = normalizeAngle(angle + (interaction.rotationOffset ?? 0));
+          const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
+          const rotation = normalizeAngle((interaction.startRotation ?? trailer.rotation) + delta);
           setTrailer(prev => ({ ...prev, rotation }));
           return;
         }
@@ -589,7 +547,8 @@ function SimulatorV2() {
             y: bot.center.y * CELL_SIZE
           };
           const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
-          const rotation = normalizeAngle(angle + (interaction.rotationOffset ?? 0));
+          const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
+          const rotation = normalizeAngle((interaction.startRotation ?? bot.rotation) + delta);
           setSlipbots(prev => {
             const index = prev.findIndex(item => item.id === interaction.id);
             if (index === -1) return prev;
@@ -611,7 +570,8 @@ function SimulatorV2() {
             y: slot.center.y * CELL_SIZE
           };
           const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
-          const rotation = normalizeAngle(angle + (interaction.rotationOffset ?? 0));
+          const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
+          const rotation = normalizeAngle((interaction.startRotation ?? slot.rotation) + delta);
           setParkingSlots(prev => {
             const index = prev.findIndex(item => item.id === interaction.id);
             if (index === -1) return prev;
@@ -701,8 +661,9 @@ function SimulatorV2() {
       <header className="simulator-header">
         <h1>SlipBot Layout Sandbox</h1>
         <p>
-          Drag and rotate the trailer, SlipBots, and parking slots. Use the circular handles for
-          smooth 360° rotation and reposition anything at any time.
+          Drag any asset to move it. Hold <strong>Shift</strong> (or use the right mouse button) while
+          dragging to rotate with precise 360° control. Everything stays locked to your cursor so
+          adjustments feel seamless.
         </p>
       </header>
       <div className="simulator-layout">
@@ -717,14 +678,15 @@ function SimulatorV2() {
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
             onPointerCancel={handlePointerUp}
+            onContextMenu={event => event.preventDefault()}
           />
         </div>
         <aside className="simulator-panel">
           <div className="panel-section">
             <h2>Controls</h2>
             <p>
-              Every asset behaves like an obstacle. Drag to move, or grab a rotation handle to aim any
-              direction you like.
+              Every asset behaves like an obstacle. Drag to move, or hold Shift/right click while
+              dragging to rotate smoothly.
             </p>
           </div>
           <div className="panel-section buttons">
