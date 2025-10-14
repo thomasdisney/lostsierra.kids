@@ -79,36 +79,6 @@
   gap: 0.65rem;
 }
 
-.angle-control {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  margin-top: 0.75rem;
-  flex-wrap: wrap;
-  color: rgba(226, 232, 240, 0.9);
-  font-size: 0.9rem;
-}
-
-.angle-label {
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-size: 0.68rem;
-  color: rgba(148, 163, 184, 0.8);
-}
-
-.angle-slider {
-  flex: 1 1 220px;
-  accent-color: #38bdf8;
-  cursor: pointer;
-}
-
-.angle-value {
-  font-weight: 600;
-  min-width: 48px;
-  text-align: right;
-}
-
 .simulator-canvas {
   border-radius: 18px;
   border: 1px solid rgba(148, 163, 184, 0.35);

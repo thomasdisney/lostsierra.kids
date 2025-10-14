@@ -12,6 +12,9 @@ const SLIPBOT_ROTATION_SPEED_DEG = 180;
 
 const SLIPBOT_COUNT = 3;
 
+const SLOT_ROTATION_HANDLE_RADIUS_PX = 12;
+const SLOT_ROTATION_HANDLE_HIT_RADIUS_PX = 18;
+
 const ORIENTATION_SEQUENCE = ["north", "east", "south", "west"];
 
 const ORIENTATION_CONFIG = {
@@ -133,8 +136,13 @@ function getOrientationDimensions(orientation) {
 
 function describeOrientation(orientation) {
   const key = normalizeOrientation(orientation);
-  const label = key === "north" ? "north" : "east";
-  return label.charAt(0).toUpperCase() + label.slice(1);
+  const labelMap = {
+    north: "North",
+    east: "East",
+    south: "South",
+    west: "West"
+  };
+  return labelMap[key] ?? "North";
 }
 
 function getTrailerDimensions(orientation) {
@@ -479,6 +487,15 @@ function SimulatorV2() {
   }, [obstacleSlipbots]);
   const isSequenceActive = sequenceState.running;
 
+  const workspaceSummary = useMemo(
+    () => allowedArea ?? DEFAULT_ALLOWED_AREA,
+    [allowedArea]
+  );
+  const trailerSummary = useMemo(
+    () => trailerOrigin ?? DEFAULT_TRAILER_ORIGIN,
+    [trailerOrigin]
+  );
+
   const slipbotsRef = useRef(slipbots);
   const allowedAreaRef = useRef(allowedArea);
   const obstacleSetRef = useRef(obstacleSet);
@@ -505,29 +522,6 @@ function SimulatorV2() {
   useEffect(() => {
     parkingAssignmentsRef.current = parkingAssignments;
   }, [parkingAssignments]);
-
-  useEffect(() => {
-    if (!isAddingObstacleSlipbot || !obstacleSlipbotPreview) return;
-    const area = draftArea ?? allowedArea;
-    if (!area) return;
-    const adjusted = clampObstacleSlipbotCenter(obstacleSlipbotPreview, obstacleSlipbotRotation);
-    if (!adjusted || !slipbotFootprintWithinArea(area, adjusted, obstacleSlipbotRotation)) {
-      setObstacleSlipbotPreview(null);
-      return;
-    }
-    const deltaX = Math.abs(adjusted.x - obstacleSlipbotPreview.x);
-    const deltaY = Math.abs(adjusted.y - obstacleSlipbotPreview.y);
-    if (deltaX > 0.001 || deltaY > 0.001) {
-      setObstacleSlipbotPreview(adjusted);
-    }
-  }, [
-    allowedArea,
-    clampObstacleSlipbotCenter,
-    draftArea,
-    isAddingObstacleSlipbot,
-    obstacleSlipbotPreview,
-    obstacleSlipbotRotation
-  ]);
 
   const canvasWidth = useMemo(() => GRID_WIDTH * CELL_SIZE, []);
   const canvasHeight = useMemo(() => GRID_HEIGHT * CELL_SIZE, []);
@@ -628,6 +622,29 @@ function SimulatorV2() {
     },
     [allowedArea, draftArea]
   );
+
+  useEffect(() => {
+    if (!isAddingObstacleSlipbot || !obstacleSlipbotPreview) return;
+    const area = draftArea ?? allowedArea;
+    if (!area) return;
+    const adjusted = clampObstacleSlipbotCenter(obstacleSlipbotPreview, obstacleSlipbotRotation);
+    if (!adjusted || !slipbotFootprintWithinArea(area, adjusted, obstacleSlipbotRotation)) {
+      setObstacleSlipbotPreview(null);
+      return;
+    }
+    const deltaX = Math.abs(adjusted.x - obstacleSlipbotPreview.x);
+    const deltaY = Math.abs(adjusted.y - obstacleSlipbotPreview.y);
+    if (deltaX > 0.001 || deltaY > 0.001) {
+      setObstacleSlipbotPreview(adjusted);
+    }
+  }, [
+    allowedArea,
+    clampObstacleSlipbotCenter,
+    draftArea,
+    isAddingObstacleSlipbot,
+    obstacleSlipbotPreview,
+    obstacleSlipbotRotation
+  ]);
 
   const findParkingSlotAtCell = useCallback(cell => {
     if (!cell) return null;
@@ -764,17 +781,42 @@ function SimulatorV2() {
           x: existingSlot.position.x + dims.width / 2,
           y: existingSlot.position.y + dims.height / 2
         };
+        if (pointerPoint) {
+          const pointerPx = { x: pointerPoint.x * CELL_SIZE, y: pointerPoint.y * CELL_SIZE };
+          const handlePx = {
+            x: (existingSlot.position.x + dims.width) * CELL_SIZE,
+            y: existingSlot.position.y * CELL_SIZE
+          };
+          const handleDistance = Math.hypot(pointerPx.x - handlePx.x, pointerPx.y - handlePx.y);
+          if (handleDistance <= SLOT_ROTATION_HANDLE_HIT_RADIUS_PX) {
+            slotInteractionRef.current = {
+              type: "slot-rotate",
+              slotId: existingSlot.id
+            };
+            setStatus(
+              `Rotating parking slot ${existingSlot.id.replace(
+                "slot-",
+                ""
+              )} – drag the highlighted corner to adjust heading.`
+            );
+            return;
+          }
+        }
+
         const centerOffset = pointerPoint
           ? { x: pointerPoint.x - center.x, y: pointerPoint.y - center.y }
           : { x: 0, y: 0 };
         slotInteractionRef.current = {
-          type: "slot",
+          type: "slot-move",
           slotId: existingSlot.id,
           centerOffset,
           lastAngle: existingSlot.rotation ?? headingFromOrientation(existingSlot.orientation)
         };
         setStatus(
-          `Adjusting parking slot ${existingSlot.id.replace("slot-", "")} – drag to reposition or sweep the cursor to rotate.`
+          `Adjusting parking slot ${existingSlot.id.replace(
+            "slot-",
+            ""
+          )} – drag to reposition or grab the highlighted corner to rotate.`
         );
         return;
       }
@@ -851,13 +893,15 @@ function SimulatorV2() {
         ? { x: pointerPoint.x - center.x, y: pointerPoint.y - center.y }
         : { x: 0, y: 0 };
       slotInteractionRef.current = {
-        type: "slot",
+        type: "slot-move",
         slotId,
         centerOffset,
         lastAngle: rotation
       };
       setStatus(
-        `Parking slot ${parkingAssignments.length + 1} positioned at (${targetTopLeft.x}, ${targetTopLeft.y}). Drag to fine-tune.`
+        `Parking slot ${
+          parkingAssignments.length + 1
+        } positioned at (${targetTopLeft.x}, ${targetTopLeft.y}). Drag to fine-tune or rotate using the highlighted corner.`
       );
     },
     [
@@ -883,28 +927,50 @@ function SimulatorV2() {
     event => {
       const cell = getCellFromEvent(event);
       const interaction = slotInteractionRef.current;
-      if (interaction && interaction.type === "slot") {
+      if (interaction?.type === "slot-rotate") {
         const pointerPoint = getPointFromEvent(event);
         if (!pointerPoint) return;
         const slot = parkingAssignmentsRef.current.find(item => item.id === interaction.slotId);
         if (!slot) return;
+        const dims = getOrientationDimensions(slot.orientation);
+        const center = {
+          x: slot.position.x + dims.width / 2,
+          y: slot.position.y + dims.height / 2
+        };
+        const angle = (Math.atan2(pointerPoint.y - center.y, pointerPoint.x - center.x) * 180) / Math.PI;
+        const rotation = normalizeAngle(angle);
+        setParkingAssignments(prev =>
+          prev.map(item => (item.id === interaction.slotId ? { ...item, rotation } : item))
+        );
+        return;
+      }
+
+      if (interaction?.type === "slot-move") {
+        const pointerPoint = getPointFromEvent(event);
+        if (!pointerPoint) return;
+        const slot = parkingAssignmentsRef.current.find(item => item.id === interaction.slotId);
+        if (!slot) return;
+        const fallbackAngle =
+          interaction.lastAngle ?? headingFromOrientation(slot.orientation);
         const centerCandidate = {
           x: pointerPoint.x - interaction.centerOffset.x,
           y: pointerPoint.y - interaction.centerOffset.y
         };
         const hasVector =
-          Math.abs(pointerPoint.x - centerCandidate.x) > 0.01 || Math.abs(pointerPoint.y - centerCandidate.y) > 0.01;
-        const angle = hasVector
+          Math.abs(pointerPoint.x - centerCandidate.x) > 0.01 ||
+          Math.abs(pointerPoint.y - centerCandidate.y) > 0.01;
+        const angleForOrientation = hasVector
           ? (Math.atan2(pointerPoint.y - centerCandidate.y, pointerPoint.x - centerCandidate.x) * 180) / Math.PI
-          : interaction.lastAngle;
-        const rotation = normalizeAngle(angle);
-        const orientation = orientationFromAngle(rotation);
+          : fallbackAngle;
+        const normalizedAngle = normalizeAngle(angleForOrientation);
+        const orientation = orientationFromAngle(normalizedAngle);
         const dims = getOrientationDimensions(orientation);
         const candidateTopLeft = {
           x: Math.round(centerCandidate.x - dims.width / 2),
           y: Math.round(centerCandidate.y - dims.height / 2)
         };
         const clamped = clampTopLeft(candidateTopLeft, orientation);
+        if (!clamped) return;
         const candidateKeys = collectFootprintKeys(clamped.x, clamped.y, orientation);
         const overlapsObstacle = candidateKeys.some(
           key => obstacleSet.has(key) || obstacleSlipbotSet.has(key)
@@ -923,8 +989,7 @@ function SimulatorV2() {
               ? {
                   ...item,
                   position: clamped,
-                  orientation,
-                  rotation
+                  orientation
                 }
               : item
           )
@@ -936,7 +1001,7 @@ function SimulatorV2() {
         slotInteractionRef.current = {
           ...interaction,
           centerOffset: { x: pointerPoint.x - center.x, y: pointerPoint.y - center.y },
-          lastAngle: rotation
+          lastAngle: normalizedAngle
         };
         return;
       }
@@ -1045,13 +1110,26 @@ function SimulatorV2() {
   );
 
   const handlePointerUp = useCallback(() => {
+    const interaction = slotInteractionRef.current;
     if (isDefiningArea && draftArea) {
       finalizeWorkspace(draftArea);
     }
     areaAnchorRef.current = null;
     setDraftArea(null);
     slotInteractionRef.current = null;
-  }, [draftArea, finalizeWorkspace, isDefiningArea]);
+
+    if (interaction?.type === "slot-rotate") {
+      const slot = parkingAssignmentsRef.current.find(item => item.id === interaction.slotId);
+      if (slot) {
+        const heading = normalizeAngle(
+          slot.rotation ?? headingFromOrientation(slot.orientation)
+        );
+        setStatus(
+          `Parking slot ${slot.id.replace("slot-", "")} heading set to ${describeAngle(heading)}.`
+        );
+      }
+    }
+  }, [draftArea, finalizeWorkspace, isDefiningArea, setStatus]);
 
   const handlePointerLeave = useCallback(() => {
     setTrailerPreview(null);
@@ -1461,6 +1539,24 @@ function SimulatorV2() {
       ctx.fillStyle = isSelected ? "rgba(226, 232, 240, 0.95)" : "rgba(226, 232, 240, 0.72)";
       ctx.fill();
       ctx.restore();
+
+      if (isSelected) {
+        const handleX = (assignment.position.x + dims.width) * CELL_SIZE;
+        const handleY = assignment.position.y * CELL_SIZE;
+        ctx.save();
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(94, 234, 212, 0.85)";
+        ctx.strokeStyle = "rgba(16, 185, 129, 0.95)";
+        ctx.lineWidth = 2.5;
+        ctx.arc(handleX, handleY, SLOT_ROTATION_HANDLE_RADIUS_PX, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.fillStyle = "#0f172a";
+        ctx.arc(handleX, handleY, SLOT_ROTATION_HANDLE_RADIUS_PX - 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     });
 
     if (currentPath.length > 1) {
@@ -1962,28 +2058,6 @@ function SimulatorV2() {
               Rotate SlipBot ({describeAngle(obstacleSlipbotRotation)})
             </button>
           </div>
-          <div className="angle-control">
-            <label htmlFor="obstacle-heading" className="angle-label">
-              Obstacle heading
-            </label>
-            <input
-              id="obstacle-heading"
-              type="range"
-              min="0"
-              max="359"
-              value={obstacleSlipbotRotation}
-              onChange={event => {
-                const next = normalizeAngle(Number(event.target.value) || 0);
-                setObstacleSlipbotRotation(next);
-                if (isAddingObstacleSlipbot) {
-                  setStatus(`SlipBot obstacle template rotated to ${describeAngle(next)}.`);
-                }
-              }}
-              className="angle-slider"
-              disabled={isSequenceActive}
-            />
-            <span className="angle-value">{describeAngle(obstacleSlipbotRotation)}</span>
-          </div>
           <canvas
             ref={canvasRef}
             className="simulator-canvas"
@@ -2006,19 +2080,19 @@ function SimulatorV2() {
             <div>
               <span className="label">Workspace origin</span>
               <span className="value">
-                ({allowedArea.x}, {allowedArea.y})
+                ({workspaceSummary.x}, {workspaceSummary.y})
               </span>
             </div>
             <div>
               <span className="label">Workspace size</span>
               <span className="value">
-                {allowedArea.width} × {allowedArea.height} ft
+                {workspaceSummary.width} × {workspaceSummary.height} ft
               </span>
             </div>
             <div>
               <span className="label">Trailer origin</span>
               <span className="value">
-                ({trailerOrigin.x}, {trailerOrigin.y})
+                ({trailerSummary.x}, {trailerSummary.y})
               </span>
             </div>
             <div>
