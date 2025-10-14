@@ -1,104 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import "./SimulatorV2.css";
 
 const GRID_WIDTH = 200;
 const GRID_HEIGHT = 100;
 const CELL_SIZE = 6;
+
+const SLIPBOT_LENGTH = 17;
 const SLIPBOT_WIDTH = 8;
-const SLIPBOT_HEIGHT = 17;
-const SLIPBOT_SPEED_FTPS = 6;
-const SLIPBOT_ROTATION_SPEED_DEG = 180;
+const TRAILER_LENGTH = SLIPBOT_LENGTH * 3 + 6;
+const TRAILER_WIDTH = SLIPBOT_WIDTH + 6;
 
-const SLIPBOT_COUNT = 3;
+const SLIPBOT_COLORS = ["#38bdf8", "#22c55e", "#f97316", "#c084fc", "#facc15"];
 
-const SLOT_ROTATION_HANDLE_RADIUS_PX = 12;
-const SLOT_ROTATION_HANDLE_HIT_RADIUS_PX = 18;
-
-const ORIENTATION_SEQUENCE = ["north", "east", "south", "west"];
-
-const ORIENTATION_CONFIG = {
-  north: {
-    width: SLIPBOT_WIDTH,
-    height: SLIPBOT_HEIGHT,
-    exitVector: { x: 0, y: -1 },
-    exitSteps: SLIPBOT_HEIGHT,
-    botOffset(index) {
-      return { x: 0, y: index * SLIPBOT_HEIGHT };
-    },
-    trailerSize: {
-      width: SLIPBOT_WIDTH,
-      height: SLIPBOT_HEIGHT * SLIPBOT_COUNT
-    }
-  },
-  east: {
-    width: SLIPBOT_HEIGHT,
-    height: SLIPBOT_WIDTH,
-    exitVector: { x: 1, y: 0 },
-    exitSteps: SLIPBOT_HEIGHT,
-    botOffset(index) {
-      return { x: (SLIPBOT_COUNT - index - 1) * SLIPBOT_HEIGHT, y: 0 };
-    },
-    trailerSize: {
-      width: SLIPBOT_HEIGHT * SLIPBOT_COUNT,
-      height: SLIPBOT_WIDTH
-    }
-  },
-  south: {
-    width: SLIPBOT_WIDTH,
-    height: SLIPBOT_HEIGHT,
-    exitVector: { x: 0, y: 1 },
-    exitSteps: SLIPBOT_HEIGHT,
-    botOffset(index) {
-      return { x: 0, y: (SLIPBOT_COUNT - index - 1) * SLIPBOT_HEIGHT };
-    },
-    trailerSize: {
-      width: SLIPBOT_WIDTH,
-      height: SLIPBOT_HEIGHT * SLIPBOT_COUNT
-    }
-  },
-  west: {
-    width: SLIPBOT_HEIGHT,
-    height: SLIPBOT_WIDTH,
-    exitVector: { x: -1, y: 0 },
-    exitSteps: SLIPBOT_HEIGHT,
-    botOffset(index) {
-      return { x: index * SLIPBOT_HEIGHT, y: 0 };
-    },
-    trailerSize: {
-      width: SLIPBOT_HEIGHT * SLIPBOT_COUNT,
-      height: SLIPBOT_WIDTH
-    }
-  }
-};
-
-const SLIPBOT_LENGTH = SLIPBOT_HEIGHT;
-const SLIPBOT_BODY_WIDTH = SLIPBOT_WIDTH;
-
-function normalizeOrientation(orientation) {
-  if (!orientation) return "north";
-  return ORIENTATION_SEQUENCE.includes(orientation) ? orientation : "north";
+function degToRad(degrees) {
+  return (degrees * Math.PI) / 180;
 }
 
-function rotateOrientation(current) {
-  const index = ORIENTATION_SEQUENCE.indexOf(normalizeOrientation(current));
-  const nextIndex = (index + 1) % ORIENTATION_SEQUENCE.length;
-  return ORIENTATION_SEQUENCE[nextIndex];
-}
-
-function headingFromOrientation(orientation) {
-  const key = normalizeOrientation(orientation);
-  switch (key) {
-    case "east":
-      return 0;
-    case "south":
-      return 90;
-    case "west":
-      return 180;
-    case "north":
-    default:
-      return 270;
-  }
+function radToDeg(radians) {
+  return (radians * 180) / Math.PI;
 }
 
 function normalizeAngle(angle) {
@@ -106,1272 +25,246 @@ function normalizeAngle(angle) {
   return ((value % 360) + 360) % 360;
 }
 
-function orientationFromAngle(angle) {
-  const normalized = normalizeAngle(angle);
-  if (normalized >= 315 || normalized < 45) return "east";
-  if (normalized >= 45 && normalized < 135) return "south";
-  if (normalized >= 135 && normalized < 225) return "west";
-  return "north";
+function getRotatedBoundingBox(width, height, rotation) {
+  const radians = degToRad(rotation);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const boxWidth = Math.abs(width * cos) + Math.abs(height * sin);
+  const boxHeight = Math.abs(width * sin) + Math.abs(height * cos);
+  return { width: boxWidth, height: boxHeight };
 }
 
-function shortestAngleDelta(from, to) {
-  const start = normalizeAngle(from);
-  const end = normalizeAngle(to);
-  let delta = end - start;
-  if (delta > 180) delta -= 360;
-  if (delta < -180) delta += 360;
+function clampCenterToBounds(center, width, height, rotation) {
+  const { width: boxWidth, height: boxHeight } = getRotatedBoundingBox(width, height, rotation);
+  const halfWidth = boxWidth / 2;
+  const halfHeight = boxHeight / 2;
+  return {
+    x: Math.min(Math.max(center.x, halfWidth), GRID_WIDTH - halfWidth),
+    y: Math.min(Math.max(center.y, halfHeight), GRID_HEIGHT - halfHeight)
+  };
+}
+
+function pointInRectangle(entity, point) {
+  const radians = degToRad(entity.rotation);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const dx = point.x - entity.center.x;
+  const dy = point.y - entity.center.y;
+  const localX = cos * dx + sin * dy;
+  const localY = -sin * dx + cos * dy;
+  return Math.abs(localX) <= entity.width / 2 && Math.abs(localY) <= entity.height / 2;
+}
+
+function getRectPolygon(entity) {
+  const radians = degToRad(entity.rotation);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const halfWidth = entity.width / 2;
+  const halfHeight = entity.height / 2;
+  const corners = [
+    { x: -halfWidth, y: -halfHeight },
+    { x: halfWidth, y: -halfHeight },
+    { x: halfWidth, y: halfHeight },
+    { x: -halfWidth, y: halfHeight }
+  ];
+  return corners.map(corner => ({
+    x: entity.center.x + corner.x * cos - corner.y * sin,
+    y: entity.center.y + corner.x * sin + corner.y * cos
+  }));
+}
+
+function getAxesFromPolygon(polygon) {
+  const axes = [];
+  for (let i = 0; i < polygon.length; i += 1) {
+    const current = polygon[i];
+    const next = polygon[(i + 1) % polygon.length];
+    const edge = { x: next.x - current.x, y: next.y - current.y };
+    const length = Math.hypot(edge.x, edge.y);
+    if (length === 0) continue;
+    axes.push({ x: -edge.y / length, y: edge.x / length });
+  }
+  return axes;
+}
+
+function projectPolygon(axis, polygon) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const point of polygon) {
+    const projection = point.x * axis.x + point.y * axis.y;
+    if (projection < min) min = projection;
+    if (projection > max) max = projection;
+  }
+  return { min, max };
+}
+
+function overlapOnAxis(axis, polygonA, polygonB) {
+  const projA = projectPolygon(axis, polygonA);
+  const projB = projectPolygon(axis, polygonB);
+  return projA.max >= projB.min && projB.max >= projA.min;
+}
+
+function rectanglesOverlap(rectA, rectB) {
+  const polygonA = getRectPolygon(rectA);
+  const polygonB = getRectPolygon(rectB);
+  const axes = [...getAxesFromPolygon(polygonA), ...getAxesFromPolygon(polygonB)];
+  return axes.every(axis => overlapOnAxis(axis, polygonA, polygonB));
+}
+
+function smallestAngleDelta(current, start) {
+  let delta = current - start;
+  while (delta > 180) delta -= 360;
+  while (delta < -180) delta += 360;
   return delta;
 }
 
-function interpolateAngles(from, to, t) {
-  const delta = shortestAngleDelta(from, to);
-  return normalizeAngle(from + delta * Math.min(Math.max(t, 0), 1));
-}
-
-function getOrientationDimensions(orientation) {
-  const key = normalizeOrientation(orientation);
-  const config = ORIENTATION_CONFIG[key];
-  return { width: config.width, height: config.height };
-}
-
-function describeOrientation(orientation) {
-  const key = normalizeOrientation(orientation);
-  const labelMap = {
-    north: "North",
-    east: "East",
-    south: "South",
-    west: "West"
+function isSlipbotPlacementValid(candidate, slipbots, ignoreId) {
+  const { width, height, rotation } = candidate;
+  const clamped = clampCenterToBounds(candidate.center, width, height, rotation);
+  if (clamped.x !== candidate.center.x || clamped.y !== candidate.center.y) {
+    return false;
+  }
+  const candidateRect = {
+    center: candidate.center,
+    width: candidate.width,
+    height: candidate.height,
+    rotation: candidate.rotation
   };
-  return labelMap[key] ?? "North";
-}
-
-function getTrailerDimensions(orientation) {
-  const key = normalizeOrientation(orientation);
-  const config = ORIENTATION_CONFIG[key];
-  return { ...config.trailerSize };
-}
-
-function getOrientationExitConfig(orientation) {
-  const key = normalizeOrientation(orientation);
-  const config = ORIENTATION_CONFIG[key];
-  return { vector: { ...config.exitVector }, steps: config.exitSteps };
-}
-
-function describeAngle(angle) {
-  const normalized = normalizeAngle(angle);
-  return `${normalized.toFixed(0)}°`;
-}
-
-function getSlipbotBoundingBox(rotation) {
-  const radians = (normalizeAngle(rotation) * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const width = Math.abs(cos) * SLIPBOT_LENGTH + Math.abs(sin) * SLIPBOT_BODY_WIDTH;
-  const height = Math.abs(sin) * SLIPBOT_LENGTH + Math.abs(cos) * SLIPBOT_BODY_WIDTH;
-  return { width, height };
-}
-
-function collectSlipbotFootprint(center, rotation) {
-  if (!center) return [];
-  const radians = (normalizeAngle(rotation) * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const halfLength = SLIPBOT_LENGTH / 2;
-  const halfWidth = SLIPBOT_BODY_WIDTH / 2;
-  const { width, height } = getSlipbotBoundingBox(rotation);
-  const minX = Math.floor(center.x - width / 2);
-  const maxX = Math.ceil(center.x + width / 2);
-  const minY = Math.floor(center.y - height / 2);
-  const maxY = Math.ceil(center.y + height / 2);
-  const keys = [];
-
-  for (let x = minX; x < maxX; x += 1) {
-    for (let y = minY; y < maxY; y += 1) {
-      if (x < 0 || y < 0 || x >= GRID_WIDTH || y >= GRID_HEIGHT) continue;
-      const px = x + 0.5 - center.x;
-      const py = y + 0.5 - center.y;
-      const localX = cos * px + sin * py;
-      const localY = -sin * px + cos * py;
-      if (Math.abs(localX) <= halfLength && Math.abs(localY) <= halfWidth) {
-        keys.push(pointKey(x, y));
-      }
+  for (const bot of slipbots) {
+    if (bot.id === ignoreId) continue;
+    const otherRect = {
+      center: bot.center,
+      width: bot.width,
+      height: bot.height,
+      rotation: bot.rotation
+    };
+    if (rectanglesOverlap(candidateRect, otherRect)) {
+      return false;
     }
   }
-
-  return keys;
+  return true;
 }
 
-function slipbotFootprintWithinArea(area, center, rotation) {
-  if (!area || !center) return false;
-  const { width, height } = getSlipbotBoundingBox(rotation);
-  const halfWidth = width / 2;
-  const halfHeight = height / 2;
-  const withinX = center.x - halfWidth >= area.x && center.x + halfWidth <= area.x + area.width;
-  const withinY = center.y - halfHeight >= area.y && center.y + halfHeight <= area.y + area.height;
-  return withinX && withinY;
+function drawRoundedRectPath(ctx, x, y, width, height, radius) {
+  const corner = Math.max(0, Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + corner, y);
+  ctx.lineTo(x + width - corner, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + corner);
+  ctx.lineTo(x + width, y + height - corner);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - corner, y + height);
+  ctx.lineTo(x + corner, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - corner);
+  ctx.lineTo(x, y + corner);
+  ctx.quadraticCurveTo(x, y, x + corner, y);
+  ctx.closePath();
 }
 
-const DEFAULT_ALLOWED_AREA = {
-  x: 1,
-  y: 1,
-  width: GRID_WIDTH - 2,
-  height: GRID_HEIGHT - 2
-};
-const TRAILER_CLEARANCE = 1;
-const TRAILER_DEFAULT_X = 4;
-const TRAILER_DEFAULT_Y = GRID_HEIGHT - SLIPBOT_HEIGHT * SLIPBOT_COUNT - 4;
-
-const DIRECTIONS = [
-  { dx: 1, dy: 0 },
-  { dx: -1, dy: 0 },
-  { dx: 0, dy: 1 },
-  { dx: 0, dy: -1 }
-];
-
-function pointKey(x, y) {
-  return `${x},${y}`;
+function buildInitialTrailer() {
+  return {
+    id: "trailer",
+    center: { x: 36, y: GRID_HEIGHT - 26 },
+    rotation: 0,
+    width: TRAILER_WIDTH,
+    height: TRAILER_LENGTH
+  };
 }
 
-function forEachFootprintCell(x, y, width, height, callback) {
-  for (let dx = 0; dx < width; dx += 1) {
-    for (let dy = 0; dy < height; dy += 1) {
-      callback(x + dx, y + dy);
-    }
-  }
-}
-
-function collectFootprintKeys(x, y, orientation) {
-  const keys = [];
-  const { width, height } = getOrientationDimensions(orientation);
-  forEachFootprintCell(x, y, width, height, (fx, fy) => {
-    keys.push(pointKey(fx, fy));
+function buildInitialSlipbots(trailer) {
+  return Array.from({ length: 3 }, (_, index) => {
+    const color = SLIPBOT_COLORS[index % SLIPBOT_COLORS.length];
+    const offset = -trailer.height / 2 + 8 + index * SLIPBOT_LENGTH + SLIPBOT_LENGTH / 2;
+    return {
+      id: `slipbot-${index + 1}`,
+      name: `SlipBot ${String.fromCharCode(65 + index)}`,
+      color,
+      center: { x: trailer.center.x, y: trailer.center.y + offset },
+      rotation: 0,
+      width: SLIPBOT_WIDTH,
+      height: SLIPBOT_LENGTH
+    };
   });
-  return keys;
 }
 
-function areaContainsFootprint(area, x, y, orientation) {
-  if (!area) return false;
-  const { width, height } = getOrientationDimensions(orientation);
-  const withinX = x >= area.x && x + width <= area.x + area.width;
-  const withinY = y >= area.y && y + height <= area.y + area.height;
-  return withinX && withinY;
-}
-
-function footprintWithinGrid(x, y, orientation) {
-  const { width, height } = getOrientationDimensions(orientation);
-  return x >= 0 && y >= 0 && x + width <= GRID_WIDTH && y + height <= GRID_HEIGHT;
-}
-
-function isFootprintFree(x, y, orientation, area, blockedSet) {
-  if (!footprintWithinGrid(x, y, orientation)) return false;
-  if (!areaContainsFootprint(area, x, y, orientation)) return false;
-  const { width, height } = getOrientationDimensions(orientation);
-  let free = true;
-  forEachFootprintCell(x, y, width, height, (cx, cy) => {
-    if (!free) return;
-    if (blockedSet.has(pointKey(cx, cy))) {
-      free = false;
-    }
-  });
-  return free;
-}
-
-function reconstructPath(cameFrom, currentKey, nodeLookup) {
-  const path = [];
-  let key = currentKey;
-  while (key) {
-    const node = nodeLookup.get(key);
-    if (!node) break;
-    path.push(node);
-    key = cameFrom.get(key) ?? null;
-  }
-  return path.reverse();
-}
-
-function orientationKey(node) {
-  return `${node.x},${node.y},${normalizeOrientation(node.orientation)}`;
-}
-
-function heuristicState(a, b) {
-  const aDims = getOrientationDimensions(a.orientation);
-  const bDims = getOrientationDimensions(b.orientation);
-  const ax = a.x + aDims.width / 2;
-  const ay = a.y + aDims.height / 2;
-  const bx = b.x + bDims.width / 2;
-  const by = b.y + bDims.height / 2;
-  const distance = Math.abs(ax - bx) + Math.abs(ay - by);
-  return a.orientation === b.orientation ? distance : distance + 1;
-}
-
-function planAStarWithRotations(start, goal, area, blockedSet) {
-  if (!start || !goal) return null;
-
-  const normalizedStart = {
-    x: start.x,
-    y: start.y,
-    orientation: normalizeOrientation(start.orientation)
+function createSlipbot(id, color, center) {
+  return {
+    id,
+    name: `SlipBot ${id.split("-").pop()?.toUpperCase() ?? id}`,
+    color,
+    center,
+    rotation: 0,
+    width: SLIPBOT_WIDTH,
+    height: SLIPBOT_LENGTH
   };
-  const normalizedGoal = {
-    x: goal.x,
-    y: goal.y,
-    orientation: normalizeOrientation(goal.orientation)
-  };
-
-  if (!isFootprintFree(normalizedGoal.x, normalizedGoal.y, normalizedGoal.orientation, area, blockedSet)) {
-    return null;
-  }
-  if (!isFootprintFree(normalizedStart.x, normalizedStart.y, normalizedStart.orientation, area, blockedSet)) {
-    return null;
-  }
-
-  const startKey = orientationKey(normalizedStart);
-  const goalKey = orientationKey(normalizedGoal);
-
-  const openMap = new Map([[startKey, normalizedStart]]);
-  const cameFrom = new Map();
-  const nodeLookup = new Map([[startKey, normalizedStart]]);
-  const gScore = new Map([[startKey, 0]]);
-  const fScore = new Map([[startKey, heuristicState(normalizedStart, normalizedGoal)]]);
-  const closedSet = new Set();
-
-  const maxIterations = GRID_WIDTH * GRID_HEIGHT * ORIENTATION_SEQUENCE.length * 10;
-  let iterations = 0;
-
-  while (openMap.size > 0 && iterations < maxIterations) {
-    iterations += 1;
-    let currentKey = null;
-    let currentNode = null;
-    let bestScore = Infinity;
-
-    for (const [key, node] of openMap.entries()) {
-      const score = fScore.get(key) ?? Infinity;
-      if (score < bestScore) {
-        bestScore = score;
-        currentKey = key;
-        currentNode = node;
-      }
-    }
-
-    if (!currentNode || currentKey === null) {
-      break;
-    }
-
-    if (currentKey === goalKey) {
-      return reconstructPath(cameFrom, currentKey, nodeLookup);
-    }
-
-    openMap.delete(currentKey);
-    closedSet.add(currentKey);
-
-    const currentG = gScore.get(currentKey) ?? Infinity;
-
-    const moveNeighbors = DIRECTIONS.map(({ dx, dy }) => ({
-      x: currentNode.x + dx,
-      y: currentNode.y + dy,
-      orientation: currentNode.orientation
-    }));
-
-    const rotationNeighbor = (() => {
-      const rotated = rotateOrientation(currentNode.orientation);
-      if (rotated === currentNode.orientation) return null;
-      return { x: currentNode.x, y: currentNode.y, orientation: rotated };
-    })();
-
-    const neighbors = [...moveNeighbors];
-    if (rotationNeighbor) {
-      neighbors.push(rotationNeighbor);
-    }
-
-    for (const neighbor of neighbors) {
-      const neighborKey = orientationKey(neighbor);
-      if (closedSet.has(neighborKey)) continue;
-
-      if (!footprintWithinGrid(neighbor.x, neighbor.y, neighbor.orientation)) continue;
-      if (!isFootprintFree(neighbor.x, neighbor.y, neighbor.orientation, area, blockedSet)) continue;
-
-      const tentativeG = currentG + 1;
-      const neighborG = gScore.get(neighborKey);
-
-      if (neighborG === undefined || tentativeG < neighborG) {
-        cameFrom.set(neighborKey, currentKey);
-        nodeLookup.set(neighborKey, neighbor);
-        gScore.set(neighborKey, tentativeG);
-        fScore.set(neighborKey, tentativeG + heuristicState(neighbor, normalizedGoal));
-        openMap.set(neighborKey, neighbor);
-      }
-    }
-  }
-
-  return null;
 }
 
-const DEFAULT_TRAILER_ORIGIN = { x: TRAILER_DEFAULT_X, y: TRAILER_DEFAULT_Y };
+function createParkingSlot(id, center) {
+  return {
+    id,
+    center,
+    rotation: 0,
+    width: SLIPBOT_WIDTH,
+    height: SLIPBOT_LENGTH
+  };
+}
 
-function createInitialSlipbots(origin = DEFAULT_TRAILER_ORIGIN, orientation = "north") {
-  const key = normalizeOrientation(orientation);
-  const config = ORIENTATION_CONFIG[key];
-  return [
-    {
-      id: "slipbot-1",
-      name: "SlipBot A",
-      color: "#38bdf8",
-      position: {
-        x: origin.x + config.botOffset(0).x,
-        y: origin.y + config.botOffset(0).y
-      },
-      orientation: key,
-      heading: headingFromOrientation(key),
-      status: "waiting"
-    },
-    {
-      id: "slipbot-2",
-      name: "SlipBot B",
-      color: "#22c55e",
-      position: {
-        x: origin.x + config.botOffset(1).x,
-        y: origin.y + config.botOffset(1).y
-      },
-      orientation: key,
-      heading: headingFromOrientation(key),
-      status: "waiting"
-    },
-    {
-      id: "slipbot-3",
-      name: "SlipBot C",
-      color: "#f97316",
-      position: {
-        x: origin.x + config.botOffset(2).x,
-        y: origin.y + config.botOffset(2).y
-      },
-      orientation: key,
-      heading: headingFromOrientation(key),
-      status: "waiting"
-    }
-  ];
+function getPointerPosition(event, canvas) {
+  const rect = canvas?.getBoundingClientRect();
+  if (!rect) return null;
+  const px = event.clientX - rect.left;
+  const py = event.clientY - rect.top;
+  return {
+    px,
+    py,
+    x: px / CELL_SIZE,
+    y: py / CELL_SIZE
+  };
 }
 
 function SimulatorV2() {
   const canvasRef = useRef(null);
-  const animationRef = useRef(null);
-  const areaAnchorRef = useRef(null);
+  const interactionRef = useRef(null);
 
-  const [allowedArea, setAllowedArea] = useState(DEFAULT_ALLOWED_AREA);
-  const [isDefiningArea, setIsDefiningArea] = useState(false);
-  const [draftArea, setDraftArea] = useState(null);
-  const [obstacleKeys, setObstacleKeys] = useState([]);
-  const [obstacleSlipbots, setObstacleSlipbots] = useState([]);
-  const [parkingAssignments, setParkingAssignments] = useState([]);
-  const [selectedSlotId, setSelectedSlotId] = useState(null);
-  const [trailerOrientation, setTrailerOrientation] = useState("north");
-  const [obstacleSlipbotRotation, setObstacleSlipbotRotation] = useState(0);
-  const [slipbots, setSlipbots] = useState(() => createInitialSlipbots(DEFAULT_TRAILER_ORIGIN, "north"));
-  const [trailerOrigin, setTrailerOrigin] = useState(DEFAULT_TRAILER_ORIGIN);
-  const [trailerPreview, setTrailerPreview] = useState(null);
-  const [obstacleSlipbotPreview, setObstacleSlipbotPreview] = useState(null);
-  const [status, setStatus] = useState(
-    "Define the workspace, position the trailer, right-click to place obstacles, then choose three parking locations."
-  );
-  const [currentPath, setCurrentPath] = useState([]);
-  const [sequenceState, setSequenceState] = useState({ running: false, activeBotId: null, queueIndex: -1 });
-  const [isPlacingTrailer, setIsPlacingTrailer] = useState(false);
-  const [isAddingObstacleSlipbot, setIsAddingObstacleSlipbot] = useState(false);
+  const initialTrailerRef = useRef(buildInitialTrailer());
 
-  const obstacleSet = useMemo(() => new Set(obstacleKeys), [obstacleKeys]);
-  const obstacleSlipbotSet = useMemo(() => {
-    const set = new Set();
-    obstacleSlipbots.forEach(item => {
-      const keys = collectSlipbotFootprint(item.center, item.rotation ?? 0);
-      keys.forEach(key => set.add(key));
-    });
-    return set;
-  }, [obstacleSlipbots]);
-  const isSequenceActive = sequenceState.running;
+  const [trailer, setTrailer] = useState(() => ({ ...initialTrailerRef.current }));
+  const [slipbots, setSlipbots] = useState(() => buildInitialSlipbots(initialTrailerRef.current));
+  const [parkingSlots, setParkingSlots] = useState([]);
+  const [selectedEntity, setSelectedEntity] = useState(null);
 
-  const workspaceSummary = useMemo(
-    () => allowedArea ?? DEFAULT_ALLOWED_AREA,
-    [allowedArea]
-  );
-  const trailerSummary = useMemo(
-    () => trailerOrigin ?? DEFAULT_TRAILER_ORIGIN,
-    [trailerOrigin]
-  );
+  const slipbotCounterRef = useRef(slipbots.length);
+  const parkingCounterRef = useRef(0);
 
-  const slipbotsRef = useRef(slipbots);
-  const allowedAreaRef = useRef(allowedArea);
-  const obstacleSetRef = useRef(obstacleSet);
-  const obstacleSlipbotSetRef = useRef(obstacleSlipbotSet);
-  const parkingAssignmentsRef = useRef(parkingAssignments);
-  const slotInteractionRef = useRef(null);
-
-  useEffect(() => {
-    slipbotsRef.current = slipbots;
-  }, [slipbots]);
-
-  useEffect(() => {
-    allowedAreaRef.current = allowedArea;
-  }, [allowedArea]);
-
-  useEffect(() => {
-    obstacleSetRef.current = obstacleSet;
-  }, [obstacleSet]);
-
-  useEffect(() => {
-    obstacleSlipbotSetRef.current = obstacleSlipbotSet;
-  }, [obstacleSlipbotSet]);
-
-  useEffect(() => {
-    parkingAssignmentsRef.current = parkingAssignments;
-  }, [parkingAssignments]);
-
-  const canvasWidth = useMemo(() => GRID_WIDTH * CELL_SIZE, []);
-  const canvasHeight = useMemo(() => GRID_HEIGHT * CELL_SIZE, []);
-
-  const clearAnimation = useCallback(() => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      clearAnimation();
-    };
-  }, [clearAnimation]);
-
-  const computeWorkspaceFromCell = useCallback(cell => {
-    if (!cell || !areaAnchorRef.current) return null;
-    const anchor = areaAnchorRef.current;
-    const minX = Math.min(anchor.x, cell.x);
-    const minY = Math.min(anchor.y, cell.y);
-    const maxX = Math.max(anchor.x, cell.x);
-    const maxY = Math.max(anchor.y, cell.y);
-    return {
-      x: minX,
-      y: minY,
-      width: maxX - minX + 1,
-      height: maxY - minY + 1
-    };
-  }, []);
-
-  const getCellFromEvent = useCallback(event => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = event.clientX ?? 0;
-    const clientY = event.clientY ?? 0;
-    const x = Math.floor((clientX - rect.left) / CELL_SIZE);
-    const y = Math.floor((clientY - rect.top) / CELL_SIZE);
-    if (Number.isNaN(x) || Number.isNaN(y)) return null;
-    if (x < 0 || y < 0 || x >= GRID_WIDTH || y >= GRID_HEIGHT) return null;
-    return { x, y };
-  }, []);
-
-  const getPointFromEvent = useCallback(event => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = event.clientX ?? 0;
-    const clientY = event.clientY ?? 0;
-    const x = (clientX - rect.left) / CELL_SIZE;
-    const y = (clientY - rect.top) / CELL_SIZE;
-    return { x, y };
-  }, []);
-
-  const clampTopLeft = useCallback(
-    (cell, orientation) => {
-      if (!cell) return null;
-      const area = draftArea ?? allowedArea;
-      if (!area) return null;
-      const dims = getOrientationDimensions(orientation);
-      const maxX = area.x + area.width - dims.width;
-      const maxY = area.y + area.height - dims.height;
-      const clampedX = Math.max(area.x, Math.min(cell.x, maxX));
-      const clampedY = Math.max(area.y, Math.min(cell.y, maxY));
-      return { x: clampedX, y: clampedY };
-    },
-    [allowedArea, draftArea]
-  );
-
-  const clampTrailerOrigin = useCallback((cell, orientation) => {
-    if (!cell) return null;
-    const dims = getTrailerDimensions(orientation);
-    const maxX = GRID_WIDTH - dims.width - TRAILER_CLEARANCE;
-    const maxY = GRID_HEIGHT - dims.height - TRAILER_CLEARANCE;
-    const clampedX = Math.max(TRAILER_CLEARANCE, Math.min(cell.x, maxX));
-    const clampedY = Math.max(TRAILER_CLEARANCE, Math.min(cell.y, maxY));
-    return { x: clampedX, y: clampedY };
-  }, []);
-
-  const clampObstacleSlipbotCenter = useCallback(
-    (point, rotation) => {
-      if (!point) return null;
-      const area = draftArea ?? allowedArea;
-      if (!area) return null;
-      const { width, height } = getSlipbotBoundingBox(rotation);
-      const halfWidth = width / 2;
-      const halfHeight = height / 2;
-      const minX = area.x + halfWidth;
-      const maxX = area.x + area.width - halfWidth;
-      const minY = area.y + halfHeight;
-      const maxY = area.y + area.height - halfHeight;
-      if (minX > maxX || minY > maxY) return null;
-      const clampedX = Math.max(minX, Math.min(point.x, maxX));
-      const clampedY = Math.max(minY, Math.min(point.y, maxY));
-      return { x: clampedX, y: clampedY };
-    },
-    [allowedArea, draftArea]
-  );
-
-  useEffect(() => {
-    if (!isAddingObstacleSlipbot || !obstacleSlipbotPreview) return;
-    const area = draftArea ?? allowedArea;
-    if (!area) return;
-    const adjusted = clampObstacleSlipbotCenter(obstacleSlipbotPreview, obstacleSlipbotRotation);
-    if (!adjusted || !slipbotFootprintWithinArea(area, adjusted, obstacleSlipbotRotation)) {
-      setObstacleSlipbotPreview(null);
-      return;
-    }
-    const deltaX = Math.abs(adjusted.x - obstacleSlipbotPreview.x);
-    const deltaY = Math.abs(adjusted.y - obstacleSlipbotPreview.y);
-    if (deltaX > 0.001 || deltaY > 0.001) {
-      setObstacleSlipbotPreview(adjusted);
-    }
-  }, [
-    allowedArea,
-    clampObstacleSlipbotCenter,
-    draftArea,
-    isAddingObstacleSlipbot,
-    obstacleSlipbotPreview,
-    obstacleSlipbotRotation
-  ]);
-
-  const findParkingSlotAtCell = useCallback(cell => {
-    if (!cell) return null;
-    const assignments = parkingAssignmentsRef.current;
-    if (!assignments) return null;
-    for (const assignment of assignments) {
-      const dims = getOrientationDimensions(assignment.orientation);
-      const withinX = cell.x >= assignment.position.x && cell.x < assignment.position.x + dims.width;
-      const withinY = cell.y >= assignment.position.y && cell.y < assignment.position.y + dims.height;
-      if (withinX && withinY) {
-        return assignment;
-      }
-    }
-    return null;
-  }, []);
-
-  const handlePointerDown = useCallback(
-    event => {
-      if (isSequenceActive) return;
-      if (event.button !== 0) return;
-      const cell = getCellFromEvent(event);
-      if (!cell) return;
-
-      if (isPlacingTrailer) {
-        const origin = clampTrailerOrigin(cell, trailerOrientation);
-        if (!origin || !allowedArea) return;
-        const staged = createInitialSlipbots(origin, trailerOrientation);
-        const insideWorkspace = staged.every(bot =>
-          areaContainsFootprint(allowedArea, bot.position.x, bot.position.y, bot.orientation)
-        );
-        if (!insideWorkspace) {
-          setStatus("Trailer must be positioned within the workspace bounds.");
-          return;
-        }
-        const trailerFootprints = staged.flatMap(bot =>
-          collectFootprintKeys(bot.position.x, bot.position.y, bot.orientation)
-        );
-        const overlapsObstacles = trailerFootprints.some(
-          key => obstacleSet.has(key) || obstacleSlipbotSet.has(key)
-        );
-        if (overlapsObstacles) {
-          setStatus("Trailer placement overlaps an existing obstacle. Choose a clear spot.");
-          return;
-        }
-        const parkingFootprints = parkingAssignments.flatMap(assignment =>
-          collectFootprintKeys(assignment.position.x, assignment.position.y, assignment.orientation)
-        );
-        const parkingFootprintSet = new Set(parkingFootprints);
-        const overlapsParking = trailerFootprints.some(key => parkingFootprintSet.has(key));
-        if (overlapsParking) {
-          setStatus("Trailer cannot overlap a planned parking slot.");
-          return;
-        }
-        setTrailerOrigin(origin);
-        setSlipbots(staged);
-        slipbotsRef.current = staged;
-        setTrailerPreview(null);
-        setIsPlacingTrailer(false);
-        setStatus(
-          `Trailer positioned at (${origin.x}, ${origin.y}) facing ${describeOrientation(
-            trailerOrientation
-          )}. SlipBots staged nose to tail.`
-        );
-        return;
-      }
-
-      if (isAddingObstacleSlipbot) {
-        if (!allowedArea) return;
-        const pointerPoint = getPointFromEvent(event);
-        const centerCandidate = pointerPoint ?? { x: cell.x + 0.5, y: cell.y + 0.5 };
-        const center = clampObstacleSlipbotCenter(centerCandidate, obstacleSlipbotRotation);
-        if (!center) return;
-        if (!slipbotFootprintWithinArea(allowedArea, center, obstacleSlipbotRotation)) {
-          setStatus("Obstacle SlipBots must be inside the workspace.");
-          return;
-        }
-        const candidateKeys = collectSlipbotFootprint(center, obstacleSlipbotRotation);
-        const slipbotKeys = new Set();
-        slipbotsRef.current.forEach(bot => {
-          collectFootprintKeys(bot.position.x, bot.position.y, bot.orientation).forEach(key =>
-            slipbotKeys.add(key)
-          );
-        });
-        const parkingKeys = new Set();
-        parkingAssignments.forEach(assignment => {
-          collectFootprintKeys(assignment.position.x, assignment.position.y, assignment.orientation).forEach(key =>
-            parkingKeys.add(key)
-          );
-        });
-        const overlaps = candidateKeys.some(key => {
-          if (obstacleSet.has(key)) return true;
-          if (obstacleSlipbotSet.has(key)) return true;
-          return slipbotKeys.has(key);
-        });
-        if (overlaps) {
-          setStatus("Placement overlaps another SlipBot or obstacle. Choose a clear space.");
-          return;
-        }
-        const overlapsParking = candidateKeys.some(key => parkingKeys.has(key));
-        if (overlapsParking) {
-          setStatus("SlipBot obstacle cannot overlap a parking slot.");
-          return;
-        }
-        setObstacleSlipbots(prev => [
-          ...prev,
-          {
-            id: `obstacle-slipbot-${Date.now()}`,
-            center,
-            rotation: obstacleSlipbotRotation
-          }
-        ]);
-        setObstacleSlipbotPreview(null);
-        setStatus(
-          `Obstacle SlipBot added near (${center.x.toFixed(1)}, ${center.y.toFixed(1)}) at ${describeAngle(
-            obstacleSlipbotRotation
-          )}.`
-        );
-        return;
-      }
-
-      if (isDefiningArea) {
-        areaAnchorRef.current = cell;
-        setDraftArea({ x: cell.x, y: cell.y, width: 1, height: 1 });
-        setStatus("Drag to size the allowable workspace.");
-        return;
-      }
-
-      const existingSlot = findParkingSlotAtCell(cell);
-      if (existingSlot) {
-        setSelectedSlotId(existingSlot.id);
-        const dims = getOrientationDimensions(existingSlot.orientation);
-        const pointerPoint = getPointFromEvent(event);
-        const center = {
-          x: existingSlot.position.x + dims.width / 2,
-          y: existingSlot.position.y + dims.height / 2
-        };
-        if (pointerPoint) {
-          const pointerPx = { x: pointerPoint.x * CELL_SIZE, y: pointerPoint.y * CELL_SIZE };
-          const handlePx = {
-            x: (existingSlot.position.x + dims.width) * CELL_SIZE,
-            y: existingSlot.position.y * CELL_SIZE
-          };
-          const handleDistance = Math.hypot(pointerPx.x - handlePx.x, pointerPx.y - handlePx.y);
-          if (handleDistance <= SLOT_ROTATION_HANDLE_HIT_RADIUS_PX) {
-            slotInteractionRef.current = {
-              type: "slot-rotate",
-              slotId: existingSlot.id
-            };
-            setStatus(
-              `Rotating parking slot ${existingSlot.id.replace(
-                "slot-",
-                ""
-              )} – drag the highlighted corner to adjust heading.`
-            );
-            return;
-          }
-        }
-
-        const centerOffset = pointerPoint
-          ? { x: pointerPoint.x - center.x, y: pointerPoint.y - center.y }
-          : { x: 0, y: 0 };
-        slotInteractionRef.current = {
-          type: "slot-move",
-          slotId: existingSlot.id,
-          centerOffset,
-          lastAngle: existingSlot.rotation ?? headingFromOrientation(existingSlot.orientation)
-        };
-        setStatus(
-          `Adjusting parking slot ${existingSlot.id.replace(
-            "slot-",
-            ""
-          )} – drag to reposition or grab the highlighted corner to rotate.`
-        );
-        return;
-      }
-
-      if (parkingAssignments.length >= 3) {
-        setStatus("Parking slots already defined. Select one to adjust or clear them to choose new targets.");
-        return;
-      }
-
-      if (!allowedArea) return;
-      const insideX = cell.x >= allowedArea.x && cell.x < allowedArea.x + allowedArea.width;
-      const insideY = cell.y >= allowedArea.y && cell.y < allowedArea.y + allowedArea.height;
-      if (!insideX || !insideY) {
-        setStatus("Parking targets must be inside the workspace.");
-        return;
-      }
-
-      const baseOrientation = normalizeOrientation(trailerOrientation);
-      const targetTopLeft = clampTopLeft(cell, baseOrientation);
-      if (!targetTopLeft) return;
-      if (!areaContainsFootprint(allowedArea, targetTopLeft.x, targetTopLeft.y, baseOrientation)) {
-        setStatus("Parking targets must be fully inside the workspace.");
-        return;
-      }
-
-      const candidateKeys = collectFootprintKeys(targetTopLeft.x, targetTopLeft.y, baseOrientation);
-      const candidateKeySet = new Set(candidateKeys);
-      const slipbotKeys = new Set();
-      slipbotsRef.current.forEach(bot => {
-        collectFootprintKeys(bot.position.x, bot.position.y, bot.orientation).forEach(key => slipbotKeys.add(key));
-      });
-      const overlappingObstacle = candidateKeys.some(key => {
-        if (obstacleSet.has(key)) return true;
-        if (obstacleSlipbotSet.has(key)) return true;
-        return slipbotKeys.has(key);
-      });
-      if (overlappingObstacle) {
-        setStatus("Parking slot overlaps an obstacle. Choose a clear space.");
-        return;
-      }
-
-      const overlappingExisting = parkingAssignments.some(assignment => {
-        const existingKeys = collectFootprintKeys(
-          assignment.position.x,
-          assignment.position.y,
-          assignment.orientation
-        );
-        return existingKeys.some(key => candidateKeySet.has(key));
-      });
-
-      if (overlappingExisting) {
-        setStatus("Parking slots cannot overlap.");
-        return;
-      }
-
-      const slotId = `slot-${parkingAssignments.length + 1}`;
-      const rotation = headingFromOrientation(baseOrientation);
-      const newSlot = {
-        id: slotId,
-        position: targetTopLeft,
-        orientation: baseOrientation,
-        rotation,
-        filled: false
-      };
-      setParkingAssignments(prev => [...prev, newSlot]);
-      setSelectedSlotId(slotId);
-      const dims = getOrientationDimensions(baseOrientation);
-      const pointerPoint = getPointFromEvent(event);
-      const center = {
-        x: targetTopLeft.x + dims.width / 2,
-        y: targetTopLeft.y + dims.height / 2
-      };
-      const centerOffset = pointerPoint
-        ? { x: pointerPoint.x - center.x, y: pointerPoint.y - center.y }
-        : { x: 0, y: 0 };
-      slotInteractionRef.current = {
-        type: "slot-move",
-        slotId,
-        centerOffset,
-        lastAngle: rotation
-      };
-      setStatus(
-        `Parking slot ${
-          parkingAssignments.length + 1
-        } positioned at (${targetTopLeft.x}, ${targetTopLeft.y}). Drag to fine-tune or rotate using the highlighted corner.`
-      );
-    },
-    [
-      allowedArea,
-      clampObstacleSlipbotCenter,
-      clampTopLeft,
-      clampTrailerOrigin,
-      getCellFromEvent,
-      getPointFromEvent,
-      isAddingObstacleSlipbot,
-      isDefiningArea,
-      isPlacingTrailer,
-      isSequenceActive,
-      obstacleSet,
-      obstacleSlipbotRotation,
-      obstacleSlipbotSet,
-      parkingAssignments,
-      trailerOrientation
-    ]
-  );
-
-  const handlePointerMove = useCallback(
-    event => {
-      const cell = getCellFromEvent(event);
-      const interaction = slotInteractionRef.current;
-      if (interaction?.type === "slot-rotate") {
-        const pointerPoint = getPointFromEvent(event);
-        if (!pointerPoint) return;
-        const slot = parkingAssignmentsRef.current.find(item => item.id === interaction.slotId);
-        if (!slot) return;
-        const dims = getOrientationDimensions(slot.orientation);
-        const center = {
-          x: slot.position.x + dims.width / 2,
-          y: slot.position.y + dims.height / 2
-        };
-        const angle = (Math.atan2(pointerPoint.y - center.y, pointerPoint.x - center.x) * 180) / Math.PI;
-        const rotation = normalizeAngle(angle);
-        setParkingAssignments(prev =>
-          prev.map(item => (item.id === interaction.slotId ? { ...item, rotation } : item))
-        );
-        return;
-      }
-
-      if (interaction?.type === "slot-move") {
-        const pointerPoint = getPointFromEvent(event);
-        if (!pointerPoint) return;
-        const slot = parkingAssignmentsRef.current.find(item => item.id === interaction.slotId);
-        if (!slot) return;
-        const fallbackAngle =
-          interaction.lastAngle ?? headingFromOrientation(slot.orientation);
-        const centerCandidate = {
-          x: pointerPoint.x - interaction.centerOffset.x,
-          y: pointerPoint.y - interaction.centerOffset.y
-        };
-        const hasVector =
-          Math.abs(pointerPoint.x - centerCandidate.x) > 0.01 ||
-          Math.abs(pointerPoint.y - centerCandidate.y) > 0.01;
-        const angleForOrientation = hasVector
-          ? (Math.atan2(pointerPoint.y - centerCandidate.y, pointerPoint.x - centerCandidate.x) * 180) / Math.PI
-          : fallbackAngle;
-        const normalizedAngle = normalizeAngle(angleForOrientation);
-        const orientation = orientationFromAngle(normalizedAngle);
-        const dims = getOrientationDimensions(orientation);
-        const candidateTopLeft = {
-          x: Math.round(centerCandidate.x - dims.width / 2),
-          y: Math.round(centerCandidate.y - dims.height / 2)
-        };
-        const clamped = clampTopLeft(candidateTopLeft, orientation);
-        if (!clamped) return;
-        const candidateKeys = collectFootprintKeys(clamped.x, clamped.y, orientation);
-        const overlapsObstacle = candidateKeys.some(
-          key => obstacleSet.has(key) || obstacleSlipbotSet.has(key)
-        );
-        if (overlapsObstacle) return;
-        const candidateKeySet = new Set(candidateKeys);
-        const overlapsSlot = parkingAssignmentsRef.current.some(other => {
-          if (other.id === interaction.slotId) return false;
-          const otherKeys = collectFootprintKeys(other.position.x, other.position.y, other.orientation);
-          return otherKeys.some(key => candidateKeySet.has(key));
-        });
-        if (overlapsSlot) return;
-        setParkingAssignments(prev =>
-          prev.map(item =>
-            item.id === interaction.slotId
-              ? {
-                  ...item,
-                  position: clamped,
-                  orientation
-                }
-              : item
-          )
-        );
-        const center = {
-          x: clamped.x + dims.width / 2,
-          y: clamped.y + dims.height / 2
-        };
-        slotInteractionRef.current = {
-          ...interaction,
-          centerOffset: { x: pointerPoint.x - center.x, y: pointerPoint.y - center.y },
-          lastAngle: normalizedAngle
-        };
-        return;
-      }
-
-      if (isDefiningArea) {
-        if (!cell || !areaAnchorRef.current) return;
-        const workspace = computeWorkspaceFromCell(cell);
-        if (workspace) {
-          setDraftArea(workspace);
-        }
-        return;
-      }
-
-      if (isPlacingTrailer) {
-        setTrailerPreview(cell ? clampTrailerOrigin(cell, trailerOrientation) : null);
-        return;
-      }
-
-      if (isAddingObstacleSlipbot) {
-        if (!allowedArea) {
-          setObstacleSlipbotPreview(null);
-          return;
-        }
-        const pointerPoint = getPointFromEvent(event);
-        const centerCandidate = pointerPoint ?? (cell ? { x: cell.x + 0.5, y: cell.y + 0.5 } : null);
-        if (!centerCandidate) {
-          setObstacleSlipbotPreview(null);
-          return;
-        }
-        const center = clampObstacleSlipbotCenter(centerCandidate, obstacleSlipbotRotation);
-        if (!center || !slipbotFootprintWithinArea(allowedArea, center, obstacleSlipbotRotation)) {
-          setObstacleSlipbotPreview(null);
-          return;
-        }
-        setObstacleSlipbotPreview(center);
-        return;
-      }
-
-    },
-    [
-      allowedArea,
-      clampObstacleSlipbotCenter,
-      clampTopLeft,
-      clampTrailerOrigin,
-      computeWorkspaceFromCell,
-      getCellFromEvent,
-      getPointFromEvent,
-      isAddingObstacleSlipbot,
-      isDefiningArea,
-      isPlacingTrailer,
-      obstacleSet,
-      obstacleSlipbotRotation,
-      obstacleSlipbotSet,
-      setParkingAssignments,
-      slotInteractionRef,
-      trailerOrientation
-    ]
-  );
-
-  const finalizeWorkspace = useCallback(
-    workspace => {
-      if (!workspace) return;
-      if (workspace.width < SLIPBOT_WIDTH || workspace.height < SLIPBOT_HEIGHT) {
-        setStatus("Workspace must be at least 8ft wide and 17ft tall.");
-        return;
-      }
-
-      const allInside = slipbotsRef.current.every(bot =>
-        areaContainsFootprint(workspace, bot.position.x, bot.position.y, bot.orientation)
-      );
-      if (!allInside) {
-        setStatus("Workspace must include the trailer and all SlipBots.");
-        return;
-      }
-
-      setAllowedArea(workspace);
-      setStatus("Workspace updated. Right-click to add obstacles or choose parking slots.");
-      setObstacleKeys(prev =>
-        prev.filter(key => {
-          const [sx, sy] = key.split(",").map(Number);
-          return (
-            sx >= workspace.x &&
-            sx < workspace.x + workspace.width &&
-            sy >= workspace.y &&
-            sy < workspace.y + workspace.height
-          );
-        })
-      );
-      setObstacleSlipbots(prev =>
-        prev.filter(item =>
-          slipbotFootprintWithinArea(workspace, item.center, item.rotation ?? 0)
-        )
-      );
-      setParkingAssignments(prev =>
-        prev.filter(assignment =>
-          areaContainsFootprint(
-            workspace,
-            assignment.position.x,
-            assignment.position.y,
-            assignment.orientation
-          )
-        )
-      );
-    },
+  const canvasDimensions = useMemo(
+    () => ({ width: GRID_WIDTH * CELL_SIZE, height: GRID_HEIGHT * CELL_SIZE }),
     []
   );
 
-  const handlePointerUp = useCallback(() => {
-    const interaction = slotInteractionRef.current;
-    if (isDefiningArea && draftArea) {
-      finalizeWorkspace(draftArea);
+  const selectionDetails = useMemo(() => {
+    if (!selectedEntity) return null;
+    if (selectedEntity.type === "trailer") {
+      return {
+        title: "Trailer",
+        position: `(${trailer.center.x.toFixed(1)}, ${trailer.center.y.toFixed(1)})`,
+        rotation: `${normalizeAngle(trailer.rotation).toFixed(1)}°`
+      };
     }
-    areaAnchorRef.current = null;
-    setDraftArea(null);
-    slotInteractionRef.current = null;
-
-    if (interaction?.type === "slot-rotate") {
-      const slot = parkingAssignmentsRef.current.find(item => item.id === interaction.slotId);
-      if (slot) {
-        const heading = normalizeAngle(
-          slot.rotation ?? headingFromOrientation(slot.orientation)
-        );
-        setStatus(
-          `Parking slot ${slot.id.replace("slot-", "")} heading set to ${describeAngle(heading)}.`
-        );
-      }
+    if (selectedEntity.type === "slipbot") {
+      const bot = slipbots.find(item => item.id === selectedEntity.id);
+      if (!bot) return null;
+      return {
+        title: bot.name,
+        position: `(${bot.center.x.toFixed(1)}, ${bot.center.y.toFixed(1)})`,
+        rotation: `${normalizeAngle(bot.rotation).toFixed(1)}°`
+      };
     }
-  }, [draftArea, finalizeWorkspace, isDefiningArea, setStatus]);
-
-  const handlePointerLeave = useCallback(() => {
-    setTrailerPreview(null);
-    setObstacleSlipbotPreview(null);
-    slotInteractionRef.current = null;
-  }, []);
-
-  const handleContextMenu = useCallback(
-    event => {
-      event.preventDefault();
-      if (isSequenceActive) return;
-      if (isPlacingTrailer || isAddingObstacleSlipbot) return;
-      const cell = getCellFromEvent(event);
-      if (!cell || !allowedArea) return;
-      const { x, y } = cell;
-      const cellKey = pointKey(x, y);
-      if (x < allowedArea.x || x >= allowedArea.x + allowedArea.width) {
-        setStatus("Obstacles must be inside the workspace.");
-        return;
-      }
-      if (y < allowedArea.y || y >= allowedArea.y + allowedArea.height) {
-        setStatus("Obstacles must be inside the workspace.");
-        return;
-      }
-
-      const conflictsSlipbot = slipbotsRef.current.some(bot => {
-        const dims = getOrientationDimensions(bot.orientation);
-        return (
-          x >= bot.position.x &&
-          x < bot.position.x + dims.width &&
-          y >= bot.position.y &&
-          y < bot.position.y + dims.height
-        );
-      });
-      if (conflictsSlipbot) {
-        setStatus("Cannot place an obstacle on top of a SlipBot.");
-        return;
-      }
-
-      const conflictsSlipbotObstacle = obstacleSlipbotSet.has(cellKey);
-      if (conflictsSlipbotObstacle) {
-        setStatus("Cannot place an obstacle on top of a SlipBot obstacle.");
-        return;
-      }
-
-      const conflictsParking = parkingAssignments.some(assignment => {
-        const dims = getOrientationDimensions(assignment.orientation);
-        return (
-          x >= assignment.position.x &&
-          x < assignment.position.x + dims.width &&
-          y >= assignment.position.y &&
-          y < assignment.position.y + dims.height
-        );
-      });
-      if (conflictsParking) {
-        setStatus("Obstacles cannot overlap parking slots.");
-        return;
-      }
-
-      setObstacleKeys(prev => {
-        if (prev.includes(cellKey)) {
-          return prev.filter(item => item !== cellKey);
-        }
-        return [...prev, cellKey];
-      });
-      setStatus("Obstacle map updated.");
-    },
-    [
-      allowedArea,
-      getCellFromEvent,
-      isAddingObstacleSlipbot,
-      isPlacingTrailer,
-      isSequenceActive,
-      obstacleSlipbots,
-      parkingAssignments
-    ]
-  );
-
-  const toggleWorkspaceMode = useCallback(() => {
-    if (isSequenceActive) return;
-    setIsDefiningArea(prev => {
-      const next = !prev;
-      if (next) {
-        setIsPlacingTrailer(false);
-        setIsAddingObstacleSlipbot(false);
-        setTrailerPreview(null);
-        setObstacleSlipbotPreview(null);
-        setStatus("Click and drag to define the workspace where SlipBots are allowed.");
-      } else {
-        setStatus("Workspace lock restored. Define parking slots or adjust obstacles.");
-        areaAnchorRef.current = null;
-        setDraftArea(null);
-      }
-      return next;
-    });
-  }, [isSequenceActive]);
-
-  const toggleTrailerPlacement = useCallback(() => {
-    if (isSequenceActive) return;
-    setIsPlacingTrailer(prev => {
-      const next = !prev;
-      if (next) {
-        setIsDefiningArea(false);
-        setIsAddingObstacleSlipbot(false);
-        areaAnchorRef.current = null;
-        setDraftArea(null);
-        setObstacleSlipbotPreview(null);
-        setStatus(
-          `Click on the canvas to position the trailer. SlipBots will align nose to tail facing ${describeOrientation(
-            trailerOrientation
-          )}.`
-        );
-      } else {
-        setStatus("Trailer placement mode exited.");
-        setTrailerPreview(null);
-      }
-      return next;
-    });
-  }, [isSequenceActive, trailerOrientation]);
-
-  const toggleObstacleSlipbotMode = useCallback(() => {
-    if (isSequenceActive) return;
-    setIsAddingObstacleSlipbot(prev => {
-      const next = !prev;
-      if (next) {
-        setIsDefiningArea(false);
-        setIsPlacingTrailer(false);
-        areaAnchorRef.current = null;
-        setDraftArea(null);
-        setTrailerPreview(null);
-        setStatus(
-          `Click inside the workspace to add a stationary SlipBot obstacle at ${describeAngle(
-            obstacleSlipbotRotation
-          )}.`
-        );
-      } else {
-        setStatus("SlipBot obstacle placement mode exited.");
-        setObstacleSlipbotPreview(null);
-      }
-      return next;
-    });
-  }, [isSequenceActive, obstacleSlipbotRotation]);
-
-  const handleRotateTrailer = useCallback(() => {
-    if (isSequenceActive) return;
-    if (!allowedArea) {
-      setStatus("Define the workspace before rotating the trailer.");
-      return;
-    }
-    const nextOrientation = rotateOrientation(trailerOrientation);
-    const origin = clampTrailerOrigin(trailerOrigin, nextOrientation);
-    if (!origin) return;
-
-    const staged = createInitialSlipbots(origin, nextOrientation);
-    const insideWorkspace = staged.every(bot =>
-      areaContainsFootprint(allowedArea, bot.position.x, bot.position.y, bot.orientation)
-    );
-    if (!insideWorkspace) {
-      setStatus("Rotating the trailer would move SlipBots outside the workspace bounds.");
-      return;
-    }
-
-    const trailerFootprints = staged.flatMap(bot =>
-      collectFootprintKeys(bot.position.x, bot.position.y, bot.orientation)
-    );
-    const overlapsObstacles = trailerFootprints.some(
-      key => obstacleSet.has(key) || obstacleSlipbotSet.has(key)
-    );
-    if (overlapsObstacles) {
-      setStatus("Clear nearby obstacles before rotating the trailer into this orientation.");
-      return;
-    }
-
-    const parkingKeys = new Set(
-      parkingAssignments.flatMap(assignment =>
-        collectFootprintKeys(assignment.position.x, assignment.position.y, assignment.orientation)
-      )
-    );
-    const overlapsParking = trailerFootprints.some(key => parkingKeys.has(key));
-    if (overlapsParking) {
-      setStatus("Rotating the trailer now would overlap a parking slot.");
-      return;
-    }
-
-    setTrailerOrigin(origin);
-    setTrailerOrientation(nextOrientation);
-    setSlipbots(staged);
-    slipbotsRef.current = staged;
-    setTrailerPreview(null);
-    setStatus(`Trailer rotated to face ${describeOrientation(nextOrientation)}.`);
-  }, [
-    allowedArea,
-    clampTrailerOrigin,
-    isSequenceActive,
-    obstacleSet,
-    obstacleSlipbotSet,
-    parkingAssignments,
-    trailerOrientation,
-    trailerOrigin
-  ]);
-
-  const handleRotateObstacleOrientation = useCallback(() => {
-    if (isSequenceActive) return;
-    setObstacleSlipbotRotation(prev => {
-      const next = normalizeAngle(prev + 15);
-      setStatus(`SlipBot obstacle template rotated to ${describeAngle(next)}.`);
-      return next;
-    });
-    setObstacleSlipbotPreview(null);
-  }, [isSequenceActive]);
-
-  const handleClearParking = useCallback(() => {
-    if (isSequenceActive) return;
-    setParkingAssignments([]);
-    setSelectedSlotId(null);
-    setStatus("Parking slots cleared. Click inside the workspace to set new targets.");
-  }, [isSequenceActive]);
-
-  const handleResetEnvironment = useCallback(() => {
-    clearAnimation();
-    setAllowedArea(DEFAULT_ALLOWED_AREA);
-    setIsDefiningArea(false);
-    setDraftArea(null);
-    setObstacleKeys([]);
-    setObstacleSlipbots([]);
-    setParkingAssignments([]);
-    setSelectedSlotId(null);
-    const resetBots = createInitialSlipbots(DEFAULT_TRAILER_ORIGIN, "north");
-    setSlipbots(resetBots);
-    slipbotsRef.current = resetBots;
-    setTrailerOrigin(DEFAULT_TRAILER_ORIGIN);
-    setTrailerOrientation("north");
-    setObstacleSlipbotRotation(0);
-    setTrailerPreview(null);
-    setObstacleSlipbotPreview(null);
-    setIsPlacingTrailer(false);
-    setIsAddingObstacleSlipbot(false);
-    setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
-    setCurrentPath([]);
-    slotInteractionRef.current = null;
-    setStatus("Environment reset. Define the workspace, position the trailer, and select three parking slots.");
-  }, [clearAnimation]);
+    const slot = parkingSlots.find(item => item.id === selectedEntity.id);
+    if (!slot) return null;
+    return {
+      title: "Parking slot",
+      position: `(${slot.center.x.toFixed(1)}, ${slot.center.y.toFixed(1)})`,
+      rotation: `${normalizeAngle(slot.rotation).toFixed(1)}°`
+    };
+  }, [parkingSlots, selectedEntity, slipbots, trailer]);
 
   const drawScene = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1379,770 +272,455 @@ function SimulatorV2() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#020617";
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const area = draftArea ?? allowedArea;
-    if (area) {
-      ctx.fillStyle = "rgba(56, 189, 248, 0.08)";
-      ctx.fillRect(area.x * CELL_SIZE, area.y * CELL_SIZE, area.width * CELL_SIZE, area.height * CELL_SIZE);
-      ctx.strokeStyle = "rgba(56, 189, 248, 0.6)";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(area.x * CELL_SIZE, area.y * CELL_SIZE, area.width * CELL_SIZE, area.height * CELL_SIZE);
-
-      ctx.fillStyle = "rgba(148, 163, 184, 0.85)";
-      ctx.font = "14px 'Inter', sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "bottom";
-      ctx.fillText(`${area.width} ft`,
-        area.x * CELL_SIZE + (area.width * CELL_SIZE) / 2,
-        area.y * CELL_SIZE - 6
-      );
-      ctx.save();
-      ctx.translate(area.x * CELL_SIZE - 8, area.y * CELL_SIZE + (area.height * CELL_SIZE) / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.fillText(`${area.height} ft`, 0, 0);
-      ctx.restore();
-    }
-
-    const renderTrailerBounds = (origin, orientation, options = {}) => {
-      if (!origin) return;
-      const padding = options.padding ?? TRAILER_CLEARANCE;
-      const alpha = options.alpha ?? 0.12;
-      const strokeAlpha = options.strokeAlpha ?? 0.5;
-      const trailerDims = getTrailerDimensions(orientation);
-      const topLeftX = (origin.x - padding) * CELL_SIZE;
-      const topLeftY = (origin.y - padding) * CELL_SIZE;
-      const width = (trailerDims.width + padding * 2) * CELL_SIZE;
-      const height = (trailerDims.height + padding * 2) * CELL_SIZE;
-      ctx.fillStyle = `rgba(148, 163, 184, ${alpha})`;
-      ctx.fillRect(topLeftX, topLeftY, width, height);
-      ctx.strokeStyle = `rgba(226, 232, 240, ${strokeAlpha})`;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(topLeftX, topLeftY, width, height);
-      if (options.dashed) {
-        ctx.save();
-        ctx.setLineDash([6, 6]);
-        ctx.strokeStyle = `rgba(148, 163, 184, ${strokeAlpha + 0.1})`;
-        ctx.strokeRect(
-          origin.x * CELL_SIZE,
-          origin.y * CELL_SIZE,
-          trailerDims.width * CELL_SIZE,
-          trailerDims.height * CELL_SIZE
-        );
-        ctx.restore();
-      }
-    };
-
-    renderTrailerBounds(trailerOrigin, trailerOrientation, {
-      padding: TRAILER_CLEARANCE,
-      alpha: 0.08,
-      strokeAlpha: 0.38
-    });
-    if (trailerPreview) {
-      renderTrailerBounds(trailerPreview, trailerOrientation, {
-        padding: TRAILER_CLEARANCE,
-        alpha: 0.18,
-        strokeAlpha: 0.6,
-        dashed: true
-      });
-    }
-
-    ctx.fillStyle = "rgba(248, 113, 113, 0.82)";
-    obstacleKeys.forEach(key => {
-      const [ox, oy] = key.split(",").map(Number);
-      ctx.fillRect(ox * CELL_SIZE, oy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      ctx.strokeStyle = "rgba(248, 113, 113, 0.95)";
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(ox * CELL_SIZE, oy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-    });
-
-    const slipbotLengthPx = SLIPBOT_LENGTH * CELL_SIZE;
-    const slipbotWidthPx = SLIPBOT_BODY_WIDTH * CELL_SIZE;
-
-    obstacleSlipbots.forEach(bot => {
-      const rotation = normalizeAngle(bot.rotation ?? 0);
-      ctx.save();
-      ctx.translate(bot.center.x * CELL_SIZE, bot.center.y * CELL_SIZE);
-      ctx.rotate((rotation * Math.PI) / 180);
-      ctx.fillStyle = "rgba(148, 163, 184, 0.45)";
-      ctx.strokeStyle = "rgba(226, 232, 240, 0.75)";
-      ctx.lineWidth = 2.5;
-      ctx.fillRect(-slipbotLengthPx / 2, -slipbotWidthPx / 2, slipbotLengthPx, slipbotWidthPx);
-      ctx.strokeRect(-slipbotLengthPx / 2, -slipbotWidthPx / 2, slipbotLengthPx, slipbotWidthPx);
-      ctx.restore();
-    });
-
-    if (obstacleSlipbotPreview) {
-      ctx.save();
-      ctx.translate(obstacleSlipbotPreview.x * CELL_SIZE, obstacleSlipbotPreview.y * CELL_SIZE);
-      ctx.rotate((obstacleSlipbotRotation * Math.PI) / 180);
-      ctx.setLineDash([6, 6]);
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.85)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-slipbotLengthPx / 2, -slipbotWidthPx / 2, slipbotLengthPx, slipbotWidthPx);
-      ctx.restore();
-    }
-
-    parkingAssignments.forEach((assignment, index) => {
-      const dims = getOrientationDimensions(assignment.orientation);
-      const isSelected = assignment.id === selectedSlotId;
-      const isFilled = assignment.filled;
-      const baseX = assignment.position.x * CELL_SIZE;
-      const baseY = assignment.position.y * CELL_SIZE;
-      ctx.fillStyle = isFilled
-        ? isSelected
-          ? "rgba(34, 197, 94, 0.48)"
-          : "rgba(34, 197, 94, 0.32)"
-        : isSelected
-        ? "rgba(34, 197, 94, 0.32)"
-        : "rgba(34, 197, 94, 0.18)";
-      ctx.fillRect(baseX, baseY, dims.width * CELL_SIZE, dims.height * CELL_SIZE);
-      ctx.strokeStyle = isFilled
-        ? isSelected
-          ? "rgba(22, 163, 74, 0.95)"
-          : "rgba(22, 163, 74, 0.75)"
-        : isSelected
-        ? "rgba(34, 197, 94, 0.9)"
-        : "rgba(34, 197, 94, 0.55)";
-      ctx.lineWidth = isSelected ? 3 : 2;
-      ctx.strokeRect(baseX, baseY, dims.width * CELL_SIZE, dims.height * CELL_SIZE);
-      ctx.fillStyle = "rgba(226, 232, 240, 0.92)";
-      ctx.font = "16px 'Inter', sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(`Slot ${index + 1}`, baseX + 8, baseY + 6);
-      ctx.font = "12px 'Inter', sans-serif";
-      ctx.fillStyle = isFilled ? "rgba(226, 232, 240, 0.85)" : "rgba(226, 232, 240, 0.6)";
-      ctx.fillText(isFilled ? "Filled" : "Open", baseX + 8, baseY + 24);
-
-      const rotation = normalizeAngle(
-        assignment.rotation ?? headingFromOrientation(assignment.orientation)
-      );
-      const centerX = baseX + (dims.width * CELL_SIZE) / 2;
-      const centerY = baseY + (dims.height * CELL_SIZE) / 2;
-      ctx.save();
-      ctx.translate(centerX, centerY);
-      ctx.rotate((rotation * Math.PI) / 180);
-      ctx.strokeStyle = isSelected ? "rgba(226, 232, 240, 0.9)" : "rgba(226, 232, 240, 0.65)";
-      ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.save();
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.15)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= GRID_WIDTH; x += 5) {
+      const px = x * CELL_SIZE;
       ctx.beginPath();
-      ctx.moveTo(-SLIPBOT_HEIGHT * CELL_SIZE * 0.4, 0);
-      ctx.lineTo(SLIPBOT_HEIGHT * CELL_SIZE * 0.45, 0);
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, canvas.height);
       ctx.stroke();
+    }
+    for (let y = 0; y <= GRID_HEIGHT; y += 5) {
+      const py = y * CELL_SIZE;
       ctx.beginPath();
-      ctx.moveTo(SLIPBOT_HEIGHT * CELL_SIZE * 0.45, 0);
-      ctx.lineTo(SLIPBOT_HEIGHT * CELL_SIZE * 0.33, -SLIPBOT_WIDTH * CELL_SIZE * 0.25);
-      ctx.lineTo(SLIPBOT_HEIGHT * CELL_SIZE * 0.33, SLIPBOT_WIDTH * CELL_SIZE * 0.25);
-      ctx.closePath();
-      ctx.fillStyle = isSelected ? "rgba(226, 232, 240, 0.95)" : "rgba(226, 232, 240, 0.72)";
+      ctx.moveTo(0, py);
+      ctx.lineTo(canvas.width, py);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    parkingSlots.forEach(slot => {
+      ctx.save();
+      ctx.translate(slot.center.x * CELL_SIZE, slot.center.y * CELL_SIZE);
+      ctx.rotate(degToRad(slot.rotation));
+      const width = slot.width * CELL_SIZE;
+      const height = slot.height * CELL_SIZE;
+      drawRoundedRectPath(ctx, -width / 2, -height / 2, width, height, Math.min(width, height) * 0.12);
+      ctx.fillStyle = "rgba(56, 189, 248, 0.12)";
       ctx.fill();
+      ctx.lineWidth = selectedEntity?.type === "parking" && selectedEntity.id === slot.id ? 3 : 1.6;
+      ctx.strokeStyle = "rgba(94, 234, 212, 0.7)";
+      ctx.setLineDash([10, 6]);
+      ctx.stroke();
       ctx.restore();
-
-      if (isSelected) {
-        const handleX = (assignment.position.x + dims.width) * CELL_SIZE;
-        const handleY = assignment.position.y * CELL_SIZE;
-        ctx.save();
-        ctx.beginPath();
-        ctx.fillStyle = "rgba(94, 234, 212, 0.85)";
-        ctx.strokeStyle = "rgba(16, 185, 129, 0.95)";
-        ctx.lineWidth = 2.5;
-        ctx.arc(handleX, handleY, SLOT_ROTATION_HANDLE_RADIUS_PX, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.fillStyle = "#0f172a";
-        ctx.arc(handleX, handleY, SLOT_ROTATION_HANDLE_RADIUS_PX - 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
+      ctx.setLineDash([]);
     });
 
-    if (currentPath.length > 1) {
-      const activeBot = slipbotsRef.current.find(bot => bot.id === sequenceState.activeBotId);
-      ctx.strokeStyle = activeBot ? activeBot.color : "#38bdf8";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      currentPath.forEach((step, idx) => {
-        const orientation = normalizeOrientation(step.orientation ?? activeBot?.orientation ?? "north");
-        const dims = getOrientationDimensions(orientation);
-        const cx = step.x * CELL_SIZE + (dims.width * CELL_SIZE) / 2;
-        const cy = step.y * CELL_SIZE + (dims.height * CELL_SIZE) / 2;
-        if (idx === 0) {
-          ctx.moveTo(cx, cy);
-        } else {
-          ctx.lineTo(cx, cy);
-        }
-      });
-      ctx.stroke();
-    }
+    ctx.save();
+    ctx.translate(trailer.center.x * CELL_SIZE, trailer.center.y * CELL_SIZE);
+    ctx.rotate(degToRad(trailer.rotation));
+    const trailerWidth = trailer.width * CELL_SIZE;
+    const trailerHeight = trailer.height * CELL_SIZE;
+    drawRoundedRectPath(ctx, -trailerWidth / 2, -trailerHeight / 2, trailerWidth, trailerHeight, Math.min(trailerWidth, trailerHeight) * 0.08);
+    ctx.fillStyle = "rgba(15, 118, 110, 0.35)";
+    ctx.fill();
+    ctx.lineWidth = selectedEntity?.type === "trailer" ? 3 : 1.6;
+    ctx.strokeStyle = "rgba(45, 212, 191, 0.9)";
+    ctx.stroke();
+    ctx.restore();
 
     slipbots.forEach(bot => {
-      const orientation = normalizeOrientation(bot.orientation);
-      const dims = getOrientationDimensions(orientation);
-      const centerX = (bot.position.x + dims.width / 2) * CELL_SIZE;
-      const centerY = (bot.position.y + dims.height / 2) * CELL_SIZE;
-      const heading = normalizeAngle(bot.heading ?? headingFromOrientation(orientation));
+      const isSelected = selectedEntity?.type === "slipbot" && selectedEntity.id === bot.id;
       ctx.save();
-      ctx.translate(centerX, centerY);
-      ctx.rotate((heading * Math.PI) / 180);
-      ctx.fillStyle = `${bot.color}dd`;
-      ctx.strokeStyle = bot.color;
-      ctx.lineWidth = 3;
-      const bodyLength = SLIPBOT_HEIGHT * CELL_SIZE;
-      const bodyWidth = SLIPBOT_WIDTH * CELL_SIZE;
-      ctx.beginPath();
-      ctx.rect(-bodyLength / 2, -bodyWidth / 2, bodyLength, bodyWidth);
+      ctx.translate(bot.center.x * CELL_SIZE, bot.center.y * CELL_SIZE);
+      ctx.rotate(degToRad(bot.rotation));
+      const width = bot.width * CELL_SIZE;
+      const height = bot.height * CELL_SIZE;
+      drawRoundedRectPath(ctx, -width / 2, -height / 2, width, height, Math.min(width, height) * 0.18);
+      ctx.fillStyle = bot.color;
       ctx.fill();
+      ctx.lineWidth = isSelected ? 3 : 1.4;
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.8)";
       ctx.stroke();
-      ctx.fillStyle = "#0f172a";
-      ctx.font = "15px 'Inter', sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(bot.name.replace("SlipBot ", ""), 0, 0);
+      ctx.beginPath();
+      ctx.moveTo(0, -height / 2 + 6);
+      ctx.lineTo(0, -height / 2);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.85)";
+      ctx.stroke();
       ctx.restore();
     });
-  }, [
-    allowedArea,
-    canvasHeight,
-    canvasWidth,
-    currentPath,
-    draftArea,
-    isSequenceActive,
-    obstacleKeys,
-    obstacleSlipbotPreview,
-    obstacleSlipbotRotation,
-    obstacleSlipbots,
-    parkingAssignments,
-    selectedSlotId,
-    sequenceState.activeBotId,
-    slipbots,
-    trailerOrigin,
-    trailerOrientation,
-    trailerPreview
-  ]);
+  }, [parkingSlots, selectedEntity, slipbots, trailer]);
 
   useEffect(() => {
     drawScene();
   }, [drawScene]);
 
-  const computeExitSegment = useCallback(
-    bot => {
-      const orientation = normalizeOrientation(bot.orientation);
-      const trailerKey = normalizeOrientation(trailerOrientation);
-      if (orientation !== trailerKey) {
-        return null;
-      }
-      const exitConfig = getOrientationExitConfig(trailerKey);
-      const trailerDims = getTrailerDimensions(trailerKey);
-      const dims = getOrientationDimensions(orientation);
+  const hitTest = useCallback(
+    pointer => {
+      if (!pointer) return null;
+      const gridPoint = { x: pointer.x, y: pointer.y };
 
-      let distanceToOpening = 0;
-      if (trailerKey === "north") {
-        distanceToOpening = bot.position.y - trailerOrigin.y;
-      } else if (trailerKey === "south") {
-        const trailerBottom = trailerOrigin.y + trailerDims.height;
-        distanceToOpening = trailerBottom - (bot.position.y + dims.height);
-      } else if (trailerKey === "east") {
-        const frontTopLeftX = trailerOrigin.x + trailerDims.width - dims.width;
-        distanceToOpening = frontTopLeftX - bot.position.x;
-      } else if (trailerKey === "west") {
-        distanceToOpening = bot.position.x - trailerOrigin.x;
+      for (let i = slipbots.length - 1; i >= 0; i -= 1) {
+        const bot = slipbots[i];
+        if (pointInRectangle(bot, gridPoint)) {
+          return { type: "slipbot", id: bot.id };
+        }
       }
 
-      const totalSteps = distanceToOpening + exitConfig.steps;
-      const segment = [
-        { x: bot.position.x, y: bot.position.y, orientation },
-      ];
-      let current = { x: bot.position.x, y: bot.position.y, orientation };
-      for (let i = 0; i < totalSteps; i += 1) {
-        current = {
-          x: current.x + exitConfig.vector.x,
-          y: current.y + exitConfig.vector.y,
-          orientation
-        };
-        segment.push(current);
+      for (let i = parkingSlots.length - 1; i >= 0; i -= 1) {
+        const slot = parkingSlots[i];
+        if (pointInRectangle(slot, gridPoint)) {
+          return { type: "parking", id: slot.id };
+        }
       }
-      return segment;
+
+      if (pointInRectangle(trailer, gridPoint)) {
+        return { type: "trailer", id: trailer.id };
+      }
+      return null;
     },
-    [trailerOrigin, trailerOrientation]
+    [parkingSlots, slipbots, trailer]
   );
 
-  const buildBlockedSetForBot = useCallback((botId, targetSlotId = null) => {
-    const blocked = new Set(obstacleSetRef.current);
-    obstacleSlipbotSetRef.current.forEach(key => blocked.add(key));
-    parkingAssignmentsRef.current.forEach(slot => {
-      if (!slot?.filled) return;
-      if (slot.id === targetSlotId) return;
-      const keys = collectFootprintKeys(slot.position.x, slot.position.y, slot.orientation);
-      keys.forEach(key => blocked.add(key));
-    });
-    slipbotsRef.current.forEach(bot => {
-      if (bot.id === botId) return;
-      const dims = getOrientationDimensions(bot.orientation);
-      forEachFootprintCell(bot.position.x, bot.position.y, dims.width, dims.height, (bx, by) => {
-        blocked.add(pointKey(bx, by));
-      });
-    });
-    return blocked;
-  }, []);
-
-  const animateSlipbot = useCallback(
-    (botId, path, onComplete) => {
-      clearAnimation();
-      if (!path || path.length <= 1) {
-        onComplete();
+  const handlePointerDown = useCallback(
+    event => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const pointer = getPointerPosition(event, canvas);
+      const hit = hitTest(pointer);
+      if (!hit) {
+        setSelectedEntity(null);
         return;
       }
 
-      const bot = slipbotsRef.current.find(item => item.id === botId);
-      const startingOrientation = normalizeOrientation(
-        path[0]?.orientation ?? bot?.orientation ?? "north"
-      );
-      let lastHeading = bot?.heading ?? headingFromOrientation(startingOrientation);
-      let lastPoint = { x: path[0].x, y: path[0].y };
-      let lastOrientation = startingOrientation;
+      event.preventDefault();
+      setSelectedEntity({ type: hit.type, id: hit.id });
 
-      const segments = [];
-      for (let i = 1; i < path.length; i += 1) {
-        const node = path[i];
-        const nextOrientation = normalizeOrientation(node.orientation ?? lastOrientation);
-        const nextHeading = headingFromOrientation(nextOrientation);
-        const dx = node.x - lastPoint.x;
-        const dy = node.y - lastPoint.y;
-        const distance = Math.hypot(dx, dy);
-        const moveDuration = distance / SLIPBOT_SPEED_FTPS;
-        const rotationDelta = Math.abs(shortestAngleDelta(lastHeading, nextHeading));
-        const rotationDuration = rotationDelta / SLIPBOT_ROTATION_SPEED_DEG;
-        const duration = Math.max(moveDuration, rotationDuration, rotationDelta > 0 ? 0.18 : 0.1);
-        segments.push({
-          start: { x: lastPoint.x, y: lastPoint.y },
-          end: { x: node.x, y: node.y },
-          startHeading: lastHeading,
-          endHeading: nextHeading,
-          startOrientation: lastOrientation,
-          endOrientation: nextOrientation,
-          duration,
-          move: distance > 0.001
-        });
-        lastPoint = { x: node.x, y: node.y };
-        lastHeading = nextHeading;
-        lastOrientation = nextOrientation;
+      const entity =
+        hit.type === "trailer"
+          ? trailer
+          : hit.type === "slipbot"
+          ? slipbots.find(item => item.id === hit.id) ?? null
+          : parkingSlots.find(item => item.id === hit.id) ?? null;
+      if (!entity) return;
+
+      if (canvas.setPointerCapture) {
+        canvas.setPointerCapture(event.pointerId);
       }
 
-      if (segments.length === 0) {
-        onComplete();
-        return;
+      const rotateGesture = event.shiftKey || event.button === 2 || event.buttons === 2;
+      if (rotateGesture) {
+        const centerPx = {
+          x: entity.center.x * CELL_SIZE,
+          y: entity.center.y * CELL_SIZE
+        };
+        const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
+        interactionRef.current = {
+          pointerId: event.pointerId,
+          mode: "rotate",
+          entityType: hit.type,
+          id: hit.id,
+          startAngle: angle,
+          startRotation: entity.rotation
+        };
+      } else {
+        const radians = degToRad(entity.rotation);
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+        const dx = pointer.x - entity.center.x;
+        const dy = pointer.y - entity.center.y;
+        const offsetLocal = {
+          x: cos * dx + sin * dy,
+          y: -sin * dx + cos * dy
+        };
+        interactionRef.current = {
+          pointerId: event.pointerId,
+          mode: "drag",
+          entityType: hit.type,
+          id: hit.id,
+          offsetLocal
+        };
       }
+    },
+    [hitTest, parkingSlots, slipbots, trailer]
+  );
 
-      let segmentIndex = 0;
-      let segmentStart = performance.now();
-      let currentPosition = { x: path[0].x, y: path[0].y };
-      let currentHeading =
-        slipbotsRef.current.find(item => item.id === botId)?.heading ?? headingFromOrientation(startingOrientation);
-      let currentOrientation = startingOrientation;
+  const handlePointerMove = useCallback(
+    event => {
+      const interaction = interactionRef.current;
+      if (!interaction) return;
+      if (interaction.pointerId !== event.pointerId) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const pointer = getPointerPosition(event, canvas);
+      if (!pointer) return;
+      event.preventDefault();
 
-      const updateBotState = (position, heading, orientation) => {
-        setSlipbots(prev =>
-          prev.map(item =>
-            item.id === botId
-              ? {
-                  ...item,
-                  position,
-                  heading,
-                  orientation
-                }
-              : item
-          )
-        );
-      };
-
-      updateBotState(currentPosition, currentHeading, currentOrientation);
-
-      const tick = now => {
-        const segment = segments[segmentIndex];
-        if (!segment) {
-          animationRef.current = null;
-          updateBotState(currentPosition, currentHeading);
-          onComplete();
+      if (interaction.mode === "drag") {
+        if (interaction.entityType === "trailer") {
+          setTrailer(prev => {
+            const radians = degToRad(prev.rotation);
+            const cos = Math.cos(radians);
+            const sin = Math.sin(radians);
+            const offsetLocal = interaction.offsetLocal ?? { x: 0, y: 0 };
+            const worldOffset = {
+              x: cos * offsetLocal.x - sin * offsetLocal.y,
+              y: sin * offsetLocal.x + cos * offsetLocal.y
+            };
+            let candidateCenter = {
+              x: pointer.x - worldOffset.x,
+              y: pointer.y - worldOffset.y
+            };
+            candidateCenter = clampCenterToBounds(candidateCenter, prev.width, prev.height, prev.rotation);
+            return { ...prev, center: candidateCenter };
+          });
           return;
         }
-
-        const elapsed = (now - segmentStart) / 1000;
-        const duration = Math.max(segment.duration, 0.001);
-        const t = Math.min(elapsed / duration, 1);
-        const position = segment.move
-          ? {
-              x: segment.start.x + (segment.end.x - segment.start.x) * t,
-              y: segment.start.y + (segment.end.y - segment.start.y) * t
+        if (interaction.entityType === "slipbot") {
+          setSlipbots(prev => {
+            const index = prev.findIndex(item => item.id === interaction.id);
+            if (index === -1) return prev;
+            const bot = prev[index];
+            const radians = degToRad(bot.rotation);
+            const cos = Math.cos(radians);
+            const sin = Math.sin(radians);
+            const offsetLocal = interaction.offsetLocal ?? { x: 0, y: 0 };
+            const worldOffset = {
+              x: cos * offsetLocal.x - sin * offsetLocal.y,
+              y: sin * offsetLocal.x + cos * offsetLocal.y
+            };
+            let candidateCenter = {
+              x: pointer.x - worldOffset.x,
+              y: pointer.y - worldOffset.y
+            };
+            candidateCenter = clampCenterToBounds(candidateCenter, bot.width, bot.height, bot.rotation);
+            const candidate = { ...bot, center: candidateCenter };
+            if (!isSlipbotPlacementValid(candidate, prev, bot.id)) {
+              return prev;
             }
-          : { x: segment.start.x, y: segment.start.y };
-        const heading = interpolateAngles(segment.startHeading, segment.endHeading, t);
-        const orientation =
-          segment.startOrientation === segment.endOrientation
-            ? segment.startOrientation
-            : t < 0.5
-            ? segment.startOrientation
-            : segment.endOrientation;
-
-        updateBotState(position, heading, orientation);
-        currentPosition = position;
-        currentHeading = heading;
-        currentOrientation = orientation;
-
-        if (t >= 1) {
-          segmentIndex += 1;
-          segmentStart = now;
-          if (segmentIndex >= segments.length) {
-            updateBotState(
-              { x: segment.end.x, y: segment.end.y },
-              segment.endHeading,
-              segment.endOrientation
-            );
-            animationRef.current = null;
-            onComplete();
-            return;
-          }
+            const next = [...prev];
+            next[index] = candidate;
+            return next;
+          });
+          return;
         }
+        if (interaction.entityType === "parking") {
+          setParkingSlots(prev => {
+            const index = prev.findIndex(item => item.id === interaction.id);
+            if (index === -1) return prev;
+            const slot = prev[index];
+            const radians = degToRad(slot.rotation);
+            const cos = Math.cos(radians);
+            const sin = Math.sin(radians);
+            const offsetLocal = interaction.offsetLocal ?? { x: 0, y: 0 };
+            const worldOffset = {
+              x: cos * offsetLocal.x - sin * offsetLocal.y,
+              y: sin * offsetLocal.x + cos * offsetLocal.y
+            };
+            let candidateCenter = {
+              x: pointer.x - worldOffset.x,
+              y: pointer.y - worldOffset.y
+            };
+            candidateCenter = clampCenterToBounds(candidateCenter, slot.width, slot.height, slot.rotation);
+            const next = [...prev];
+            next[index] = { ...slot, center: candidateCenter };
+            return next;
+          });
+        }
+        return;
+      }
 
-        animationRef.current = requestAnimationFrame(tick);
+      if (interaction.mode === "rotate") {
+        if (interaction.entityType === "trailer") {
+          const centerPx = {
+            x: trailer.center.x * CELL_SIZE,
+            y: trailer.center.y * CELL_SIZE
+          };
+          const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
+          const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
+          const rotation = normalizeAngle((interaction.startRotation ?? trailer.rotation) + delta);
+          setTrailer(prev => ({ ...prev, rotation }));
+          return;
+        }
+        if (interaction.entityType === "slipbot") {
+          const bot = slipbots.find(item => item.id === interaction.id);
+          if (!bot) return;
+          const centerPx = {
+            x: bot.center.x * CELL_SIZE,
+            y: bot.center.y * CELL_SIZE
+          };
+          const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
+          const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
+          const rotation = normalizeAngle((interaction.startRotation ?? bot.rotation) + delta);
+          setSlipbots(prev => {
+            const index = prev.findIndex(item => item.id === interaction.id);
+            if (index === -1) return prev;
+            const candidate = { ...prev[index], rotation };
+            if (!isSlipbotPlacementValid(candidate, prev, candidate.id)) {
+              return prev;
+            }
+            const next = [...prev];
+            next[index] = candidate;
+            return next;
+          });
+          return;
+        }
+        if (interaction.entityType === "parking") {
+          const slot = parkingSlots.find(item => item.id === interaction.id);
+          if (!slot) return;
+          const centerPx = {
+            x: slot.center.x * CELL_SIZE,
+            y: slot.center.y * CELL_SIZE
+          };
+          const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
+          const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
+          const rotation = normalizeAngle((interaction.startRotation ?? slot.rotation) + delta);
+          setParkingSlots(prev => {
+            const index = prev.findIndex(item => item.id === interaction.id);
+            if (index === -1) return prev;
+            const next = [...prev];
+            next[index] = { ...prev[index], rotation };
+            return next;
+          });
+        }
+      }
+    },
+    [parkingSlots, slipbots, trailer]
+  );
+
+  const handlePointerUp = useCallback(event => {
+    const canvas = canvasRef.current;
+    if (canvas && canvas.releasePointerCapture && canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+    interactionRef.current = null;
+  }, []);
+
+  const placeNewSlipbot = useCallback(() => {
+    const baseCenter = { x: GRID_WIDTH / 2, y: GRID_HEIGHT / 2 };
+    const candidates = [];
+    const step = 8;
+    for (let radius = 0; radius <= 40; radius += step) {
+      for (let angle = 0; angle < 360; angle += 45) {
+        const radians = degToRad(angle);
+        candidates.push({
+          x: baseCenter.x + Math.cos(radians) * radius,
+          y: baseCenter.y + Math.sin(radians) * radius
+        });
+      }
+    }
+    for (const candidate of candidates) {
+      const center = clampCenterToBounds({ ...candidate }, SLIPBOT_WIDTH, SLIPBOT_LENGTH, 0);
+      const slipbotCandidate = {
+        id: "candidate",
+        center,
+        width: SLIPBOT_WIDTH,
+        height: SLIPBOT_LENGTH,
+        rotation: 0
       };
-
-      animationRef.current = requestAnimationFrame(tick);
-    },
-    [clearAnimation]
-  );
-
-  const runQueue = useCallback(
-    (queue, index) => {
-      if (index >= queue.length) {
-        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
-        setCurrentPath([]);
-        setStatus("All SlipBots are parked. Great work!");
-        return;
+      if (isSlipbotPlacementValid(slipbotCandidate, slipbots, null)) {
+        return center;
       }
-
-      const entry = queue[index];
-      const bot = slipbotsRef.current.find(item => item.id === entry.botId);
-      if (!bot) {
-        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
-        setStatus("Unexpected error locating SlipBot.");
-        return;
-      }
-
-      const area = allowedAreaRef.current;
-      const blocked = buildBlockedSetForBot(bot.id, entry.target.id);
-      const exitSegment = computeExitSegment(bot);
-      if (!exitSegment || exitSegment.length < 2) {
-        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
-        setStatus("Unable to compute a straight-line exit for the active SlipBot.");
-        return;
-      }
-
-      const corridorClear = exitSegment.every((step, idx) => {
-        if (idx === 0) return true;
-        const stepOrientation = normalizeOrientation(step.orientation ?? bot.orientation);
-        return isFootprintFree(step.x, step.y, stepOrientation, area, blocked);
-      });
-      if (!corridorClear) {
-        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
-        setCurrentPath([]);
-        setStatus(
-          `${bot.name} cannot leave the trailer without crossing an obstacle. Clear the exit lane and try again.`
-        );
-        return;
-      }
-
-      const exitComplete = exitSegment[exitSegment.length - 1];
-      const navigationPath = planAStarWithRotations(
-        { ...exitComplete, orientation: bot.orientation },
-        {
-          x: entry.target.position.x,
-          y: entry.target.position.y,
-          orientation: entry.target.orientation
-        },
-        area,
-        blocked
-      );
-
-      if (!navigationPath) {
-        setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
-        setCurrentPath([]);
-        setStatus(
-          `${bot.name} could not find a path to its parking slot. Adjust the workspace or obstacles and try again.`
-        );
-        return;
-      }
-
-      const path = navigationPath.length > 0
-        ? [...exitSegment, ...navigationPath.slice(1)]
-        : exitSegment;
-
-      setSequenceState({ running: true, activeBotId: bot.id, queueIndex: index });
-      setCurrentPath(path);
-      setSlipbots(prev => prev.map(item => (item.id === bot.id ? { ...item, status: "moving" } : item)));
-      setStatus(`${bot.name} is exiting the trailer and navigating to slot ${index + 1}.`);
-
-      animateSlipbot(bot.id, path, () => {
-        setSlipbots(prev =>
-          prev.map(item =>
-            item.id === bot.id
-              ? {
-                  ...item,
-                  position: entry.target.position,
-                  orientation: entry.target.orientation,
-                  heading:
-                    entry.target.rotation ?? headingFromOrientation(entry.target.orientation),
-                  status: "parked"
-                }
-              : item
-          )
-        );
-        setParkingAssignments(prev =>
-          prev.map(item => (item.id === entry.target.id ? { ...item, filled: true } : item))
-        );
-        setCurrentPath([]);
-        setStatus(`${bot.name} parked successfully.`);
-        runQueue(queue, index + 1);
-      });
-    },
-    [animateSlipbot, buildBlockedSetForBot, computeExitSegment]
-  );
-
-  const handleExitSlipbots = useCallback(() => {
-    if (parkingAssignments.length !== 3) {
-      setStatus("Select three parking slots before commanding the exit sequence.");
-      return;
     }
-    if (isSequenceActive) return;
+    return clampCenterToBounds(baseCenter, SLIPBOT_WIDTH, SLIPBOT_LENGTH, 0);
+  }, [slipbots]);
 
-    const allWaiting = slipbotsRef.current.every(bot => bot.status === "waiting");
-    if (!allWaiting) {
-      setStatus("Reset the environment to run the exit sequence again.");
-      return;
-    }
+  const handleAddSlipbot = useCallback(() => {
+    slipbotCounterRef.current += 1;
+    const id = `slipbot-${slipbotCounterRef.current}`;
+    const color = SLIPBOT_COLORS[(slipbotCounterRef.current - 1) % SLIPBOT_COLORS.length];
+    const center = placeNewSlipbot();
+    const newSlipbot = createSlipbot(id, color, center);
+    setSlipbots(prev => [...prev, newSlipbot]);
+    setSelectedEntity({ type: "slipbot", id });
+  }, [placeNewSlipbot]);
 
-    const waitingBots = slipbotsRef.current.filter(bot => bot.status === "waiting");
-    const sortedWaiting = [...waitingBots].sort((a, b) => {
-      const orientation = normalizeOrientation(trailerOrientation);
-      if (orientation === "north") {
-        return a.position.y - b.position.y;
-      }
-      return b.position.x - a.position.x;
-    });
+  const handleAddParkingSlot = useCallback(() => {
+    parkingCounterRef.current += 1;
+    const id = `slot-${parkingCounterRef.current}`;
+    const offset = {
+      x: trailer.center.x + trailer.width + 12,
+      y: trailer.center.y - trailer.height / 2 - SLIPBOT_LENGTH
+    };
+    const center = clampCenterToBounds(offset, SLIPBOT_WIDTH, SLIPBOT_LENGTH, 0);
+    const slot = createParkingSlot(id, center);
+    setParkingSlots(prev => [...prev, slot]);
+    setSelectedEntity({ type: "parking", id });
+  }, [trailer.center.x, trailer.center.y, trailer.height, trailer.width]);
 
-    if (sortedWaiting.length !== parkingAssignments.length) {
-      setStatus("Mismatch between waiting SlipBots and parking assignments. Reset and try again.");
-      return;
-    }
-
-    const queue = sortedWaiting.map((bot, idx) => ({
-      botId: bot.id,
-      target: parkingAssignments[idx]
-    }));
-
-    const allInside = queue.every(entry =>
-      areaContainsFootprint(
-        allowedAreaRef.current,
-        entry.target.position.x,
-        entry.target.position.y,
-        entry.target.orientation
-      )
-    );
-    if (!allInside) {
-      setStatus("All parking slots must remain inside the workspace.");
-      return;
-    }
-
-    const anyBlocked = queue.some(entry => {
-      const keys = collectFootprintKeys(
-        entry.target.position.x,
-        entry.target.position.y,
-        entry.target.orientation
-      );
-      return keys.some(key => obstacleSetRef.current.has(key));
-    });
-    if (anyBlocked) {
-      setStatus("Clear obstacles from each parking slot before launching the exit sequence.");
-      return;
-    }
-
-    setStatus("Starting the SlipBot exit sequence.");
-    runQueue(queue, 0);
-  }, [isSequenceActive, parkingAssignments, runQueue, trailerOrientation]);
-
-  const slipbotSummary = useMemo(
-    () =>
-      slipbots.map(bot => {
-        const statusText =
-          bot.status === "waiting" ? "Queued in trailer" : bot.status === "moving" ? "In motion" : "Parked";
-        return { ...bot, statusText };
-      }),
-    [slipbots]
-  );
+  const handleReset = useCallback(() => {
+    const freshTrailer = buildInitialTrailer();
+    initialTrailerRef.current = freshTrailer;
+    slipbotCounterRef.current = 3;
+    parkingCounterRef.current = 0;
+    setTrailer({ ...freshTrailer });
+    setSlipbots(buildInitialSlipbots(freshTrailer));
+    setParkingSlots([]);
+    setSelectedEntity(null);
+  }, []);
 
   return (
     <div className="simulator-app">
-      <header className="simulator-top-bar">
-        <div className="top-bar-info">
-          <h1>SlipBot Simulator</h1>
-          <p>Plan a precise trailer exit inside a 200&nbsp;ft × 100&nbsp;ft yard.</p>
-        </div>
-        <div className="top-bar-actions">
-          <button
-            className="simulator-button secondary"
-            onClick={handleClearParking}
-            disabled={parkingAssignments.length === 0 || isSequenceActive}
-          >
-            Clear slots
-          </button>
-          <button className="simulator-button secondary" onClick={handleResetEnvironment}>
-            Reset
-          </button>
-          <Link className="simulator-button secondary" to="/">
-            Home
-          </Link>
-        </div>
+      <header className="simulator-header">
+        <h1>SlipBot Layout Sandbox</h1>
+        <p>
+          Drag any asset to move it. Hold <strong>Shift</strong> (or use the right mouse button) while
+          dragging to rotate with precise 360° control. Everything stays locked to your cursor so
+          adjustments feel seamless.
+        </p>
       </header>
-      <div className="simulator-body">
-        <section className="workspace-area">
-          <div className="workspace-controls">
-            <div className="toggle-group">
-              <span className="toggle-text">Workspace edit</span>
-              <button
-                type="button"
-                className={`toggle-switch ${isDefiningArea ? "active" : ""}`}
-                onClick={toggleWorkspaceMode}
-                aria-pressed={isDefiningArea}
-              >
-                <span className="toggle-thumb" />
-              </button>
-              <span className="toggle-state">{isDefiningArea ? "Drag" : "Locked"}</span>
-            </div>
-            <span className="control-hint">Left click: parking slot • Right click: 1&nbsp;ft obstacle</span>
-          </div>
-          <div className="control-buttons">
-            <button
-              type="button"
-              className={`simulator-button secondary ${isPlacingTrailer ? "active" : ""}`}
-              onClick={toggleTrailerPlacement}
-              aria-pressed={isPlacingTrailer}
-              disabled={isSequenceActive}
-            >
-              Place trailer
-            </button>
-            <button
-              type="button"
-              className="simulator-button secondary"
-              onClick={handleRotateTrailer}
-              disabled={isSequenceActive}
-            >
-              Rotate trailer ({describeOrientation(trailerOrientation)})
-            </button>
-            <button
-              type="button"
-              className={`simulator-button secondary ${isAddingObstacleSlipbot ? "active" : ""}`}
-              onClick={toggleObstacleSlipbotMode}
-              aria-pressed={isAddingObstacleSlipbot}
-              disabled={isSequenceActive}
-            >
-              Add SlipBot
-            </button>
-            <button
-              type="button"
-              className="simulator-button secondary"
-              onClick={handleRotateObstacleOrientation}
-              disabled={isSequenceActive}
-            >
-              Rotate SlipBot ({describeAngle(obstacleSlipbotRotation)})
-            </button>
-          </div>
+      <div className="simulator-layout">
+        <div className="canvas-wrapper">
           <canvas
             ref={canvasRef}
             className="simulator-canvas"
-            width={canvasWidth}
-            height={canvasHeight}
+            width={canvasDimensions.width}
+            height={canvasDimensions.height}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerLeave}
-            onPointerCancel={handlePointerLeave}
-            onContextMenu={handleContextMenu}
+            onPointerLeave={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onContextMenu={event => event.preventDefault()}
           />
-        </section>
-        <aside className="control-panel">
-          <div className="status-card">
-            <h2>Status</h2>
-            <p className="status-text">{status}</p>
+        </div>
+        <aside className="simulator-panel">
+          <div className="panel-section">
+            <h2>Controls</h2>
+            <p>
+              Every asset behaves like an obstacle. Drag to move, or hold Shift/right click while
+              dragging to rotate smoothly.
+            </p>
           </div>
-          <div className="metrics-grid">
-            <div>
-              <span className="label">Workspace origin</span>
-              <span className="value">
-                ({workspaceSummary.x}, {workspaceSummary.y})
-              </span>
-            </div>
-            <div>
-              <span className="label">Workspace size</span>
-              <span className="value">
-                {workspaceSummary.width} × {workspaceSummary.height} ft
-              </span>
-            </div>
-            <div>
-              <span className="label">Trailer origin</span>
-              <span className="value">
-                ({trailerSummary.x}, {trailerSummary.y})
-              </span>
-            </div>
-            <div>
-              <span className="label">Trailer orientation</span>
-              <span className="value">{describeOrientation(trailerOrientation)}</span>
-            </div>
-            <div>
-              <span className="label">Obstacles</span>
-              <span className="value">{obstacleKeys.length}</span>
-            </div>
-            <div>
-              <span className="label">Obstacle SlipBots</span>
-              <span className="value">{obstacleSlipbots.length}</span>
-            </div>
-            <div>
-              <span className="label">Parking slots</span>
-              <span className="value">{parkingAssignments.length} / 3</span>
-            </div>
-            <div>
-              <span className="label">SlipBot obstacle</span>
-              <span className="value">{describeAngle(obstacleSlipbotRotation)}</span>
-            </div>
+          <div className="panel-section buttons">
+            <button type="button" className="panel-button" onClick={handleAddSlipbot}>
+              Add SlipBot
+            </button>
+            <button type="button" className="panel-button" onClick={handleAddParkingSlot}>
+              Add parking slot
+            </button>
+            <button type="button" className="panel-button subtle" onClick={handleReset}>
+              Reset layout
+            </button>
           </div>
-          <div className="queue-card">
-            <h3>SlipBot queue</h3>
-            <ul className="slipbot-list">
-              {slipbotSummary.map(bot => (
-                <li key={bot.id} className="slipbot-list-item">
-                  <span className="slipbot-swatch" style={{ background: bot.color }} />
-                  <div>
-                    <div className="slipbot-name">{bot.name}</div>
-                    <div className="slipbot-status">{bot.statusText}</div>
-                    <div className="slipbot-position">
-                      ({bot.position.x.toFixed(1)}, {bot.position.y.toFixed(1)})
-                    </div>
-                    <div className="slipbot-orientation">
-                      Heading {describeAngle(bot.heading ?? headingFromOrientation(bot.orientation))}
-                    </div>
-                  </div>
-                </li>
-              ))}
+          <div className="panel-section">
+            <h3>Summary</h3>
+            <ul className="summary-list">
+              <li>
+                <span>SlipBots</span>
+                <span>{slipbots.length}</span>
+              </li>
+              <li>
+                <span>Parking slots</span>
+                <span>{parkingSlots.length}</span>
+              </li>
             </ul>
           </div>
-          <button
-            className="simulator-button launch"
-            onClick={handleExitSlipbots}
-            disabled={parkingAssignments.length !== 3 || isSequenceActive}
-          >
-            Exit SlipBots
-          </button>
+          {selectionDetails && (
+            <div className="panel-section">
+              <h3>Selected</h3>
+              <p className="selection-title">{selectionDetails.title}</p>
+              <p className="selection-detail">Position: {selectionDetails.position}</p>
+              <p className="selection-detail">Rotation: {selectionDetails.rotation}</p>
+            </div>
+          )}
         </aside>
       </div>
     </div>
