@@ -2,16 +2,17 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom";
 import "./SimulatorV2.css";
 
-const GRID_WIDTH = 100;
-const GRID_HEIGHT = 200;
+const GRID_WIDTH = 200;
+const GRID_HEIGHT = 100;
 const CELL_SIZE = 6;
 const SLIPBOT_WIDTH = 8;
 const SLIPBOT_HEIGHT = 17;
-const ANIMATION_DELAY_MS = 220;
+const SLIPBOT_SPEED_FTPS = 6;
+const SLIPBOT_ROTATION_SPEED_DEG = 180;
 
 const SLIPBOT_COUNT = 3;
 
-const ORIENTATION_SEQUENCE = ["north", "east"];
+const ORIENTATION_SEQUENCE = ["north", "east", "south", "west"];
 
 const ORIENTATION_CONFIG = {
   north: {
@@ -39,6 +40,32 @@ const ORIENTATION_CONFIG = {
       width: SLIPBOT_HEIGHT * SLIPBOT_COUNT,
       height: SLIPBOT_WIDTH
     }
+  },
+  south: {
+    width: SLIPBOT_WIDTH,
+    height: SLIPBOT_HEIGHT,
+    exitVector: { x: 0, y: 1 },
+    exitSteps: SLIPBOT_HEIGHT,
+    botOffset(index) {
+      return { x: 0, y: (SLIPBOT_COUNT - index - 1) * SLIPBOT_HEIGHT };
+    },
+    trailerSize: {
+      width: SLIPBOT_WIDTH,
+      height: SLIPBOT_HEIGHT * SLIPBOT_COUNT
+    }
+  },
+  west: {
+    width: SLIPBOT_HEIGHT,
+    height: SLIPBOT_WIDTH,
+    exitVector: { x: -1, y: 0 },
+    exitSteps: SLIPBOT_HEIGHT,
+    botOffset(index) {
+      return { x: index * SLIPBOT_HEIGHT, y: 0 };
+    },
+    trailerSize: {
+      width: SLIPBOT_HEIGHT * SLIPBOT_COUNT,
+      height: SLIPBOT_WIDTH
+    }
   }
 };
 
@@ -51,6 +78,48 @@ function rotateOrientation(current) {
   const index = ORIENTATION_SEQUENCE.indexOf(normalizeOrientation(current));
   const nextIndex = (index + 1) % ORIENTATION_SEQUENCE.length;
   return ORIENTATION_SEQUENCE[nextIndex];
+}
+
+function headingFromOrientation(orientation) {
+  const key = normalizeOrientation(orientation);
+  switch (key) {
+    case "east":
+      return 0;
+    case "south":
+      return 90;
+    case "west":
+      return 180;
+    case "north":
+    default:
+      return 270;
+  }
+}
+
+function normalizeAngle(angle) {
+  const value = Number.isFinite(angle) ? angle : 0;
+  return ((value % 360) + 360) % 360;
+}
+
+function orientationFromAngle(angle) {
+  const normalized = normalizeAngle(angle);
+  if (normalized >= 315 || normalized < 45) return "east";
+  if (normalized >= 45 && normalized < 135) return "south";
+  if (normalized >= 135 && normalized < 225) return "west";
+  return "north";
+}
+
+function shortestAngleDelta(from, to) {
+  const start = normalizeAngle(from);
+  const end = normalizeAngle(to);
+  let delta = end - start;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return delta;
+}
+
+function interpolateAngles(from, to, t) {
+  const delta = shortestAngleDelta(from, to);
+  return normalizeAngle(from + delta * Math.min(Math.max(t, 0), 1));
 }
 
 function getOrientationDimensions(orientation) {
@@ -286,6 +355,7 @@ function createInitialSlipbots(origin = DEFAULT_TRAILER_ORIGIN, orientation = "n
         y: origin.y + config.botOffset(0).y
       },
       orientation: key,
+      heading: headingFromOrientation(key),
       status: "waiting"
     },
     {
@@ -297,6 +367,7 @@ function createInitialSlipbots(origin = DEFAULT_TRAILER_ORIGIN, orientation = "n
         y: origin.y + config.botOffset(1).y
       },
       orientation: key,
+      heading: headingFromOrientation(key),
       status: "waiting"
     },
     {
@@ -308,6 +379,7 @@ function createInitialSlipbots(origin = DEFAULT_TRAILER_ORIGIN, orientation = "n
         y: origin.y + config.botOffset(2).y
       },
       orientation: key,
+      heading: headingFromOrientation(key),
       status: "waiting"
     }
   ];
@@ -324,9 +396,8 @@ function SimulatorV2() {
   const [obstacleKeys, setObstacleKeys] = useState([]);
   const [obstacleSlipbots, setObstacleSlipbots] = useState([]);
   const [parkingAssignments, setParkingAssignments] = useState([]);
-  const [hoverCell, setHoverCell] = useState(null);
+  const [selectedSlotId, setSelectedSlotId] = useState(null);
   const [trailerOrientation, setTrailerOrientation] = useState("north");
-  const [parkingSlotOrientation, setParkingSlotOrientation] = useState("north");
   const [obstacleSlipbotOrientation, setObstacleSlipbotOrientation] = useState("north");
   const [slipbots, setSlipbots] = useState(() => createInitialSlipbots(DEFAULT_TRAILER_ORIGIN, "north"));
   const [trailerOrigin, setTrailerOrigin] = useState(DEFAULT_TRAILER_ORIGIN);
@@ -357,6 +428,8 @@ function SimulatorV2() {
   const allowedAreaRef = useRef(allowedArea);
   const obstacleSetRef = useRef(obstacleSet);
   const obstacleSlipbotSetRef = useRef(obstacleSlipbotSet);
+  const parkingAssignmentsRef = useRef(parkingAssignments);
+  const slotInteractionRef = useRef(null);
 
   useEffect(() => {
     slipbotsRef.current = slipbots;
@@ -374,12 +447,16 @@ function SimulatorV2() {
     obstacleSlipbotSetRef.current = obstacleSlipbotSet;
   }, [obstacleSlipbotSet]);
 
+  useEffect(() => {
+    parkingAssignmentsRef.current = parkingAssignments;
+  }, [parkingAssignments]);
+
   const canvasWidth = useMemo(() => GRID_WIDTH * CELL_SIZE, []);
   const canvasHeight = useMemo(() => GRID_HEIGHT * CELL_SIZE, []);
 
   const clearAnimation = useCallback(() => {
     if (animationRef.current) {
-      clearTimeout(animationRef.current);
+      cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
     }
   }, []);
@@ -415,6 +492,17 @@ function SimulatorV2() {
     const y = Math.floor((clientY - rect.top) / CELL_SIZE);
     if (Number.isNaN(x) || Number.isNaN(y)) return null;
     if (x < 0 || y < 0 || x >= GRID_WIDTH || y >= GRID_HEIGHT) return null;
+    return { x, y };
+  }, []);
+
+  const getPointFromEvent = useCallback(event => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = event.clientX ?? 0;
+    const clientY = event.clientY ?? 0;
+    const x = (clientX - rect.left) / CELL_SIZE;
+    const y = (clientY - rect.top) / CELL_SIZE;
     return { x, y };
   }, []);
 
@@ -457,6 +545,21 @@ function SimulatorV2() {
     },
     [allowedArea, draftArea]
   );
+
+  const findParkingSlotAtCell = useCallback(cell => {
+    if (!cell) return null;
+    const assignments = parkingAssignmentsRef.current;
+    if (!assignments) return null;
+    for (const assignment of assignments) {
+      const dims = getOrientationDimensions(assignment.orientation);
+      const withinX = cell.x >= assignment.position.x && cell.x < assignment.position.x + dims.width;
+      const withinY = cell.y >= assignment.position.y && cell.y < assignment.position.y + dims.height;
+      if (withinX && withinY) {
+        return assignment;
+      }
+    }
+    return null;
+  }, []);
 
   const handlePointerDown = useCallback(
     event => {
@@ -565,8 +668,32 @@ function SimulatorV2() {
         return;
       }
 
+      const existingSlot = findParkingSlotAtCell(cell);
+      if (existingSlot) {
+        setSelectedSlotId(existingSlot.id);
+        const dims = getOrientationDimensions(existingSlot.orientation);
+        const pointerPoint = getPointFromEvent(event);
+        const center = {
+          x: existingSlot.position.x + dims.width / 2,
+          y: existingSlot.position.y + dims.height / 2
+        };
+        const centerOffset = pointerPoint
+          ? { x: pointerPoint.x - center.x, y: pointerPoint.y - center.y }
+          : { x: 0, y: 0 };
+        slotInteractionRef.current = {
+          type: "slot",
+          slotId: existingSlot.id,
+          centerOffset,
+          lastAngle: existingSlot.rotation ?? headingFromOrientation(existingSlot.orientation)
+        };
+        setStatus(
+          `Adjusting parking slot ${existingSlot.id.replace("slot-", "")} – drag to reposition or sweep the cursor to rotate.`
+        );
+        return;
+      }
+
       if (parkingAssignments.length >= 3) {
-        setStatus("Parking slots already defined. Clear them to choose new targets.");
+        setStatus("Parking slots already defined. Select one to adjust or clear them to choose new targets.");
         return;
       }
 
@@ -578,14 +705,15 @@ function SimulatorV2() {
         return;
       }
 
-      const targetTopLeft = clampTopLeft(cell, parkingSlotOrientation);
+      const baseOrientation = normalizeOrientation(trailerOrientation);
+      const targetTopLeft = clampTopLeft(cell, baseOrientation);
       if (!targetTopLeft) return;
-      if (!areaContainsFootprint(allowedArea, targetTopLeft.x, targetTopLeft.y, parkingSlotOrientation)) {
+      if (!areaContainsFootprint(allowedArea, targetTopLeft.x, targetTopLeft.y, baseOrientation)) {
         setStatus("Parking targets must be fully inside the workspace.");
         return;
       }
 
-      const candidateKeys = collectFootprintKeys(targetTopLeft.x, targetTopLeft.y, parkingSlotOrientation);
+      const candidateKeys = collectFootprintKeys(targetTopLeft.x, targetTopLeft.y, baseOrientation);
       const candidateKeySet = new Set(candidateKeys);
       const slipbotKeys = new Set();
       slipbotsRef.current.forEach(bot => {
@@ -615,19 +743,33 @@ function SimulatorV2() {
         return;
       }
 
-      const newAssignments = [
-        ...parkingAssignments,
-        {
-          id: `slot-${parkingAssignments.length + 1}`,
-          position: targetTopLeft,
-          orientation: parkingSlotOrientation
-        }
-      ];
-      setParkingAssignments(newAssignments);
+      const slotId = `slot-${parkingAssignments.length + 1}`;
+      const rotation = headingFromOrientation(baseOrientation);
+      const newSlot = {
+        id: slotId,
+        position: targetTopLeft,
+        orientation: baseOrientation,
+        rotation
+      };
+      setParkingAssignments(prev => [...prev, newSlot]);
+      setSelectedSlotId(slotId);
+      const dims = getOrientationDimensions(baseOrientation);
+      const pointerPoint = getPointFromEvent(event);
+      const center = {
+        x: targetTopLeft.x + dims.width / 2,
+        y: targetTopLeft.y + dims.height / 2
+      };
+      const centerOffset = pointerPoint
+        ? { x: pointerPoint.x - center.x, y: pointerPoint.y - center.y }
+        : { x: 0, y: 0 };
+      slotInteractionRef.current = {
+        type: "slot",
+        slotId,
+        centerOffset,
+        lastAngle: rotation
+      };
       setStatus(
-        `Parking slot ${newAssignments.length} positioned at (${targetTopLeft.x}, ${targetTopLeft.y}) facing ${describeOrientation(
-          parkingSlotOrientation
-        )}.`
+        `Parking slot ${parkingAssignments.length + 1} positioned at (${targetTopLeft.x}, ${targetTopLeft.y}). Drag to fine-tune.`
       );
     },
     [
@@ -653,6 +795,65 @@ function SimulatorV2() {
   const handlePointerMove = useCallback(
     event => {
       const cell = getCellFromEvent(event);
+      const interaction = slotInteractionRef.current;
+      if (interaction && interaction.type === "slot") {
+        const pointerPoint = getPointFromEvent(event);
+        if (!pointerPoint) return;
+        const slot = parkingAssignmentsRef.current.find(item => item.id === interaction.slotId);
+        if (!slot) return;
+        const centerCandidate = {
+          x: pointerPoint.x - interaction.centerOffset.x,
+          y: pointerPoint.y - interaction.centerOffset.y
+        };
+        const hasVector =
+          Math.abs(pointerPoint.x - centerCandidate.x) > 0.01 || Math.abs(pointerPoint.y - centerCandidate.y) > 0.01;
+        const angle = hasVector
+          ? (Math.atan2(pointerPoint.y - centerCandidate.y, pointerPoint.x - centerCandidate.x) * 180) / Math.PI
+          : interaction.lastAngle;
+        const rotation = normalizeAngle(angle);
+        const orientation = orientationFromAngle(rotation);
+        const dims = getOrientationDimensions(orientation);
+        const candidateTopLeft = {
+          x: Math.round(centerCandidate.x - dims.width / 2),
+          y: Math.round(centerCandidate.y - dims.height / 2)
+        };
+        const clamped = clampTopLeft(candidateTopLeft, orientation);
+        const candidateKeys = collectFootprintKeys(clamped.x, clamped.y, orientation);
+        const overlapsObstacle = candidateKeys.some(
+          key => obstacleSet.has(key) || obstacleSlipbotSet.has(key)
+        );
+        if (overlapsObstacle) return;
+        const candidateKeySet = new Set(candidateKeys);
+        const overlapsSlot = parkingAssignmentsRef.current.some(other => {
+          if (other.id === interaction.slotId) return false;
+          const otherKeys = collectFootprintKeys(other.position.x, other.position.y, other.orientation);
+          return otherKeys.some(key => candidateKeySet.has(key));
+        });
+        if (overlapsSlot) return;
+        setParkingAssignments(prev =>
+          prev.map(item =>
+            item.id === interaction.slotId
+              ? {
+                  ...item,
+                  position: clamped,
+                  orientation,
+                  rotation
+                }
+              : item
+          )
+        );
+        const center = {
+          x: clamped.x + dims.width / 2,
+          y: clamped.y + dims.height / 2
+        };
+        slotInteractionRef.current = {
+          ...interaction,
+          centerOffset: { x: pointerPoint.x - center.x, y: pointerPoint.y - center.y },
+          lastAngle: rotation
+        };
+        return;
+      }
+
       if (isDefiningArea) {
         if (!cell || !areaAnchorRef.current) return;
         const workspace = computeWorkspaceFromCell(cell);
@@ -674,32 +875,22 @@ function SimulatorV2() {
         return;
       }
 
-      if (!isSequenceActive && parkingAssignments.length < 3) {
-        setHoverCell(
-          cell
-            ? {
-                position: clampTopLeft(cell, parkingSlotOrientation),
-                orientation: parkingSlotOrientation
-              }
-            : null
-        );
-      } else {
-        setHoverCell(null);
-      }
     },
     [
+      clampObstacleSlipbot,
       clampTopLeft,
       clampTrailerOrigin,
-      clampObstacleSlipbot,
       computeWorkspaceFromCell,
       getCellFromEvent,
+      getPointFromEvent,
       isAddingObstacleSlipbot,
       isDefiningArea,
       isPlacingTrailer,
-      isSequenceActive,
+      obstacleSet,
       obstacleSlipbotOrientation,
-      parkingAssignments.length,
-      parkingSlotOrientation,
+      obstacleSlipbotSet,
+      setParkingAssignments,
+      slotInteractionRef,
       trailerOrientation
     ]
   );
@@ -758,12 +949,13 @@ function SimulatorV2() {
     }
     areaAnchorRef.current = null;
     setDraftArea(null);
+    slotInteractionRef.current = null;
   }, [draftArea, finalizeWorkspace, isDefiningArea]);
 
   const handlePointerLeave = useCallback(() => {
-    setHoverCell(null);
     setTrailerPreview(null);
     setObstacleSlipbotPreview(null);
+    slotInteractionRef.current = null;
   }, []);
 
   const handleContextMenu = useCallback(
@@ -968,14 +1160,6 @@ function SimulatorV2() {
     trailerOrigin
   ]);
 
-  const handleRotateParkingOrientation = useCallback(() => {
-    if (isSequenceActive) return;
-    const next = rotateOrientation(parkingSlotOrientation);
-    setParkingSlotOrientation(next);
-    setHoverCell(null);
-    setStatus(`Parking slot template rotated to ${describeOrientation(next)}.`);
-  }, [isSequenceActive, parkingSlotOrientation]);
-
   const handleRotateObstacleOrientation = useCallback(() => {
     if (isSequenceActive) return;
     const next = rotateOrientation(obstacleSlipbotOrientation);
@@ -987,6 +1171,7 @@ function SimulatorV2() {
   const handleClearParking = useCallback(() => {
     if (isSequenceActive) return;
     setParkingAssignments([]);
+    setSelectedSlotId(null);
     setStatus("Parking slots cleared. Click inside the workspace to set new targets.");
   }, [isSequenceActive]);
 
@@ -998,13 +1183,12 @@ function SimulatorV2() {
     setObstacleKeys([]);
     setObstacleSlipbots([]);
     setParkingAssignments([]);
-    setHoverCell(null);
+    setSelectedSlotId(null);
     const resetBots = createInitialSlipbots(DEFAULT_TRAILER_ORIGIN, "north");
     setSlipbots(resetBots);
     slipbotsRef.current = resetBots;
     setTrailerOrigin(DEFAULT_TRAILER_ORIGIN);
     setTrailerOrientation("north");
-    setParkingSlotOrientation("north");
     setObstacleSlipbotOrientation("north");
     setTrailerPreview(null);
     setObstacleSlipbotPreview(null);
@@ -1012,6 +1196,7 @@ function SimulatorV2() {
     setIsAddingObstacleSlipbot(false);
     setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
     setCurrentPath([]);
+    slotInteractionRef.current = null;
     setStatus("Environment reset. Define the workspace, position the trailer, and select three parking slots.");
   }, [clearAnimation]);
 
@@ -1091,13 +1276,16 @@ function SimulatorV2() {
       });
     }
 
-    ctx.fillStyle = "rgba(248, 113, 113, 0.6)";
+    ctx.fillStyle = "rgba(248, 113, 113, 0.82)";
     obstacleKeys.forEach(key => {
       const [ox, oy] = key.split(",").map(Number);
       ctx.fillRect(ox * CELL_SIZE, oy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      ctx.strokeStyle = "rgba(248, 113, 113, 0.95)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(ox * CELL_SIZE, oy * CELL_SIZE, CELL_SIZE, CELL_SIZE);
     });
 
-    obstacleSlipbots.forEach((bot, index) => {
+    obstacleSlipbots.forEach(bot => {
       const dims = getOrientationDimensions(bot.orientation);
       ctx.fillStyle = "rgba(148, 163, 184, 0.28)";
       ctx.fillRect(
@@ -1113,15 +1301,6 @@ function SimulatorV2() {
         bot.position.y * CELL_SIZE,
         dims.width * CELL_SIZE,
         dims.height * CELL_SIZE
-      );
-      ctx.fillStyle = "rgba(226, 232, 240, 0.88)";
-      ctx.font = "13px 'Inter', sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(
-        `Obs ${index + 1}`,
-        bot.position.x * CELL_SIZE + (dims.width * CELL_SIZE) / 2,
-        bot.position.y * CELL_SIZE + (dims.height * CELL_SIZE) / 2
       );
     });
 
@@ -1142,50 +1321,43 @@ function SimulatorV2() {
 
     parkingAssignments.forEach((assignment, index) => {
       const dims = getOrientationDimensions(assignment.orientation);
-      ctx.fillStyle = "rgba(34, 197, 94, 0.22)";
-      ctx.fillRect(
-        assignment.position.x * CELL_SIZE,
-        assignment.position.y * CELL_SIZE,
-        dims.width * CELL_SIZE,
-        dims.height * CELL_SIZE
-      );
-      ctx.strokeStyle = "rgba(34, 197, 94, 0.6)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        assignment.position.x * CELL_SIZE,
-        assignment.position.y * CELL_SIZE,
-        dims.width * CELL_SIZE,
-        dims.height * CELL_SIZE
-      );
+      const isSelected = assignment.id === selectedSlotId;
+      const baseX = assignment.position.x * CELL_SIZE;
+      const baseY = assignment.position.y * CELL_SIZE;
+      ctx.fillStyle = isSelected ? "rgba(34, 197, 94, 0.32)" : "rgba(34, 197, 94, 0.18)";
+      ctx.fillRect(baseX, baseY, dims.width * CELL_SIZE, dims.height * CELL_SIZE);
+      ctx.strokeStyle = isSelected ? "rgba(34, 197, 94, 0.9)" : "rgba(34, 197, 94, 0.55)";
+      ctx.lineWidth = isSelected ? 3 : 2;
+      ctx.strokeRect(baseX, baseY, dims.width * CELL_SIZE, dims.height * CELL_SIZE);
       ctx.fillStyle = "rgba(226, 232, 240, 0.92)";
       ctx.font = "16px 'Inter', sans-serif";
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(
-        `Slot ${index + 1}`,
-        assignment.position.x * CELL_SIZE + 8,
-        assignment.position.y * CELL_SIZE + 6
-      );
-    });
+      ctx.fillText(`Slot ${index + 1}`, baseX + 8, baseY + 6);
 
-    if (hoverCell && parkingAssignments.length < 3 && !isSequenceActive) {
-      const dims = getOrientationDimensions(hoverCell.orientation);
-      ctx.fillStyle = "rgba(250, 204, 21, 0.18)";
-      ctx.fillRect(
-        hoverCell.position.x * CELL_SIZE,
-        hoverCell.position.y * CELL_SIZE,
-        dims.width * CELL_SIZE,
-        dims.height * CELL_SIZE
+      const rotation = normalizeAngle(
+        assignment.rotation ?? headingFromOrientation(assignment.orientation)
       );
-      ctx.strokeStyle = "rgba(250, 204, 21, 0.6)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        hoverCell.position.x * CELL_SIZE,
-        hoverCell.position.y * CELL_SIZE,
-        dims.width * CELL_SIZE,
-        dims.height * CELL_SIZE
-      );
-    }
+      const centerX = baseX + (dims.width * CELL_SIZE) / 2;
+      const centerY = baseY + (dims.height * CELL_SIZE) / 2;
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate((rotation * Math.PI) / 180);
+      ctx.strokeStyle = isSelected ? "rgba(226, 232, 240, 0.9)" : "rgba(226, 232, 240, 0.65)";
+      ctx.lineWidth = isSelected ? 3 : 2;
+      ctx.beginPath();
+      ctx.moveTo(-SLIPBOT_HEIGHT * CELL_SIZE * 0.4, 0);
+      ctx.lineTo(SLIPBOT_HEIGHT * CELL_SIZE * 0.45, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(SLIPBOT_HEIGHT * CELL_SIZE * 0.45, 0);
+      ctx.lineTo(SLIPBOT_HEIGHT * CELL_SIZE * 0.33, -SLIPBOT_WIDTH * CELL_SIZE * 0.25);
+      ctx.lineTo(SLIPBOT_HEIGHT * CELL_SIZE * 0.33, SLIPBOT_WIDTH * CELL_SIZE * 0.25);
+      ctx.closePath();
+      ctx.fillStyle = isSelected ? "rgba(226, 232, 240, 0.95)" : "rgba(226, 232, 240, 0.72)";
+      ctx.fill();
+      ctx.restore();
+    });
 
     if (currentPath.length > 1) {
       const activeBot = slipbotsRef.current.find(bot => bot.id === sequenceState.activeBotId);
@@ -1207,31 +1379,29 @@ function SimulatorV2() {
     }
 
     slipbots.forEach(bot => {
-      const dims = getOrientationDimensions(bot.orientation);
-      ctx.fillStyle = `${bot.color}cc`;
-      ctx.fillRect(
-        bot.position.x * CELL_SIZE,
-        bot.position.y * CELL_SIZE,
-        dims.width * CELL_SIZE,
-        dims.height * CELL_SIZE
-      );
+      const orientation = normalizeOrientation(bot.orientation);
+      const dims = getOrientationDimensions(orientation);
+      const centerX = (bot.position.x + dims.width / 2) * CELL_SIZE;
+      const centerY = (bot.position.y + dims.height / 2) * CELL_SIZE;
+      const heading = normalizeAngle(bot.heading ?? headingFromOrientation(orientation));
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate((heading * Math.PI) / 180);
+      ctx.fillStyle = `${bot.color}dd`;
       ctx.strokeStyle = bot.color;
       ctx.lineWidth = 3;
-      ctx.strokeRect(
-        bot.position.x * CELL_SIZE,
-        bot.position.y * CELL_SIZE,
-        dims.width * CELL_SIZE,
-        dims.height * CELL_SIZE
-      );
+      const bodyLength = SLIPBOT_HEIGHT * CELL_SIZE;
+      const bodyWidth = SLIPBOT_WIDTH * CELL_SIZE;
+      ctx.beginPath();
+      ctx.rect(-bodyLength / 2, -bodyWidth / 2, bodyLength, bodyWidth);
+      ctx.fill();
+      ctx.stroke();
       ctx.fillStyle = "#0f172a";
       ctx.font = "15px 'Inter', sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(
-        bot.name.replace("SlipBot ", ""),
-        bot.position.x * CELL_SIZE + (dims.width * CELL_SIZE) / 2,
-        bot.position.y * CELL_SIZE + (dims.height * CELL_SIZE) / 2
-      );
+      ctx.fillText(bot.name.replace("SlipBot ", ""), 0, 0);
+      ctx.restore();
     });
   }, [
     allowedArea,
@@ -1239,13 +1409,13 @@ function SimulatorV2() {
     canvasWidth,
     currentPath,
     draftArea,
-    hoverCell,
     isSequenceActive,
     obstacleKeys,
     obstacleSlipbotOrientation,
     obstacleSlipbotPreview,
     obstacleSlipbots,
     parkingAssignments,
+    selectedSlotId,
     sequenceState.activeBotId,
     slipbots,
     trailerOrigin,
@@ -1271,9 +1441,14 @@ function SimulatorV2() {
       let distanceToOpening = 0;
       if (trailerKey === "north") {
         distanceToOpening = bot.position.y - trailerOrigin.y;
+      } else if (trailerKey === "south") {
+        const trailerBottom = trailerOrigin.y + trailerDims.height;
+        distanceToOpening = trailerBottom - (bot.position.y + dims.height);
       } else if (trailerKey === "east") {
         const frontTopLeftX = trailerOrigin.x + trailerDims.width - dims.width;
         distanceToOpening = frontTopLeftX - bot.position.x;
+      } else if (trailerKey === "west") {
+        distanceToOpening = bot.position.x - trailerOrigin.x;
       }
 
       const totalSteps = distanceToOpening + exitConfig.steps;
@@ -1314,31 +1489,121 @@ function SimulatorV2() {
         onComplete();
         return;
       }
-      let index = 1;
-      const step = () => {
-        const nextPoint = path[index];
+
+      const bot = slipbotsRef.current.find(item => item.id === botId);
+      const startingOrientation = normalizeOrientation(
+        path[0]?.orientation ?? bot?.orientation ?? "north"
+      );
+      let lastHeading = bot?.heading ?? headingFromOrientation(startingOrientation);
+      let lastPoint = { x: path[0].x, y: path[0].y };
+      let lastOrientation = startingOrientation;
+
+      const segments = [];
+      for (let i = 1; i < path.length; i += 1) {
+        const node = path[i];
+        const nextOrientation = normalizeOrientation(node.orientation ?? lastOrientation);
+        const nextHeading = headingFromOrientation(nextOrientation);
+        const dx = node.x - lastPoint.x;
+        const dy = node.y - lastPoint.y;
+        const distance = Math.hypot(dx, dy);
+        const moveDuration = distance / SLIPBOT_SPEED_FTPS;
+        const rotationDelta = Math.abs(shortestAngleDelta(lastHeading, nextHeading));
+        const rotationDuration = rotationDelta / SLIPBOT_ROTATION_SPEED_DEG;
+        const duration = Math.max(moveDuration, rotationDuration, rotationDelta > 0 ? 0.18 : 0.1);
+        segments.push({
+          start: { x: lastPoint.x, y: lastPoint.y },
+          end: { x: node.x, y: node.y },
+          startHeading: lastHeading,
+          endHeading: nextHeading,
+          startOrientation: lastOrientation,
+          endOrientation: nextOrientation,
+          duration,
+          move: distance > 0.001
+        });
+        lastPoint = { x: node.x, y: node.y };
+        lastHeading = nextHeading;
+        lastOrientation = nextOrientation;
+      }
+
+      if (segments.length === 0) {
+        onComplete();
+        return;
+      }
+
+      let segmentIndex = 0;
+      let segmentStart = performance.now();
+      let currentPosition = { x: path[0].x, y: path[0].y };
+      let currentHeading =
+        slipbotsRef.current.find(item => item.id === botId)?.heading ?? headingFromOrientation(startingOrientation);
+      let currentOrientation = startingOrientation;
+
+      const updateBotState = (position, heading, orientation) => {
         setSlipbots(prev =>
-          prev.map(bot => {
-            if (bot.id !== botId) return bot;
-            const updated = {
-              ...bot,
-              position: { x: nextPoint.x, y: nextPoint.y }
-            };
-            if (nextPoint.orientation) {
-              updated.orientation = normalizeOrientation(nextPoint.orientation);
-            }
-            return updated;
-          })
+          prev.map(item =>
+            item.id === botId
+              ? {
+                  ...item,
+                  position,
+                  heading,
+                  orientation
+                }
+              : item
+          )
         );
-        index += 1;
-        if (index < path.length) {
-          animationRef.current = setTimeout(step, ANIMATION_DELAY_MS);
-        } else {
-          animationRef.current = null;
-          onComplete();
-        }
       };
-      animationRef.current = setTimeout(step, ANIMATION_DELAY_MS);
+
+      updateBotState(currentPosition, currentHeading, currentOrientation);
+
+      const tick = now => {
+        const segment = segments[segmentIndex];
+        if (!segment) {
+          animationRef.current = null;
+          updateBotState(currentPosition, currentHeading);
+          onComplete();
+          return;
+        }
+
+        const elapsed = (now - segmentStart) / 1000;
+        const duration = Math.max(segment.duration, 0.001);
+        const t = Math.min(elapsed / duration, 1);
+        const position = segment.move
+          ? {
+              x: segment.start.x + (segment.end.x - segment.start.x) * t,
+              y: segment.start.y + (segment.end.y - segment.start.y) * t
+            }
+          : { x: segment.start.x, y: segment.start.y };
+        const heading = interpolateAngles(segment.startHeading, segment.endHeading, t);
+        const orientation =
+          segment.startOrientation === segment.endOrientation
+            ? segment.startOrientation
+            : t < 0.5
+            ? segment.startOrientation
+            : segment.endOrientation;
+
+        updateBotState(position, heading, orientation);
+        currentPosition = position;
+        currentHeading = heading;
+        currentOrientation = orientation;
+
+        if (t >= 1) {
+          segmentIndex += 1;
+          segmentStart = now;
+          if (segmentIndex >= segments.length) {
+            updateBotState(
+              { x: segment.end.x, y: segment.end.y },
+              segment.endHeading,
+              segment.endOrientation
+            );
+            animationRef.current = null;
+            onComplete();
+            return;
+          }
+        }
+
+        animationRef.current = requestAnimationFrame(tick);
+      };
+
+      animationRef.current = requestAnimationFrame(tick);
     },
     [clearAnimation]
   );
@@ -1421,6 +1686,7 @@ function SimulatorV2() {
                   ...item,
                   position: entry.target.position,
                   orientation: entry.target.orientation,
+                  heading: headingFromOrientation(entry.target.orientation),
                   status: "parked"
                 }
               : item
@@ -1507,77 +1773,80 @@ function SimulatorV2() {
   );
 
   return (
-    <div className="simulator-wrapper">
-      <div className="simulator-header">
-        <h1>SlipBot Simulator V2</h1>
-        <p>
-          Configure a workspace, sprinkle in obstacles, and watch three SlipBots exit the trailer one at a time to their
-          assigned parking slots. Each SlipBot is 17&nbsp;ft × 8&nbsp;ft and must avoid obstacles, walls, and the other
-          robots.
-        </p>
-      </div>
-      <div className="simulator-layout">
-        <div className="canvas-container">
-          <div className="canvas-toolbar">
-            <div className="toolbar-row">
-              <div className="toggle-group">
-                <span className="toggle-text">Workspace edit</span>
-                <button
-                  type="button"
-                  className={`toggle-switch ${isDefiningArea ? "active" : ""}`}
-                  onClick={toggleWorkspaceMode}
-                  aria-pressed={isDefiningArea}
-                >
-                  <span className="toggle-thumb" />
-                </button>
-                <span className="toggle-state">{isDefiningArea ? "Drag" : "Locked"}</span>
-              </div>
-              <span className="grid-note">Left click: parking slot • Right click: 1&nbsp;ft obstacle</span>
+    <div className="simulator-app">
+      <header className="simulator-top-bar">
+        <div className="top-bar-info">
+          <h1>SlipBot Simulator</h1>
+          <p>Plan a precise trailer exit inside a 200&nbsp;ft × 100&nbsp;ft yard.</p>
+        </div>
+        <div className="top-bar-actions">
+          <button
+            className="simulator-button secondary"
+            onClick={handleClearParking}
+            disabled={parkingAssignments.length === 0 || isSequenceActive}
+          >
+            Clear slots
+          </button>
+          <button className="simulator-button secondary" onClick={handleResetEnvironment}>
+            Reset
+          </button>
+          <Link className="simulator-button secondary" to="/">
+            Home
+          </Link>
+        </div>
+      </header>
+      <div className="simulator-body">
+        <section className="workspace-area">
+          <div className="workspace-controls">
+            <div className="toggle-group">
+              <span className="toggle-text">Workspace edit</span>
+              <button
+                type="button"
+                className={`toggle-switch ${isDefiningArea ? "active" : ""}`}
+                onClick={toggleWorkspaceMode}
+                aria-pressed={isDefiningArea}
+              >
+                <span className="toggle-thumb" />
+              </button>
+              <span className="toggle-state">{isDefiningArea ? "Drag" : "Locked"}</span>
             </div>
-            <div className="toolbar-actions">
-              <button
-                type="button"
-                className={`simulator-button secondary ${isPlacingTrailer ? "active" : ""}`}
-                onClick={toggleTrailerPlacement}
-                aria-pressed={isPlacingTrailer}
-                disabled={isSequenceActive}
-              >
-                Place trailer
-              </button>
-              <button
-                type="button"
-                className="simulator-button secondary"
-                onClick={handleRotateTrailer}
-                disabled={isSequenceActive}
-              >
-                Rotate trailer ({describeOrientation(trailerOrientation)})
-              </button>
-              <button
-                type="button"
-                className={`simulator-button secondary ${isAddingObstacleSlipbot ? "active" : ""}`}
-                onClick={toggleObstacleSlipbotMode}
-                aria-pressed={isAddingObstacleSlipbot}
-                disabled={isSequenceActive}
-              >
-                Add SlipBot
-              </button>
-              <button
-                type="button"
-                className="simulator-button secondary"
-                onClick={handleRotateObstacleOrientation}
-                disabled={isSequenceActive}
-              >
-                Rotate SlipBot ({describeOrientation(obstacleSlipbotOrientation)})
-              </button>
-              <button
-                type="button"
-                className="simulator-button secondary"
-                onClick={handleRotateParkingOrientation}
-                disabled={isSequenceActive}
-              >
-                Rotate slot ({describeOrientation(parkingSlotOrientation)})
-              </button>
-            </div>
+            <span className="control-hint">Left click: parking slot • Right click: 1&nbsp;ft obstacle</span>
+          </div>
+          <div className="control-buttons">
+            <button
+              type="button"
+              className={`simulator-button secondary ${isPlacingTrailer ? "active" : ""}`}
+              onClick={toggleTrailerPlacement}
+              aria-pressed={isPlacingTrailer}
+              disabled={isSequenceActive}
+            >
+              Place trailer
+            </button>
+            <button
+              type="button"
+              className="simulator-button secondary"
+              onClick={handleRotateTrailer}
+              disabled={isSequenceActive}
+            >
+              Rotate trailer ({describeOrientation(trailerOrientation)})
+            </button>
+            <button
+              type="button"
+              className={`simulator-button secondary ${isAddingObstacleSlipbot ? "active" : ""}`}
+              onClick={toggleObstacleSlipbotMode}
+              aria-pressed={isAddingObstacleSlipbot}
+              disabled={isSequenceActive}
+            >
+              Add SlipBot
+            </button>
+            <button
+              type="button"
+              className="simulator-button secondary"
+              onClick={handleRotateObstacleOrientation}
+              disabled={isSequenceActive}
+            >
+              Rotate SlipBot ({describeOrientation(obstacleSlipbotOrientation)})
+            </button>
           </div>
           <canvas
             ref={canvasRef}
@@ -1591,26 +1860,13 @@ function SimulatorV2() {
             onPointerCancel={handlePointerLeave}
             onContextMenu={handleContextMenu}
           />
-          <div className="canvas-footer">
-            <button className="simulator-button" onClick={handleResetEnvironment}>
-              Reset environment
-            </button>
-            <button
-              className="simulator-button secondary"
-              onClick={handleClearParking}
-              disabled={parkingAssignments.length === 0 || isSequenceActive}
-            >
-              Clear parking slots
-            </button>
-            <Link className="simulator-button secondary" to="/">
-              Back to home
-            </Link>
+        </section>
+        <aside className="control-panel">
+          <div className="status-card">
+            <h2>Status</h2>
+            <p className="status-text">{status}</p>
           </div>
-        </div>
-        <aside className="simulator-sidebar">
-          <h2>Planner status</h2>
-          <p className="status-text">{status}</p>
-          <div className="info-grid">
+          <div className="metrics-grid">
             <div>
               <span className="label">Workspace origin</span>
               <span className="value">
@@ -1646,15 +1902,11 @@ function SimulatorV2() {
               <span className="value">{parkingAssignments.length} / 3</span>
             </div>
             <div>
-              <span className="label">Slot template</span>
-              <span className="value">{describeOrientation(parkingSlotOrientation)}</span>
-            </div>
-            <div>
               <span className="label">SlipBot obstacle</span>
               <span className="value">{describeOrientation(obstacleSlipbotOrientation)}</span>
             </div>
           </div>
-          <div className="slipbot-panel">
+          <div className="queue-card">
             <h3>SlipBot queue</h3>
             <ul className="slipbot-list">
               {slipbotSummary.map(bot => (
@@ -1664,24 +1916,12 @@ function SimulatorV2() {
                     <div className="slipbot-name">{bot.name}</div>
                     <div className="slipbot-status">{bot.statusText}</div>
                     <div className="slipbot-position">
-                      ({bot.position.x}, {bot.position.y})
+                      ({bot.position.x.toFixed(1)}, {bot.position.y.toFixed(1)})
                     </div>
-                    <div className="slipbot-orientation">Facing {describeOrientation(bot.orientation)}</div>
+                    <div className="slipbot-orientation">Heading {describeOrientation(bot.orientation)}</div>
                   </div>
                 </li>
               ))}
-            </ul>
-          </div>
-          <div className="hint-panel">
-            <h3>How to use</h3>
-            <ul>
-              <li>Toggle workspace edit to drag out the allowed operating area. Dimensions are shown as you size it.</li>
-              <li>Use <strong>Place trailer</strong> to reposition the staged SlipBots. Click once inside the workspace to park the trailer nose to tail.</li>
-              <li>Use <strong>Add SlipBot</strong> to drop stationary SlipBot obstacles for path-planning experiments.</li>
-              <li>Use the rotate controls to align the trailer, parking slot template, and obstacle SlipBots with your layout.</li>
-              <li>Right-click within the workspace to drop 1&nbsp;ft obstacles that SlipBots must avoid.</li>
-              <li>Left-click inside the workspace to define three parking slots sized for a 17&nbsp;ft × 8&nbsp;ft SlipBot.</li>
-              <li>Once slots are ready, launch the exit sequence. SlipBots leave the trailer closest-first and avoid one another.</li>
             </ul>
           </div>
           <button
