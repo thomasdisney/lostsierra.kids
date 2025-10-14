@@ -127,6 +127,13 @@
   background: rgba(148, 163, 184, 0.28);
 }
 
+.panel-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .summary-list {
   list-style: none;
   margin: 0;

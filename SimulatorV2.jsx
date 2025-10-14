@@ -159,6 +159,294 @@ function drawRoundedRectPath(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
+const RIGHT_ANGLE_ORIENTATIONS = [0, 90, 180, 270];
+const ROUTE_GRID_SCALE = 2; // represents half-cell precision
+
+function alignToRightAngle(angle) {
+  const normalized = normalizeAngle(angle);
+  let best = RIGHT_ANGLE_ORIENTATIONS[0];
+  let smallest = Infinity;
+  RIGHT_ANGLE_ORIENTATIONS.forEach(candidate => {
+    const diff = Math.abs(smallestAngleDelta(normalized, candidate));
+    if (diff < smallest) {
+      smallest = diff;
+      best = candidate;
+    }
+  });
+  return best;
+}
+
+function orientationIndexFromAngle(angle) {
+  const normalized = alignToRightAngle(angle);
+  return RIGHT_ANGLE_ORIENTATIONS.indexOf(normalized);
+}
+
+function angleFromOrientationIndex(index) {
+  return RIGHT_ANGLE_ORIENTATIONS[((index % RIGHT_ANGLE_ORIENTATIONS.length) + RIGHT_ANGLE_ORIENTATIONS.length) % RIGHT_ANGLE_ORIENTATIONS.length];
+}
+
+function encodeRouteKey(x, y, orientationIndex) {
+  return `${x},${y},${orientationIndex}`;
+}
+
+function isPlacementCollisionFree(candidate, obstacles) {
+  const clamped = clampCenterToBounds(candidate.center, candidate.width, candidate.height, candidate.rotation);
+  if (clamped.x !== candidate.center.x || clamped.y !== candidate.center.y) {
+    return false;
+  }
+  for (const obstacle of obstacles) {
+    if (rectanglesOverlap(candidate, obstacle)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function planRoute(start, goal, width, height, obstacles) {
+  const startX = Math.round(start.center.x * ROUTE_GRID_SCALE);
+  const startY = Math.round(start.center.y * ROUTE_GRID_SCALE);
+  const goalX = Math.round(goal.center.x * ROUTE_GRID_SCALE);
+  const goalY = Math.round(goal.center.y * ROUTE_GRID_SCALE);
+  const startOrientation = orientationIndexFromAngle(start.rotation);
+  const goalOrientation = orientationIndexFromAngle(goal.rotation);
+
+  const startState = { x: startX, y: startY, orientationIndex: startOrientation };
+  const goalKey = encodeRouteKey(goalX, goalY, goalOrientation);
+
+  const open = [];
+  const gScores = new Map();
+  const cameFrom = new Map();
+  const visited = new Set();
+
+  function heuristic(x, y, orientationIndex) {
+    const distance = Math.abs(x - goalX) + Math.abs(y - goalY);
+    const orientationDelta = Math.abs(orientationIndex - goalOrientation);
+    const rotationCost = Math.min(orientationDelta, RIGHT_ANGLE_ORIENTATIONS.length - orientationDelta);
+    return distance + rotationCost * 2;
+  }
+
+  function pushNode(node) {
+    const index = open.findIndex(item => item.fScore > node.fScore);
+    if (index === -1) {
+      open.push(node);
+    } else {
+      open.splice(index, 0, node);
+    }
+  }
+
+  const startKey = encodeRouteKey(startState.x, startState.y, startState.orientationIndex);
+  gScores.set(startKey, 0);
+  pushNode({ ...startState, fScore: heuristic(startState.x, startState.y, startState.orientationIndex) });
+
+  const directionVectors = [
+    { dx: ROUTE_GRID_SCALE, dy: 0 },
+    { dx: 0, dy: ROUTE_GRID_SCALE },
+    { dx: -ROUTE_GRID_SCALE, dy: 0 },
+    { dx: 0, dy: -ROUTE_GRID_SCALE }
+  ];
+
+  while (open.length > 0) {
+    const current = open.shift();
+    const currentKey = encodeRouteKey(current.x, current.y, current.orientationIndex);
+    if (visited.has(currentKey)) {
+      continue;
+    }
+    visited.add(currentKey);
+
+    if (currentKey === goalKey) {
+      const path = [];
+      let nodeKey = currentKey;
+      let node = current;
+      while (node) {
+        path.push(node);
+        const previousKey = cameFrom.get(nodeKey);
+        if (!previousKey) break;
+        node = previousKey.node;
+        nodeKey = previousKey.key;
+      }
+      return path.reverse();
+    }
+
+    const baseScore = gScores.get(currentKey) ?? Infinity;
+
+    // rotate left/right
+    for (const delta of [-1, 1]) {
+      const nextOrientation = (current.orientationIndex + delta + RIGHT_ANGLE_ORIENTATIONS.length) % RIGHT_ANGLE_ORIENTATIONS.length;
+      const nextKey = encodeRouteKey(current.x, current.y, nextOrientation);
+      const nextScore = baseScore + 2;
+      if (nextScore >= (gScores.get(nextKey) ?? Infinity)) continue;
+      const candidate = {
+        center: { x: current.x / ROUTE_GRID_SCALE, y: current.y / ROUTE_GRID_SCALE },
+        width,
+        height,
+        rotation: angleFromOrientationIndex(nextOrientation)
+      };
+      if (!isPlacementCollisionFree(candidate, obstacles)) continue;
+      cameFrom.set(nextKey, { key: currentKey, node: current });
+      gScores.set(nextKey, nextScore);
+      pushNode({ x: current.x, y: current.y, orientationIndex: nextOrientation, fScore: nextScore + heuristic(current.x, current.y, nextOrientation) });
+    }
+
+    // move forward/backward
+    const direction = directionVectors[current.orientationIndex];
+    for (const directionMultiplier of [1, -1]) {
+      const nextX = current.x + direction.dx * directionMultiplier;
+      const nextY = current.y + direction.dy * directionMultiplier;
+      const nextKey = encodeRouteKey(nextX, nextY, current.orientationIndex);
+      const nextScore = baseScore + 1;
+      if (nextScore >= (gScores.get(nextKey) ?? Infinity)) continue;
+      const candidate = {
+        center: { x: nextX / ROUTE_GRID_SCALE, y: nextY / ROUTE_GRID_SCALE },
+        width,
+        height,
+        rotation: angleFromOrientationIndex(current.orientationIndex)
+      };
+      if (!isPlacementCollisionFree(candidate, obstacles)) continue;
+      cameFrom.set(nextKey, { key: currentKey, node: current });
+      gScores.set(nextKey, nextScore);
+      pushNode({ x: nextX, y: nextY, orientationIndex: current.orientationIndex, fScore: nextScore + heuristic(nextX, nextY, current.orientationIndex) });
+    }
+  }
+
+  return null;
+}
+
+function buildFramesFromPath(path, startRotation, goalRotation) {
+  if (!path || path.length === 0) return [];
+  const frames = [];
+  const normalizedStart = normalizeAngle(startRotation);
+  const initialState = path[0];
+  const initialAngle = angleFromOrientationIndex(initialState.orientationIndex);
+  const initialCenter = {
+    x: initialState.x / ROUTE_GRID_SCALE,
+    y: initialState.y / ROUTE_GRID_SCALE
+  };
+  if (Math.abs(smallestAngleDelta(initialAngle, normalizedStart)) > 1) {
+    frames.push({ center: initialCenter, rotation: initialAngle });
+  }
+  for (let i = 1; i < path.length; i += 1) {
+    const state = path[i];
+    frames.push({
+      center: { x: state.x / ROUTE_GRID_SCALE, y: state.y / ROUTE_GRID_SCALE },
+      rotation: angleFromOrientationIndex(state.orientationIndex)
+    });
+  }
+  const goalState = path[path.length - 1];
+  const lastFrameRotation = frames.length
+    ? frames[frames.length - 1].rotation
+    : angleFromOrientationIndex(goalState.orientationIndex);
+  const desiredGoalRotation = normalizeAngle(goalRotation);
+  if (Math.abs(smallestAngleDelta(desiredGoalRotation, lastFrameRotation)) > 1) {
+    frames.push({
+      center: { x: goalState.x / ROUTE_GRID_SCALE, y: goalState.y / ROUTE_GRID_SCALE },
+      rotation: desiredGoalRotation
+    });
+  }
+  return frames.reduce((acc, frame) => {
+    const previous = acc[acc.length - 1];
+    if (
+      previous &&
+      Math.abs(previous.center.x - frame.center.x) < 1e-3 &&
+      Math.abs(previous.center.y - frame.center.y) < 1e-3 &&
+      Math.abs(smallestAngleDelta(previous.rotation, frame.rotation)) < 0.5
+    ) {
+      return acc;
+    }
+    acc.push(frame);
+    return acc;
+  }, []);
+}
+
+function buildPlanningObstacles(slipbots, parkingSlots, movingBotId, allowedParkingId) {
+  const obstacles = [];
+  slipbots.forEach(bot => {
+    if (bot.id === movingBotId) return;
+    obstacles.push({
+      center: { ...bot.center },
+      width: bot.width,
+      height: bot.height,
+      rotation: bot.rotation
+    });
+  });
+  parkingSlots.forEach(slot => {
+    if (slot.id === allowedParkingId) return;
+    obstacles.push({
+      center: { ...slot.center },
+      width: slot.width,
+      height: slot.height,
+      rotation: slot.rotation
+    });
+  });
+  return obstacles;
+}
+
+function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
+  const obstacles = buildPlanningObstacles(
+    slipbots,
+    parkingSlots,
+    bot.id,
+    options.allowedParkingId ?? null
+  );
+  if (options.includeTrailer && options.trailer) {
+    obstacles.push({
+      center: { ...options.trailer.center },
+      width: options.trailer.width,
+      height: options.trailer.height,
+      rotation: options.trailer.rotation
+    });
+  }
+  const route = planRoute(
+    { center: bot.center, rotation: bot.rotation },
+    { center: goal.center, rotation: goal.rotation },
+    bot.width,
+    bot.height,
+    obstacles
+  );
+  if (!route) return null;
+  const frames = buildFramesFromPath(route, bot.rotation, goal.rotation);
+  const points = route.map(state => ({
+    x: state.x / ROUTE_GRID_SCALE,
+    y: state.y / ROUTE_GRID_SCALE
+  }));
+  return { frames, points };
+}
+
+function extractSlipbotLabel(bot) {
+  const match = bot.name?.match(/([A-Z])$/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function buildParkingSlotLookup(parkingSlots) {
+  const lookup = {};
+  parkingSlots.forEach((slot, index) => {
+    const derivedLabel = slot.label
+      ? slot.label.toUpperCase()
+      : String.fromCharCode(65 + (index % 26));
+    if (!lookup[derivedLabel]) {
+      lookup[derivedLabel] = slot;
+    }
+  });
+  return lookup;
+}
+
+function computeTrailerSlots(trailer) {
+  const radians = degToRad(trailer.rotation);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return Array.from({ length: 3 }, (_, index) => {
+    const offset = -trailer.height / 2 + 8 + index * SLIPBOT_LENGTH + SLIPBOT_LENGTH / 2;
+    const local = { x: 0, y: offset };
+    return {
+      label: String.fromCharCode(65 + index),
+      center: {
+        x: trailer.center.x + local.x * cos - local.y * sin,
+        y: trailer.center.y + local.x * sin + local.y * cos
+      },
+      rotation: trailer.rotation
+    };
+  });
+}
+
 function buildInitialTrailer() {
   return {
     id: "trailer",
@@ -197,21 +485,24 @@ function createSlipbot(id, color, center) {
   };
 }
 
-function createParkingSlot(id, center) {
+function createParkingSlot(id, center, label) {
   return {
     id,
     center,
     rotation: 0,
     width: SLIPBOT_WIDTH,
-    height: SLIPBOT_LENGTH
+    height: SLIPBOT_LENGTH,
+    label
   };
 }
 
 function getPointerPosition(event, canvas) {
   const rect = canvas?.getBoundingClientRect();
   if (!rect) return null;
-  const px = event.clientX - rect.left;
-  const py = event.clientY - rect.top;
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const px = (event.clientX - rect.left) * scaleX;
+  const py = (event.clientY - rect.top) * scaleY;
   return {
     px,
     py,
@@ -230,9 +521,22 @@ function SimulatorV2() {
   const [slipbots, setSlipbots] = useState(() => buildInitialSlipbots(initialTrailerRef.current));
   const [parkingSlots, setParkingSlots] = useState([]);
   const [selectedEntity, setSelectedEntity] = useState(null);
+  const [plannedRoutes, setPlannedRoutes] = useState({});
+  const [isAnimatingState, setIsAnimatingState] = useState(false);
 
   const slipbotCounterRef = useRef(slipbots.length);
   const parkingCounterRef = useRef(0);
+  const animationHandlesRef = useRef([]);
+  const isAnimatingRef = useRef(false);
+
+  const clearAnimations = useCallback(() => {
+    animationHandlesRef.current.forEach(handle => {
+      window.clearTimeout(handle);
+    });
+    animationHandlesRef.current = [];
+    isAnimatingRef.current = false;
+    setIsAnimatingState(false);
+  }, []);
 
   const canvasDimensions = useMemo(
     () => ({ width: GRID_WIDTH * CELL_SIZE, height: GRID_HEIGHT * CELL_SIZE }),
@@ -308,6 +612,13 @@ function SimulatorV2() {
       ctx.strokeStyle = "rgba(94, 234, 212, 0.7)";
       ctx.setLineDash([10, 6]);
       ctx.stroke();
+      if (slot.label) {
+        ctx.fillStyle = "rgba(226, 232, 240, 0.9)";
+        ctx.font = `bold ${Math.max(12, CELL_SIZE * 2.4)}px 'Inter', 'Segoe UI', sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(slot.label, 0, 0);
+      }
       ctx.restore();
       ctx.setLineDash([]);
     });
@@ -346,11 +657,39 @@ function SimulatorV2() {
       ctx.stroke();
       ctx.restore();
     });
-  }, [parkingSlots, selectedEntity, slipbots, trailer]);
+
+    Object.entries(plannedRoutes).forEach(([botId, route]) => {
+      if (!route?.points?.length) return;
+      const bot = slipbots.find(item => item.id === botId);
+      ctx.save();
+      ctx.strokeStyle = bot?.color ? `${bot.color}AA` : "rgba(248, 250, 252, 0.55)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      route.points.forEach((point, index) => {
+        const px = point.x * CELL_SIZE;
+        const py = point.y * CELL_SIZE;
+        if (index === 0) {
+          ctx.moveTo(px, py);
+        } else {
+          ctx.lineTo(px, py);
+        }
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    });
+  }, [parkingSlots, plannedRoutes, selectedEntity, slipbots, trailer]);
 
   useEffect(() => {
     drawScene();
   }, [drawScene]);
+
+  useEffect(() => {
+    return () => {
+      clearAnimations();
+    };
+  }, [clearAnimations]);
 
   const hitTest = useCallback(
     pointer => {
@@ -635,26 +974,216 @@ function SimulatorV2() {
   const handleAddParkingSlot = useCallback(() => {
     parkingCounterRef.current += 1;
     const id = `slot-${parkingCounterRef.current}`;
+    const labelIndex = (parkingCounterRef.current - 1) % 26;
+    const label = String.fromCharCode(65 + labelIndex);
     const offset = {
       x: trailer.center.x + trailer.width + 12,
       y: trailer.center.y - trailer.height / 2 - SLIPBOT_LENGTH
     };
     const center = clampCenterToBounds(offset, SLIPBOT_WIDTH, SLIPBOT_LENGTH, 0);
-    const slot = createParkingSlot(id, center);
+    const slot = createParkingSlot(id, center, label);
     setParkingSlots(prev => [...prev, slot]);
     setSelectedEntity({ type: "parking", id });
   }, [trailer.center.x, trailer.center.y, trailer.height, trailer.width]);
+
+  const handleExitToParking = useCallback(() => {
+    if (!parkingSlots.length) {
+      setPlannedRoutes({});
+      return;
+    }
+    const slotLookup = buildParkingSlotLookup(parkingSlots);
+    const trailerBots = slipbots
+      .filter(bot => pointInRectangle(trailer, bot.center))
+      .map(bot => ({ bot, label: extractSlipbotLabel(bot) }))
+      .filter(item => item.label && slotLookup[item.label]);
+    if (!trailerBots.length) {
+      setPlannedRoutes({});
+      return;
+    }
+    trailerBots.sort((a, b) => a.label.localeCompare(b.label));
+
+    let simulatedSlipbots = slipbots.map(item => ({ ...item }));
+    const plans = [];
+    const targets = {};
+
+    trailerBots.forEach(({ bot, label }) => {
+      const slot = slotLookup[label];
+      if (!slot) return;
+      const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
+      const movement = planSlipbotMovement(
+        simulatedBot,
+        { center: { ...slot.center }, rotation: slot.rotation },
+        simulatedSlipbots,
+        parkingSlots,
+        { allowedParkingId: slot.id }
+      );
+      if (!movement) return;
+      plans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
+      targets[bot.id] = { center: { ...slot.center }, rotation: slot.rotation };
+      simulatedSlipbots = simulatedSlipbots.map(item =>
+        item.id === bot.id
+          ? { ...item, center: { ...slot.center }, rotation: slot.rotation }
+          : item
+      );
+    });
+
+    if (!plans.length) {
+      setPlannedRoutes({});
+      return;
+    }
+
+    const routes = plans.reduce((acc, plan) => {
+      const bot = slipbots.find(item => item.id === plan.botId);
+      acc[plan.botId] = { points: plan.points, color: bot?.color ?? null };
+      return acc;
+    }, {});
+    setPlannedRoutes(routes);
+
+    animatePlans(plans, () => {
+      setSlipbots(prev =>
+        prev.map(bot => {
+          const target = targets[bot.id];
+          return target ? { ...bot, center: target.center, rotation: target.rotation } : bot;
+        })
+      );
+    });
+  }, [animatePlans, parkingSlots, slipbots, trailer]);
+
+  const handleEnterTrailer = useCallback(() => {
+    const trailerSlots = computeTrailerSlots(trailer);
+    const slotLookup = trailerSlots.reduce((acc, slot) => {
+      acc[slot.label] = slot;
+      return acc;
+    }, {});
+
+    const stagedBots = slipbots
+      .filter(bot => !pointInRectangle(trailer, bot.center))
+      .map(bot => ({ bot, label: extractSlipbotLabel(bot) }))
+      .filter(item => item.label && slotLookup[item.label])
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .slice(0, trailerSlots.length);
+
+    if (!stagedBots.length) {
+      setPlannedRoutes({});
+      return;
+    }
+
+    let simulatedSlipbots = slipbots.map(item => ({ ...item }));
+    const plans = [];
+    const targets = {};
+
+    stagedBots.forEach(({ bot, label }) => {
+      const slot = slotLookup[label];
+      if (!slot) return;
+      const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
+      const movement = planSlipbotMovement(
+        simulatedBot,
+        { center: { ...slot.center }, rotation: slot.rotation },
+        simulatedSlipbots,
+        parkingSlots,
+        { allowedParkingId: null }
+      );
+      if (!movement) return;
+      plans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
+      targets[bot.id] = { center: { ...slot.center }, rotation: slot.rotation };
+      simulatedSlipbots = simulatedSlipbots.map(item =>
+        item.id === bot.id
+          ? { ...item, center: { ...slot.center }, rotation: slot.rotation }
+          : item
+      );
+    });
+
+    if (!plans.length) {
+      setPlannedRoutes({});
+      return;
+    }
+
+    const routes = plans.reduce((acc, plan) => {
+      const bot = slipbots.find(item => item.id === plan.botId);
+      acc[plan.botId] = { points: plan.points, color: bot?.color ?? null };
+      return acc;
+    }, {});
+    setPlannedRoutes(routes);
+
+    animatePlans(plans, () => {
+      setSlipbots(prev =>
+        prev.map(bot => {
+          const target = targets[bot.id];
+          return target ? { ...bot, center: target.center, rotation: target.rotation } : bot;
+        })
+      );
+    });
+  }, [animatePlans, parkingSlots, slipbots, trailer]);
 
   const handleReset = useCallback(() => {
     const freshTrailer = buildInitialTrailer();
     initialTrailerRef.current = freshTrailer;
     slipbotCounterRef.current = 3;
     parkingCounterRef.current = 0;
+    clearAnimations();
     setTrailer({ ...freshTrailer });
     setSlipbots(buildInitialSlipbots(freshTrailer));
     setParkingSlots([]);
     setSelectedEntity(null);
-  }, []);
+    setPlannedRoutes({});
+  }, [clearAnimations]);
+
+  const animatePlans = useCallback(
+    (plans, onComplete) => {
+      clearAnimations();
+      if (!plans.length) {
+        isAnimatingRef.current = false;
+        setIsAnimatingState(false);
+        if (onComplete) onComplete();
+        return;
+      }
+
+      const runPlan = index => {
+        if (index >= plans.length) {
+          isAnimatingRef.current = false;
+          setIsAnimatingState(false);
+          if (onComplete) onComplete();
+          return;
+        }
+        const currentPlan = plans[index];
+        const frames = currentPlan.frames ?? [];
+        if (frames.length === 0) {
+          runPlan(index + 1);
+          return;
+        }
+
+        let frameIndex = 0;
+        const applyNextFrame = () => {
+          if (frameIndex >= frames.length) {
+            runPlan(index + 1);
+            return;
+          }
+          const frame = frames[frameIndex];
+          setSlipbots(prev => {
+            const next = [...prev];
+            const botIndex = next.findIndex(item => item.id === currentPlan.botId);
+            if (botIndex === -1) return prev;
+            next[botIndex] = {
+              ...next[botIndex],
+              center: frame.center,
+              rotation: frame.rotation
+            };
+            return next;
+          });
+          frameIndex += 1;
+          const handle = window.setTimeout(applyNextFrame, 120);
+          animationHandlesRef.current.push(handle);
+        };
+
+        applyNextFrame();
+      };
+
+      isAnimatingRef.current = true;
+      setIsAnimatingState(true);
+      runPlan(0);
+    },
+    [clearAnimations]
+  );
 
   return (
     <div className="simulator-app">
@@ -686,10 +1215,27 @@ function SimulatorV2() {
             <h2>Controls</h2>
             <p>
               Every asset behaves like an obstacle. Drag to move, or hold Shift/right click while
-              dragging to rotate smoothly.
+              dragging to rotate smoothly. Use the Exit/Enter trailer actions to generate collision-free
+              routes for the staged SlipBots.
             </p>
           </div>
           <div className="panel-section buttons">
+            <button
+              type="button"
+              className="panel-button"
+              onClick={handleExitToParking}
+              disabled={isAnimatingState}
+            >
+              Exit trailer
+            </button>
+            <button
+              type="button"
+              className="panel-button"
+              onClick={handleEnterTrailer}
+              disabled={isAnimatingState}
+            >
+              Enter trailer
+            </button>
             <button type="button" className="panel-button" onClick={handleAddSlipbot}>
               Add SlipBot
             </button>
