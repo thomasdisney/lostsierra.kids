@@ -154,31 +154,53 @@ function reconstructPath(cameFrom, currentKey, nodeLookup) {
   return path.reverse();
 }
 
-function heuristic(a, b, orientation) {
-  const { width, height } = getOrientationDimensions(orientation);
-  const ax = a.x + width / 2;
-  const ay = a.y + height / 2;
-  const bx = b.x + width / 2;
-  const by = b.y + height / 2;
-  return Math.abs(ax - bx) + Math.abs(ay - by);
+function orientationKey(node) {
+  return `${node.x},${node.y},${normalizeOrientation(node.orientation)}`;
 }
 
-function planAStar(start, goal, orientation, area, blockedSet) {
+function heuristicState(a, b) {
+  const aDims = getOrientationDimensions(a.orientation);
+  const bDims = getOrientationDimensions(b.orientation);
+  const ax = a.x + aDims.width / 2;
+  const ay = a.y + aDims.height / 2;
+  const bx = b.x + bDims.width / 2;
+  const by = b.y + bDims.height / 2;
+  const distance = Math.abs(ax - bx) + Math.abs(ay - by);
+  return a.orientation === b.orientation ? distance : distance + 1;
+}
+
+function planAStarWithRotations(start, goal, area, blockedSet) {
   if (!start || !goal) return null;
-  if (!isFootprintFree(goal.x, goal.y, orientation, area, blockedSet)) return null;
-  if (!isFootprintFree(start.x, start.y, orientation, area, blockedSet)) return null;
 
-  const startKey = pointKey(start.x, start.y);
-  const goalKey = pointKey(goal.x, goal.y);
+  const normalizedStart = {
+    x: start.x,
+    y: start.y,
+    orientation: normalizeOrientation(start.orientation)
+  };
+  const normalizedGoal = {
+    x: goal.x,
+    y: goal.y,
+    orientation: normalizeOrientation(goal.orientation)
+  };
 
-  const openMap = new Map([[startKey, { ...start }]]);
+  if (!isFootprintFree(normalizedGoal.x, normalizedGoal.y, normalizedGoal.orientation, area, blockedSet)) {
+    return null;
+  }
+  if (!isFootprintFree(normalizedStart.x, normalizedStart.y, normalizedStart.orientation, area, blockedSet)) {
+    return null;
+  }
+
+  const startKey = orientationKey(normalizedStart);
+  const goalKey = orientationKey(normalizedGoal);
+
+  const openMap = new Map([[startKey, normalizedStart]]);
   const cameFrom = new Map();
-  const nodeLookup = new Map([[startKey, { ...start }]]);
+  const nodeLookup = new Map([[startKey, normalizedStart]]);
   const gScore = new Map([[startKey, 0]]);
-  const fScore = new Map([[startKey, heuristic(start, goal, orientation)]]);
+  const fScore = new Map([[startKey, heuristicState(normalizedStart, normalizedGoal)]]);
   const closedSet = new Set();
 
-  const maxIterations = GRID_WIDTH * GRID_HEIGHT * 10;
+  const maxIterations = GRID_WIDTH * GRID_HEIGHT * ORIENTATION_SEQUENCE.length * 10;
   let iterations = 0;
 
   while (openMap.size > 0 && iterations < maxIterations) {
@@ -209,13 +231,29 @@ function planAStar(start, goal, orientation, area, blockedSet) {
 
     const currentG = gScore.get(currentKey) ?? Infinity;
 
-    for (const { dx, dy } of DIRECTIONS) {
-      const neighbor = { x: currentNode.x + dx, y: currentNode.y + dy };
-      if (!footprintWithinGrid(neighbor.x, neighbor.y, orientation)) continue;
-      if (!isFootprintFree(neighbor.x, neighbor.y, orientation, area, blockedSet)) continue;
+    const moveNeighbors = DIRECTIONS.map(({ dx, dy }) => ({
+      x: currentNode.x + dx,
+      y: currentNode.y + dy,
+      orientation: currentNode.orientation
+    }));
 
-      const neighborKey = pointKey(neighbor.x, neighbor.y);
+    const rotationNeighbor = (() => {
+      const rotated = rotateOrientation(currentNode.orientation);
+      if (rotated === currentNode.orientation) return null;
+      return { x: currentNode.x, y: currentNode.y, orientation: rotated };
+    })();
+
+    const neighbors = [...moveNeighbors];
+    if (rotationNeighbor) {
+      neighbors.push(rotationNeighbor);
+    }
+
+    for (const neighbor of neighbors) {
+      const neighborKey = orientationKey(neighbor);
       if (closedSet.has(neighborKey)) continue;
+
+      if (!footprintWithinGrid(neighbor.x, neighbor.y, neighbor.orientation)) continue;
+      if (!isFootprintFree(neighbor.x, neighbor.y, neighbor.orientation, area, blockedSet)) continue;
 
       const tentativeG = currentG + 1;
       const neighborG = gScore.get(neighborKey);
@@ -224,7 +262,7 @@ function planAStar(start, goal, orientation, area, blockedSet) {
         cameFrom.set(neighborKey, currentKey);
         nodeLookup.set(neighborKey, neighbor);
         gScore.set(neighborKey, tentativeG);
-        fScore.set(neighborKey, tentativeG + heuristic(neighbor, goal, orientation));
+        fScore.set(neighborKey, tentativeG + heuristicState(neighbor, normalizedGoal));
         openMap.set(neighborKey, neighbor);
       }
     }
@@ -1151,13 +1189,14 @@ function SimulatorV2() {
 
     if (currentPath.length > 1) {
       const activeBot = slipbotsRef.current.find(bot => bot.id === sequenceState.activeBotId);
-      const activeDims = getOrientationDimensions(activeBot?.orientation ?? "north");
       ctx.strokeStyle = activeBot ? activeBot.color : "#38bdf8";
       ctx.lineWidth = 4;
       ctx.beginPath();
       currentPath.forEach((step, idx) => {
-        const cx = step.x * CELL_SIZE + (activeDims.width * CELL_SIZE) / 2;
-        const cy = step.y * CELL_SIZE + (activeDims.height * CELL_SIZE) / 2;
+        const orientation = normalizeOrientation(step.orientation ?? activeBot?.orientation ?? "north");
+        const dims = getOrientationDimensions(orientation);
+        const cx = step.x * CELL_SIZE + (dims.width * CELL_SIZE) / 2;
+        const cy = step.y * CELL_SIZE + (dims.height * CELL_SIZE) / 2;
         if (idx === 0) {
           ctx.moveTo(cx, cy);
         } else {
@@ -1238,10 +1277,16 @@ function SimulatorV2() {
       }
 
       const totalSteps = distanceToOpening + exitConfig.steps;
-      const segment = [{ x: bot.position.x, y: bot.position.y }];
-      let current = { x: bot.position.x, y: bot.position.y };
+      const segment = [
+        { x: bot.position.x, y: bot.position.y, orientation },
+      ];
+      let current = { x: bot.position.x, y: bot.position.y, orientation };
       for (let i = 0; i < totalSteps; i += 1) {
-        current = { x: current.x + exitConfig.vector.x, y: current.y + exitConfig.vector.y };
+        current = {
+          x: current.x + exitConfig.vector.x,
+          y: current.y + exitConfig.vector.y,
+          orientation
+        };
         segment.push(current);
       }
       return segment;
@@ -1273,9 +1318,17 @@ function SimulatorV2() {
       const step = () => {
         const nextPoint = path[index];
         setSlipbots(prev =>
-          prev.map(bot =>
-            bot.id === botId ? { ...bot, position: { x: nextPoint.x, y: nextPoint.y } } : bot
-          )
+          prev.map(bot => {
+            if (bot.id !== botId) return bot;
+            const updated = {
+              ...bot,
+              position: { x: nextPoint.x, y: nextPoint.y }
+            };
+            if (nextPoint.orientation) {
+              updated.orientation = normalizeOrientation(nextPoint.orientation);
+            }
+            return updated;
+          })
         );
         index += 1;
         if (index < path.length) {
@@ -1318,7 +1371,8 @@ function SimulatorV2() {
 
       const corridorClear = exitSegment.every((step, idx) => {
         if (idx === 0) return true;
-        return isFootprintFree(step.x, step.y, bot.orientation, area, blocked);
+        const stepOrientation = normalizeOrientation(step.orientation ?? bot.orientation);
+        return isFootprintFree(step.x, step.y, stepOrientation, area, blocked);
       });
       if (!corridorClear) {
         setSequenceState({ running: false, activeBotId: null, queueIndex: -1 });
@@ -1330,10 +1384,13 @@ function SimulatorV2() {
       }
 
       const exitComplete = exitSegment[exitSegment.length - 1];
-      const navigationPath = planAStar(
-        exitComplete,
-        entry.target.position,
-        bot.orientation,
+      const navigationPath = planAStarWithRotations(
+        { ...exitComplete, orientation: bot.orientation },
+        {
+          x: entry.target.position.x,
+          y: entry.target.position.y,
+          orientation: entry.target.orientation
+        },
         area,
         blocked
       );
@@ -1432,14 +1489,6 @@ function SimulatorV2() {
     });
     if (anyBlocked) {
       setStatus("Clear obstacles from each parking slot before launching the exit sequence.");
-      return;
-    }
-
-    const orientationAligned = queue.every(
-      entry => normalizeOrientation(entry.target.orientation) === normalizeOrientation(trailerOrientation)
-    );
-    if (!orientationAligned) {
-      setStatus("Rotate the trailer or parking slots so their orientations match before starting the exit sequence.");
       return;
     }
 
