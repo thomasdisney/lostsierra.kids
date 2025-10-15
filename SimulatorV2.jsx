@@ -9,6 +9,8 @@ const SLIPBOT_LENGTH = 17;
 const SLIPBOT_WIDTH = 8;
 const TRAILER_LENGTH = SLIPBOT_LENGTH * 3 + 6;
 const TRAILER_WIDTH = SLIPBOT_WIDTH + 6;
+const TRAILER_WALL_THICKNESS = 4;
+const TRAILER_OPENING_WIDTH = SLIPBOT_WIDTH + 4;
 
 const SLIPBOT_COLORS = ["#38bdf8", "#22c55e", "#f97316", "#c084fc", "#facc15"];
 
@@ -388,12 +390,7 @@ function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
     options.allowedParkingId ?? null
   );
   if (options.includeTrailer && options.trailer) {
-    obstacles.push({
-      center: { ...options.trailer.center },
-      width: options.trailer.width,
-      height: options.trailer.height,
-      rotation: options.trailer.rotation
-    });
+    obstacles.push(...buildTrailerWallObstacles(options.trailer));
   }
   const route = planRoute(
     { center: bot.center, rotation: bot.rotation },
@@ -445,6 +442,66 @@ function computeTrailerSlots(trailer) {
       rotation: trailer.rotation
     };
   });
+}
+
+function transformTrailerLocalPoint(trailer, local) {
+  const radians = degToRad(trailer.rotation);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return {
+    x: trailer.center.x + local.x * cos - local.y * sin,
+    y: trailer.center.y + local.x * sin + local.y * cos
+  };
+}
+
+function buildTrailerWallObstacles(trailer) {
+  const halfWidth = trailer.width / 2;
+  const halfHeight = trailer.height / 2;
+  const wallThickness = Math.min(TRAILER_WALL_THICKNESS, halfWidth, halfHeight);
+  const openingHalfWidth = Math.min(TRAILER_OPENING_WIDTH / 2, halfWidth);
+  const walls = [];
+
+  const sideWallWidth = wallThickness * 2;
+  const sideWallHeight = trailer.height;
+  const sideOffsets = [
+    { x: -(halfWidth - wallThickness / 2), y: 0 },
+    { x: halfWidth - wallThickness / 2, y: 0 }
+  ];
+  sideOffsets.forEach(offset => {
+    walls.push({
+      center: transformTrailerLocalPoint(trailer, offset),
+      width: sideWallWidth,
+      height: sideWallHeight,
+      rotation: trailer.rotation
+    });
+  });
+
+  walls.push({
+    center: transformTrailerLocalPoint(trailer, { x: 0, y: -(halfHeight - wallThickness / 2) }),
+    width: trailer.width,
+    height: wallThickness * 2,
+    rotation: trailer.rotation
+  });
+
+  const remainingWidth = halfWidth - openingHalfWidth;
+  if (remainingWidth > 0.5) {
+    const segmentWidth = remainingWidth * 2;
+    const segmentY = halfHeight - wallThickness / 2;
+    const segmentXOffsets = [
+      -(openingHalfWidth + remainingWidth / 2),
+      openingHalfWidth + remainingWidth / 2
+    ];
+    segmentXOffsets.forEach(xOffset => {
+      walls.push({
+        center: transformTrailerLocalPoint(trailer, { x: xOffset, y: segmentY }),
+        width: segmentWidth,
+        height: wallThickness * 2,
+        rotation: trailer.rotation
+      });
+    });
+  }
+
+  return walls;
 }
 
 function buildInitialTrailer() {
@@ -794,6 +851,8 @@ function SimulatorV2() {
 
       if (interaction.mode === "drag") {
         if (interaction.entityType === "trailer") {
+          const previousTrailer = trailer;
+          let translation = { x: 0, y: 0 };
           setTrailer(prev => {
             const radians = degToRad(prev.rotation);
             const cos = Math.cos(radians);
@@ -808,8 +867,31 @@ function SimulatorV2() {
               y: pointer.y - worldOffset.y
             };
             candidateCenter = clampCenterToBounds(candidateCenter, prev.width, prev.height, prev.rotation);
+            translation = {
+              x: candidateCenter.x - prev.center.x,
+              y: candidateCenter.y - prev.center.y
+            };
+            if (Math.abs(translation.x) < 1e-6 && Math.abs(translation.y) < 1e-6) {
+              translation = { x: 0, y: 0 };
+              return prev;
+            }
             return { ...prev, center: candidateCenter };
           });
+          if (Math.abs(translation.x) > 0 || Math.abs(translation.y) > 0) {
+            setSlipbots(prev =>
+              prev.map(bot =>
+                pointInRectangle(previousTrailer, bot.center)
+                  ? {
+                      ...bot,
+                      center: {
+                        x: bot.center.x + translation.x,
+                        y: bot.center.y + translation.y
+                      }
+                    }
+                  : bot
+              )
+            );
+          }
           return;
         }
         if (interaction.entityType === "slipbot") {
@@ -1072,7 +1154,11 @@ function SimulatorV2() {
         { center: { ...slot.center }, rotation: slot.rotation },
         simulatedSlipbots,
         parkingSlots,
-        { allowedParkingId: slot.id }
+        {
+          allowedParkingId: slot.id,
+          includeTrailer: true,
+          trailer
+        }
       );
       if (!movement) return;
       plans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
@@ -1138,7 +1224,11 @@ function SimulatorV2() {
         { center: { ...slot.center }, rotation: slot.rotation },
         simulatedSlipbots,
         parkingSlots,
-        { allowedParkingId: null }
+        {
+          allowedParkingId: null,
+          includeTrailer: true,
+          trailer
+        }
       );
       if (!movement) return;
       plans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
