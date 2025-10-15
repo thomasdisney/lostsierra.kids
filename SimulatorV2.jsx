@@ -457,11 +457,17 @@ function transformTrailerLocalPoint(trailer, local) {
 function buildTrailerWallObstacles(trailer) {
   const halfWidth = trailer.width / 2;
   const halfHeight = trailer.height / 2;
-  const wallThickness = Math.min(TRAILER_WALL_THICKNESS, halfWidth, halfHeight);
+  const maxThicknessForSlipbot = Math.max(0, (trailer.width - SLIPBOT_WIDTH) / 2);
+  const wallThickness = Math.min(
+    TRAILER_WALL_THICKNESS,
+    halfWidth,
+    halfHeight,
+    maxThicknessForSlipbot
+  );
   const openingHalfWidth = Math.min(TRAILER_OPENING_WIDTH / 2, halfWidth);
   const walls = [];
 
-  const sideWallWidth = wallThickness * 2;
+  const sideWallWidth = wallThickness;
   const sideWallHeight = trailer.height;
   const sideOffsets = [
     { x: -(halfWidth - wallThickness / 2), y: 0 },
@@ -479,7 +485,7 @@ function buildTrailerWallObstacles(trailer) {
   walls.push({
     center: transformTrailerLocalPoint(trailer, { x: 0, y: -(halfHeight - wallThickness / 2) }),
     width: trailer.width,
-    height: wallThickness * 2,
+    height: wallThickness,
     rotation: trailer.rotation
   });
 
@@ -495,7 +501,7 @@ function buildTrailerWallObstacles(trailer) {
       walls.push({
         center: transformTrailerLocalPoint(trailer, { x: xOffset, y: segmentY }),
         width: segmentWidth,
-        height: wallThickness * 2,
+        height: wallThickness,
         rotation: trailer.rotation
       });
     });
