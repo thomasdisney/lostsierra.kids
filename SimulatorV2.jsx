@@ -986,6 +986,63 @@ function SimulatorV2() {
     setSelectedEntity({ type: "parking", id });
   }, [trailer.center.x, trailer.center.y, trailer.height, trailer.width]);
 
+  const animatePlans = useCallback(
+    (plans, onComplete) => {
+      clearAnimations();
+      if (!plans.length) {
+        isAnimatingRef.current = false;
+        setIsAnimatingState(false);
+        if (onComplete) onComplete();
+        return;
+      }
+
+      const runPlan = index => {
+        if (index >= plans.length) {
+          isAnimatingRef.current = false;
+          setIsAnimatingState(false);
+          if (onComplete) onComplete();
+          return;
+        }
+        const currentPlan = plans[index];
+        const frames = currentPlan.frames ?? [];
+        if (frames.length === 0) {
+          runPlan(index + 1);
+          return;
+        }
+
+        let frameIndex = 0;
+        const applyNextFrame = () => {
+          if (frameIndex >= frames.length) {
+            runPlan(index + 1);
+            return;
+          }
+          const frame = frames[frameIndex];
+          setSlipbots(prev => {
+            const next = [...prev];
+            const botIndex = next.findIndex(item => item.id === currentPlan.botId);
+            if (botIndex === -1) return prev;
+            next[botIndex] = {
+              ...next[botIndex],
+              center: frame.center,
+              rotation: frame.rotation
+            };
+            return next;
+          });
+          frameIndex += 1;
+          const handle = window.setTimeout(applyNextFrame, 120);
+          animationHandlesRef.current.push(handle);
+        };
+
+        applyNextFrame();
+      };
+
+      isAnimatingRef.current = true;
+      setIsAnimatingState(true);
+      runPlan(0);
+    },
+    [clearAnimations]
+  );
+
   const handleExitToParking = useCallback(() => {
     if (!parkingSlots.length) {
       setPlannedRoutes({});
@@ -1127,63 +1184,6 @@ function SimulatorV2() {
     setSelectedEntity(null);
     setPlannedRoutes({});
   }, [clearAnimations]);
-
-  const animatePlans = useCallback(
-    (plans, onComplete) => {
-      clearAnimations();
-      if (!plans.length) {
-        isAnimatingRef.current = false;
-        setIsAnimatingState(false);
-        if (onComplete) onComplete();
-        return;
-      }
-
-      const runPlan = index => {
-        if (index >= plans.length) {
-          isAnimatingRef.current = false;
-          setIsAnimatingState(false);
-          if (onComplete) onComplete();
-          return;
-        }
-        const currentPlan = plans[index];
-        const frames = currentPlan.frames ?? [];
-        if (frames.length === 0) {
-          runPlan(index + 1);
-          return;
-        }
-
-        let frameIndex = 0;
-        const applyNextFrame = () => {
-          if (frameIndex >= frames.length) {
-            runPlan(index + 1);
-            return;
-          }
-          const frame = frames[frameIndex];
-          setSlipbots(prev => {
-            const next = [...prev];
-            const botIndex = next.findIndex(item => item.id === currentPlan.botId);
-            if (botIndex === -1) return prev;
-            next[botIndex] = {
-              ...next[botIndex],
-              center: frame.center,
-              rotation: frame.rotation
-            };
-            return next;
-          });
-          frameIndex += 1;
-          const handle = window.setTimeout(applyNextFrame, 120);
-          animationHandlesRef.current.push(handle);
-        };
-
-        applyNextFrame();
-      };
-
-      isAnimatingRef.current = true;
-      setIsAnimatingState(true);
-      runPlan(0);
-    },
-    [clearAnimations]
-  );
 
   return (
     <div className="simulator-app">
