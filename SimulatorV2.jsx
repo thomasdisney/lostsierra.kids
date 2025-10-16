@@ -243,10 +243,10 @@ function planRoute(start, goal, width, height, obstacles) {
   pushNode({ ...startState, fScore: heuristic(startState.x, startState.y, startState.orientationIndex) });
 
   const directionVectors = [
+    { dx: 0, dy: -ROUTE_GRID_SCALE },
     { dx: ROUTE_GRID_SCALE, dy: 0 },
     { dx: 0, dy: ROUTE_GRID_SCALE },
-    { dx: -ROUTE_GRID_SCALE, dy: 0 },
-    { dx: 0, dy: -ROUTE_GRID_SCALE }
+    { dx: -ROUTE_GRID_SCALE, dy: 0 }
   ];
 
   while (open.length > 0) {
