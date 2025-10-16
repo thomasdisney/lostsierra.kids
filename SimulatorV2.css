@@ -107,7 +107,7 @@
   color: #020617;
   background: linear-gradient(130deg, #38bdf8, #22c55e);
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease, filter 0.18s ease;
   box-shadow: 0 18px 30px rgba(56, 189, 248, 0.25);
 }
 
@@ -116,22 +116,35 @@
   box-shadow: 0 22px 36px rgba(56, 189, 248, 0.3);
 }
 
-.panel-button.subtle {
-  background: rgba(148, 163, 184, 0.18);
-  color: #e2e8f0;
-  box-shadow: none;
-}
-
-.panel-button.subtle:hover {
-  transform: none;
-  background: rgba(148, 163, 184, 0.28);
+.panel-button.ready {
+  box-shadow: 0 22px 40px rgba(56, 189, 248, 0.35);
+  animation: panelButtonPulse 2.2s ease-in-out infinite;
 }
 
 .panel-button:disabled {
-  opacity: 0.55;
+  opacity: 0.35;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+  background: rgba(148, 163, 184, 0.22);
+  color: rgba(226, 232, 240, 0.62);
+  filter: grayscale(0.4);
+}
+
+.panel-button:disabled:hover {
+  box-shadow: none;
+}
+
+@keyframes panelButtonPulse {
+  0%,
+  100% {
+    transform: translateY(0);
+    filter: brightness(1);
+  }
+  50% {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+  }
 }
 
 .summary-list {

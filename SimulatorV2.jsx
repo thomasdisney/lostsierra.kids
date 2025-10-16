@@ -391,23 +391,291 @@ function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
     bot.id,
     options.allowedParkingId ?? null
   );
+  let trailerWaypoints = [];
+
   if (options.includeTrailer && options.trailer) {
     obstacles.push(...buildTrailerWallObstacles(options.trailer));
+    const { insideWaypoint, outsideWaypoint } = computeTrailerExitWaypoints(options.trailer);
+    const startInside = pointInRectangle(options.trailer, bot.center);
+    const goalInside = pointInRectangle(options.trailer, goal.center);
+
+    const waypoints = [];
+    const pushWaypoint = waypoint => {
+      if (!waypoint) return;
+      const last = waypoints[waypoints.length - 1];
+      if (
+        last &&
+        Math.hypot(last.center.x - waypoint.center.x, last.center.y - waypoint.center.y) < 1e-3 &&
+        Math.abs(smallestAngleDelta(last.rotation, waypoint.rotation)) < 0.5
+      ) {
+        return;
+      }
+      waypoints.push(waypoint);
+    };
+
+    if (startInside) {
+      pushWaypoint(insideWaypoint);
+      pushWaypoint(outsideWaypoint);
+    }
+    if (goalInside) {
+      if (!startInside) {
+        pushWaypoint(outsideWaypoint);
+      }
+      pushWaypoint(insideWaypoint);
+    }
+
+    trailerWaypoints = waypoints;
   }
-  const route = planRoute(
-    { center: bot.center, rotation: bot.rotation },
-    { center: goal.center, rotation: goal.rotation },
-    bot.width,
-    bot.height,
-    obstacles
-  );
-  if (!route) return null;
-  const frames = buildFramesFromPath(route, bot.rotation, goal.rotation);
-  const points = route.map(state => ({
-    x: state.x / ROUTE_GRID_SCALE,
-    y: state.y / ROUTE_GRID_SCALE
-  }));
-  return { frames, points };
+
+  const sequence = [...trailerWaypoints, { center: { ...goal.center }, rotation: goal.rotation }];
+
+  const combinedFrames = [];
+  const combinedPoints = [];
+  let currentState = { center: { ...bot.center }, rotation: bot.rotation };
+
+  for (const waypoint of sequence) {
+    const route = planRoute(
+      { center: currentState.center, rotation: currentState.rotation },
+      { center: waypoint.center, rotation: waypoint.rotation },
+      bot.width,
+      bot.height,
+      obstacles
+    );
+    if (!route) {
+      return null;
+    }
+
+    const frames = buildFramesFromPath(route, currentState.rotation, waypoint.rotation);
+    if (frames.length) {
+      if (combinedFrames.length) {
+        combinedFrames.push(...frames.slice(1));
+      } else {
+        combinedFrames.push(...frames);
+      }
+    }
+
+    const points = route.map(state => ({
+      x: state.x / ROUTE_GRID_SCALE,
+      y: state.y / ROUTE_GRID_SCALE
+    }));
+    if (points.length) {
+      if (combinedPoints.length) {
+        combinedPoints.push(...points.slice(1));
+      } else {
+        combinedPoints.push(...points);
+      }
+    }
+
+    currentState = { center: { ...waypoint.center }, rotation: waypoint.rotation };
+  }
+
+  return { frames: combinedFrames, points: combinedPoints };
+}
+
+function computeExitPlan(slipbots, parkingSlots, trailer) {
+  const assignedSlots = parkingSlots.filter(slot => typeof slot.slotIndex === "number");
+  const candidateSlots = assignedSlots.length ? assignedSlots : parkingSlots;
+  if (!candidateSlots.length) {
+    return null;
+  }
+
+  const trailerBots = slipbots.filter(bot => pointInRectangle(trailer, bot.center));
+  if (!trailerBots.length) {
+    return null;
+  }
+
+  const sortedBots = [...trailerBots].sort((a, b) => {
+    const aIndex = typeof a.slotIndex === "number" ? a.slotIndex : Number.MAX_SAFE_INTEGER;
+    const bIndex = typeof b.slotIndex === "number" ? b.slotIndex : Number.MAX_SAFE_INTEGER;
+    if (aIndex !== bIndex) return aIndex - bIndex;
+    return a.id.localeCompare(b.id);
+  });
+
+  const uniqueSets = new Set(sortedBots.map(bot => bot.setId).filter(Boolean));
+  const [activeSetId] = uniqueSets.size === 1 ? Array.from(uniqueSets) : [null];
+
+  let simulatedSlipbots = slipbots.map(item => ({ ...item }));
+  const plans = [];
+  const targets = {};
+  const usedSlots = new Set();
+
+  sortedBots.forEach(bot => {
+    let slot = null;
+    if (typeof bot.slotIndex === "number") {
+      slot = candidateSlots.find(item => item.slotIndex === bot.slotIndex);
+    }
+    if (!slot) {
+      slot = candidateSlots.find(item => !usedSlots.has(item.id));
+    }
+    if (!slot) return;
+    usedSlots.add(slot.id);
+
+    const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
+    const movement = planSlipbotMovement(
+      simulatedBot,
+      { center: { ...slot.center }, rotation: slot.rotation },
+      simulatedSlipbots,
+      parkingSlots,
+      {
+        allowedParkingId: slot.id,
+        includeTrailer: true,
+        trailer
+      }
+    );
+    if (!movement) {
+      usedSlots.delete(slot.id);
+      return;
+    }
+    plans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
+    targets[bot.id] = { center: { ...slot.center }, rotation: slot.rotation };
+    simulatedSlipbots = simulatedSlipbots.map(item =>
+      item.id === bot.id
+        ? { ...item, center: { ...slot.center }, rotation: slot.rotation }
+        : item
+    );
+  });
+
+  if (!plans.length) {
+    return null;
+  }
+
+  const routes = plans.reduce((acc, plan) => {
+    const bot = slipbots.find(item => item.id === plan.botId);
+    acc[plan.botId] = { points: plan.points, color: bot?.color ?? null };
+    return acc;
+  }, {});
+
+  return { plans, targets, routes, activeSetId };
+}
+
+function computeEnterPlan(slipbots, parkingSlots, trailer, lastExitedSet) {
+  const trailerOccupants = slipbots.filter(bot => pointInRectangle(trailer, bot.center));
+  if (trailerOccupants.length > 0) {
+    return null;
+  }
+
+  const trailerSlots = computeTrailerSlots(trailer);
+  if (!trailerSlots.length) {
+    return null;
+  }
+
+  const targetSetId =
+    lastExitedSet === PRIMARY_SLIPBOT_SET_ID ? SECONDARY_SLIPBOT_SET_ID : PRIMARY_SLIPBOT_SET_ID;
+
+  let simulatedSlipbots = slipbots.map(item => ({ ...item }));
+  const relocationPlans = [];
+  const relocationTargets = {};
+  const previousSetId = lastExitedSet;
+  const relocationCandidates =
+    previousSetId && previousSetId !== targetSetId
+      ? slipbots.filter(bot => {
+          if (bot.setId !== previousSetId) return false;
+          if (!bot.stagingCenter) return false;
+          if (pointInRectangle(trailer, bot.center)) return false;
+          const slot = parkingSlots.find(item => item.slotIndex === bot.slotIndex);
+          if (!slot) return false;
+          const dx = bot.center.x - slot.center.x;
+          const dy = bot.center.y - slot.center.y;
+          return Math.hypot(dx, dy) < SLIPBOT_LENGTH / 2;
+        })
+      : [];
+
+  relocationCandidates.forEach(bot => {
+    const stagingCenter = bot.stagingCenter;
+    if (!stagingCenter) return;
+    const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
+    const movement = planSlipbotMovement(
+      simulatedBot,
+      { center: { ...stagingCenter }, rotation: bot.stagingRotation ?? 0 },
+      simulatedSlipbots,
+      parkingSlots,
+      {
+        allowedParkingId: null,
+        includeTrailer: true,
+        trailer
+      }
+    );
+    if (!movement) return;
+    relocationPlans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
+    relocationTargets[bot.id] = { center: { ...stagingCenter }, rotation: bot.stagingRotation ?? 0 };
+    simulatedSlipbots = simulatedSlipbots.map(item =>
+      item.id === bot.id
+        ? { ...item, center: { ...stagingCenter }, rotation: bot.stagingRotation ?? 0 }
+        : item
+    );
+  });
+
+  if (relocationCandidates.length && relocationPlans.length !== relocationCandidates.length) {
+    return null;
+  }
+
+  const stagedBots = slipbots
+    .filter(bot => bot.setId === targetSetId && !pointInRectangle(trailer, bot.center))
+    .sort((a, b) => {
+      const aIndex = typeof a.slotIndex === "number" ? a.slotIndex : Number.MAX_SAFE_INTEGER;
+      const bIndex = typeof b.slotIndex === "number" ? b.slotIndex : Number.MAX_SAFE_INTEGER;
+      if (aIndex !== bIndex) return aIndex - bIndex;
+      return a.id.localeCompare(b.id);
+    })
+    .slice(0, trailerSlots.length);
+
+  if (stagedBots.length < trailerSlots.length) {
+    return null;
+  }
+
+  const entryPlans = [];
+  const entryTargets = {};
+  const usedSlots = new Set();
+
+  stagedBots.forEach(bot => {
+    let slot = null;
+    if (typeof bot.slotIndex === "number") {
+      slot = trailerSlots.find(item => item.slotIndex === bot.slotIndex);
+    }
+    if (!slot) {
+      slot = trailerSlots.find(item => !usedSlots.has(item.slotIndex));
+    }
+    if (!slot) return;
+    usedSlots.add(slot.slotIndex);
+
+    const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
+    const movement = planSlipbotMovement(
+      simulatedBot,
+      { center: { ...slot.center }, rotation: slot.rotation },
+      simulatedSlipbots,
+      parkingSlots,
+      {
+        allowedParkingId: null,
+        includeTrailer: true,
+        trailer
+      }
+    );
+    if (!movement) {
+      usedSlots.delete(slot.slotIndex);
+      return;
+    }
+    entryPlans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
+    entryTargets[bot.id] = { center: { ...slot.center }, rotation: slot.rotation };
+    simulatedSlipbots = simulatedSlipbots.map(item =>
+      item.id === bot.id
+        ? { ...item, center: { ...slot.center }, rotation: slot.rotation }
+        : item
+    );
+  });
+
+  if (!entryPlans.length) {
+    return null;
+  }
+
+  const plans = [...relocationPlans, ...entryPlans];
+  const targets = { ...relocationTargets, ...entryTargets };
+  const routes = plans.reduce((acc, plan) => {
+    const bot = slipbots.find(item => item.id === plan.botId);
+    acc[plan.botId] = { points: plan.points, color: bot?.color ?? null };
+    return acc;
+  }, {});
+
+  return { plans, targets, routes };
 }
 
 function computeTrailerSlots(trailer) {
@@ -449,20 +717,19 @@ function buildTrailerWallObstacles(trailer) {
     halfHeight,
     maxThicknessForSlipbot
   );
-  const openingHalfWidth = Math.min(TRAILER_OPENING_WIDTH / 2, halfWidth);
+
   const walls = [];
 
-  const sideWallWidth = wallThickness;
-  const sideWallHeight = trailer.height;
   const sideOffsets = [
     { x: -(halfWidth - wallThickness / 2), y: 0 },
     { x: halfWidth - wallThickness / 2, y: 0 }
   ];
+
   sideOffsets.forEach(offset => {
     walls.push({
       center: transformTrailerLocalPoint(trailer, offset),
-      width: sideWallWidth,
-      height: sideWallHeight,
+      width: wallThickness,
+      height: trailer.height,
       rotation: trailer.rotation
     });
   });
@@ -474,25 +741,37 @@ function buildTrailerWallObstacles(trailer) {
     rotation: trailer.rotation
   });
 
-  const remainingWidth = halfWidth - openingHalfWidth;
-  if (remainingWidth > 0.5) {
-    const segmentWidth = remainingWidth * 2;
-    const segmentY = halfHeight - wallThickness / 2;
-    const segmentXOffsets = [
-      -(openingHalfWidth + remainingWidth / 2),
-      openingHalfWidth + remainingWidth / 2
-    ];
-    segmentXOffsets.forEach(xOffset => {
-      walls.push({
-        center: transformTrailerLocalPoint(trailer, { x: xOffset, y: segmentY }),
-        width: segmentWidth,
-        height: wallThickness,
-        rotation: trailer.rotation
-      });
-    });
+  return walls;
+}
+
+function computeTrailerExitWaypoints(trailer) {
+  if (!trailer) {
+    return { insideWaypoint: null, outsideWaypoint: null };
   }
 
-  return walls;
+  const halfHeight = trailer.height / 2;
+  const insideOffset = Math.max(0, halfHeight - SLIPBOT_LENGTH / 2 - 0.75);
+  const outsideOffset = halfHeight + SLIPBOT_LENGTH / 2 + 2;
+
+  const insideCenter = transformTrailerLocalPoint(trailer, { x: 0, y: insideOffset });
+  const outsideCenter = transformTrailerLocalPoint(trailer, { x: 0, y: outsideOffset });
+  const clampedOutside = clampCenterToBounds(
+    outsideCenter,
+    SLIPBOT_WIDTH,
+    SLIPBOT_LENGTH,
+    trailer.rotation
+  );
+
+  return {
+    insideWaypoint: {
+      center: insideCenter,
+      rotation: trailer.rotation
+    },
+    outsideWaypoint: {
+      center: clampedOutside,
+      rotation: trailer.rotation
+    }
+  };
 }
 
 function buildInitialTrailer() {
@@ -648,21 +927,21 @@ function SimulatorV2() {
   const canvasRef = useRef(null);
   const interactionRef = useRef(null);
 
-  const initialTrailerRef = useRef(buildInitialTrailer());
-  const initialParkingRef = useRef(buildInitialParkingSlots(initialTrailerRef.current));
+  const initialTrailer = useMemo(() => buildInitialTrailer(), []);
+  const initialParkingSlots = useMemo(
+    () => buildInitialParkingSlots(initialTrailer),
+    [initialTrailer]
+  );
 
-  const [trailer, setTrailer] = useState(() => ({ ...initialTrailerRef.current }));
-  const [parkingSlots, setParkingSlots] = useState(() => initialParkingRef.current.map(slot => ({ ...slot })));
-  const [slipbots, setSlipbots] = useState(() => buildInitialSlipbots(initialTrailerRef.current, initialParkingRef.current));
+  const [trailer, setTrailer] = useState(() => ({ ...initialTrailer }));
+  const [parkingSlots, setParkingSlots] = useState(() => initialParkingSlots.map(slot => ({ ...slot })));
+  const [slipbots, setSlipbots] = useState(() => buildInitialSlipbots(initialTrailer, initialParkingSlots));
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [plannedRoutes, setPlannedRoutes] = useState({});
   const [isAnimatingState, setIsAnimatingState] = useState(false);
-
-  const slipbotCounterRef = useRef(slipbots.length);
-  const parkingCounterRef = useRef(parkingSlots.length);
   const animationHandlesRef = useRef([]);
   const isAnimatingRef = useRef(false);
-  const lastExitedSetRef = useRef(PRIMARY_SLIPBOT_SET_ID);
+  const [lastExitedSet, setLastExitedSet] = useState(PRIMARY_SLIPBOT_SET_ID);
 
   const clearAnimations = useCallback(() => {
     animationHandlesRef.current.forEach(handle => {
@@ -676,6 +955,16 @@ function SimulatorV2() {
   const canvasDimensions = useMemo(
     () => ({ width: GRID_WIDTH * CELL_SIZE, height: GRID_HEIGHT * CELL_SIZE }),
     []
+  );
+
+  const exitPlan = useMemo(
+    () => computeExitPlan(slipbots, parkingSlots, trailer),
+    [parkingSlots, slipbots, trailer]
+  );
+
+  const enterPlan = useMemo(
+    () => computeEnterPlan(slipbots, parkingSlots, trailer, lastExitedSet),
+    [lastExitedSet, parkingSlots, slipbots, trailer]
   );
 
   const selectionDetails = useMemo(() => {
@@ -1092,60 +1381,6 @@ function SimulatorV2() {
     interactionRef.current = null;
   }, []);
 
-  const placeNewSlipbot = useCallback(() => {
-    const baseCenter = { x: GRID_WIDTH / 2, y: GRID_HEIGHT / 2 };
-    const candidates = [];
-    const step = 8;
-    for (let radius = 0; radius <= 40; radius += step) {
-      for (let angle = 0; angle < 360; angle += 45) {
-        const radians = degToRad(angle);
-        candidates.push({
-          x: baseCenter.x + Math.cos(radians) * radius,
-          y: baseCenter.y + Math.sin(radians) * radius
-        });
-      }
-    }
-    for (const candidate of candidates) {
-      const center = clampCenterToBounds({ ...candidate }, SLIPBOT_WIDTH, SLIPBOT_LENGTH, 0);
-      const slipbotCandidate = {
-        id: "candidate",
-        center,
-        width: SLIPBOT_WIDTH,
-        height: SLIPBOT_LENGTH,
-        rotation: 0
-      };
-      if (isSlipbotPlacementValid(slipbotCandidate, slipbots, null)) {
-        return center;
-      }
-    }
-    return clampCenterToBounds(baseCenter, SLIPBOT_WIDTH, SLIPBOT_LENGTH, 0);
-  }, [slipbots]);
-
-  const handleAddSlipbot = useCallback(() => {
-    slipbotCounterRef.current += 1;
-    const id = `slipbot-${slipbotCounterRef.current}`;
-    const color = SLIPBOT_COLORS[(slipbotCounterRef.current - 1) % SLIPBOT_COLORS.length];
-    const center = placeNewSlipbot();
-    const newSlipbot = createSlipbot(id, color, center);
-    setSlipbots(prev => [...prev, newSlipbot]);
-    setSelectedEntity({ type: "slipbot", id });
-  }, [placeNewSlipbot]);
-
-  const handleAddParkingSlot = useCallback(() => {
-    parkingCounterRef.current += 1;
-    const id = `slot-${parkingCounterRef.current}`;
-    const labelIndex = (parkingCounterRef.current - 1) % 26;
-    const label = String.fromCharCode(65 + labelIndex);
-    const offset = {
-      x: trailer.center.x + trailer.width + 12,
-      y: trailer.center.y - trailer.height / 2 - SLIPBOT_LENGTH
-    };
-    const center = clampCenterToBounds(offset, SLIPBOT_WIDTH, SLIPBOT_LENGTH, 0);
-    const slot = createParkingSlot(id, center, label);
-    setParkingSlots(prev => [...prev, slot]);
-    setSelectedEntity({ type: "parking", id });
-  }, [trailer.center.x, trailer.center.y, trailer.height, trailer.width]);
-
   const animatePlans = useCallback(
     (plans, onComplete) => {
       clearAnimations();
@@ -1204,256 +1439,50 @@ function SimulatorV2() {
   );
 
   const handleExitToParking = useCallback(() => {
-    const assignedSlots = parkingSlots.filter(slot => typeof slot.slotIndex === "number");
-    const candidateSlots = assignedSlots.length ? assignedSlots : parkingSlots;
-    if (!candidateSlots.length) {
+    if (!exitPlan || !exitPlan.plans?.length) {
       setPlannedRoutes({});
       return;
     }
 
-    const trailerBots = slipbots.filter(bot => pointInRectangle(trailer, bot.center));
-    if (!trailerBots.length) {
-      setPlannedRoutes({});
-      return;
-    }
+    setPlannedRoutes(exitPlan.routes);
 
-    const sortedBots = [...trailerBots].sort((a, b) => {
-      const aIndex = typeof a.slotIndex === "number" ? a.slotIndex : Number.MAX_SAFE_INTEGER;
-      const bIndex = typeof b.slotIndex === "number" ? b.slotIndex : Number.MAX_SAFE_INTEGER;
-      if (aIndex !== bIndex) return aIndex - bIndex;
-      return a.id.localeCompare(b.id);
-    });
-    const uniqueSets = new Set(sortedBots.map(bot => bot.setId).filter(Boolean));
-    const [activeSetId] = uniqueSets.size === 1 ? Array.from(uniqueSets) : [null];
-
-    let simulatedSlipbots = slipbots.map(item => ({ ...item }));
-    const plans = [];
-    const targets = {};
-    const usedSlots = new Set();
-
-    sortedBots.forEach(bot => {
-      let slot = null;
-      if (typeof bot.slotIndex === "number") {
-        slot = candidateSlots.find(item => item.slotIndex === bot.slotIndex);
-      }
-      if (!slot) {
-        slot = candidateSlots.find(item => !usedSlots.has(item.id));
-      }
-      if (!slot) return;
-      usedSlots.add(slot.id);
-
-      const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
-      const movement = planSlipbotMovement(
-        simulatedBot,
-        { center: { ...slot.center }, rotation: slot.rotation },
-        simulatedSlipbots,
-        parkingSlots,
-        {
-          allowedParkingId: slot.id,
-          includeTrailer: true,
-          trailer
-        }
-      );
-      if (!movement) {
-        usedSlots.delete(slot.id);
-        return;
-      }
-      plans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
-      targets[bot.id] = { center: { ...slot.center }, rotation: slot.rotation };
-      simulatedSlipbots = simulatedSlipbots.map(item =>
-        item.id === bot.id
-          ? { ...item, center: { ...slot.center }, rotation: slot.rotation }
-          : item
-      );
-    });
-
-    if (!plans.length) {
-      setPlannedRoutes({});
-      return;
-    }
-
-    const routes = plans.reduce((acc, plan) => {
-      const bot = slipbots.find(item => item.id === plan.botId);
-      acc[plan.botId] = { points: plan.points, color: bot?.color ?? null };
-      return acc;
-    }, {});
-    setPlannedRoutes(routes);
-
-    animatePlans(plans, () => {
+    animatePlans(exitPlan.plans, () => {
       setSlipbots(prev =>
         prev.map(bot => {
-          const target = targets[bot.id];
+          const target = exitPlan.targets[bot.id];
           return target ? { ...bot, center: target.center, rotation: target.rotation } : bot;
         })
       );
-      if (activeSetId) {
-        lastExitedSetRef.current = activeSetId;
+      if (exitPlan.activeSetId) {
+        setLastExitedSet(exitPlan.activeSetId);
       }
     });
-  }, [animatePlans, parkingSlots, slipbots, trailer]);
+  }, [animatePlans, exitPlan]);
 
   const handleEnterTrailer = useCallback(() => {
-    const trailerOccupants = slipbots.filter(bot => pointInRectangle(trailer, bot.center));
-    if (trailerOccupants.length > 0) {
+    if (!enterPlan || !enterPlan.plans?.length) {
       setPlannedRoutes({});
       return;
     }
 
-    const trailerSlots = computeTrailerSlots(trailer);
-    if (!trailerSlots.length) {
-      setPlannedRoutes({});
-      return;
-    }
+    setPlannedRoutes(enterPlan.routes);
 
-    const targetSetId =
-      lastExitedSetRef.current === PRIMARY_SLIPBOT_SET_ID
-        ? SECONDARY_SLIPBOT_SET_ID
-        : PRIMARY_SLIPBOT_SET_ID;
-
-    let simulatedSlipbots = slipbots.map(item => ({ ...item }));
-    const relocationPlans = [];
-    const relocationTargets = {};
-    const previousSetId = lastExitedSetRef.current;
-    const relocationCandidates =
-      previousSetId && previousSetId !== targetSetId
-        ? slipbots.filter(bot => {
-            if (bot.setId !== previousSetId) return false;
-            if (!bot.stagingCenter) return false;
-            if (pointInRectangle(trailer, bot.center)) return false;
-            const slot = parkingSlots.find(item => item.slotIndex === bot.slotIndex);
-            if (!slot) return false;
-            const dx = bot.center.x - slot.center.x;
-            const dy = bot.center.y - slot.center.y;
-            return Math.hypot(dx, dy) < SLIPBOT_LENGTH / 2;
-          })
-        : [];
-
-    relocationCandidates.forEach(bot => {
-      const stagingCenter = bot.stagingCenter;
-      if (!stagingCenter) return;
-      const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
-      const movement = planSlipbotMovement(
-        simulatedBot,
-        { center: { ...stagingCenter }, rotation: bot.stagingRotation ?? 0 },
-        simulatedSlipbots,
-        parkingSlots,
-        {
-          allowedParkingId: null,
-          includeTrailer: true,
-          trailer
-        }
-      );
-      if (!movement) return;
-      relocationPlans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
-      relocationTargets[bot.id] = { center: { ...stagingCenter }, rotation: bot.stagingRotation ?? 0 };
-      simulatedSlipbots = simulatedSlipbots.map(item =>
-        item.id === bot.id
-          ? { ...item, center: { ...stagingCenter }, rotation: bot.stagingRotation ?? 0 }
-          : item
-      );
-    });
-
-    if (relocationCandidates.length && relocationPlans.length !== relocationCandidates.length) {
-      setPlannedRoutes({});
-      return;
-    }
-
-    const stagedBots = slipbots
-      .filter(bot => bot.setId === targetSetId && !pointInRectangle(trailer, bot.center))
-      .sort((a, b) => {
-        const aIndex = typeof a.slotIndex === "number" ? a.slotIndex : Number.MAX_SAFE_INTEGER;
-        const bIndex = typeof b.slotIndex === "number" ? b.slotIndex : Number.MAX_SAFE_INTEGER;
-        if (aIndex !== bIndex) return aIndex - bIndex;
-        return a.id.localeCompare(b.id);
-      })
-      .slice(0, trailerSlots.length);
-
-    if (stagedBots.length < trailerSlots.length) {
-      setPlannedRoutes({});
-      return;
-    }
-
-    const entryPlans = [];
-    const entryTargets = {};
-    const usedSlots = new Set();
-
-    stagedBots.forEach(bot => {
-      let slot = null;
-      if (typeof bot.slotIndex === "number") {
-        slot = trailerSlots.find(item => item.slotIndex === bot.slotIndex);
-      }
-      if (!slot) {
-        slot = trailerSlots.find(item => !usedSlots.has(item.slotIndex));
-      }
-      if (!slot) return;
-      usedSlots.add(slot.slotIndex);
-
-      const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
-      const movement = planSlipbotMovement(
-        simulatedBot,
-        { center: { ...slot.center }, rotation: slot.rotation },
-        simulatedSlipbots,
-        parkingSlots,
-        {
-          allowedParkingId: null,
-          includeTrailer: true,
-          trailer
-        }
-      );
-      if (!movement) {
-        usedSlots.delete(slot.slotIndex);
-        return;
-      }
-      entryPlans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
-      entryTargets[bot.id] = { center: { ...slot.center }, rotation: slot.rotation };
-      simulatedSlipbots = simulatedSlipbots.map(item =>
-        item.id === bot.id
-          ? { ...item, center: { ...slot.center }, rotation: slot.rotation }
-          : item
-      );
-    });
-
-    if (!entryPlans.length) {
-      setPlannedRoutes({});
-      return;
-    }
-
-    const plans = [...relocationPlans, ...entryPlans];
-    const targets = { ...relocationTargets, ...entryTargets };
-
-    const routes = plans.reduce((acc, plan) => {
-      const bot = slipbots.find(item => item.id === plan.botId);
-      acc[plan.botId] = { points: plan.points, color: bot?.color ?? null };
-      return acc;
-    }, {});
-    setPlannedRoutes(routes);
-
-    animatePlans(plans, () => {
+    animatePlans(enterPlan.plans, () => {
       setSlipbots(prev =>
         prev.map(bot => {
-          const target = targets[bot.id];
+          const target = enterPlan.targets[bot.id];
           return target ? { ...bot, center: target.center, rotation: target.rotation } : bot;
         })
       );
     });
-  }, [animatePlans, parkingSlots, slipbots, trailer]);
+  }, [animatePlans, enterPlan]);
 
-  const handleReset = useCallback(() => {
-    const freshTrailer = buildInitialTrailer();
-    const freshParking = buildInitialParkingSlots(freshTrailer);
-    const freshSlipbots = buildInitialSlipbots(freshTrailer, freshParking);
-    initialTrailerRef.current = freshTrailer;
-    initialParkingRef.current = freshParking;
-    slipbotCounterRef.current = freshSlipbots.length;
-    parkingCounterRef.current = freshParking.length;
-    lastExitedSetRef.current = PRIMARY_SLIPBOT_SET_ID;
-    clearAnimations();
-    setTrailer({ ...freshTrailer });
-    setParkingSlots(freshParking.map(slot => ({ ...slot })));
-    setSlipbots(freshSlipbots);
-    setSelectedEntity(null);
-    setPlannedRoutes({});
-  }, [clearAnimations]);
+  const exitHasPlan = Boolean(exitPlan?.plans?.length);
+  const enterHasPlan = Boolean(enterPlan?.plans?.length);
+  const exitDisabled = isAnimatingState || !exitHasPlan;
+  const enterDisabled = isAnimatingState || !enterHasPlan;
+  const exitReady = !exitDisabled;
+  const enterReady = !enterDisabled;
 
   return (
     <div className="simulator-app">
@@ -1492,28 +1521,21 @@ function SimulatorV2() {
           <div className="panel-section buttons">
             <button
               type="button"
-              className="panel-button"
+              className={`panel-button${exitReady ? " ready" : ""}`}
               onClick={handleExitToParking}
-              disabled={isAnimatingState}
+              disabled={exitDisabled}
+              data-ready={exitReady ? "true" : "false"}
             >
               Exit trailer
             </button>
             <button
               type="button"
-              className="panel-button"
+              className={`panel-button${enterReady ? " ready" : ""}`}
               onClick={handleEnterTrailer}
-              disabled={isAnimatingState}
+              disabled={enterDisabled}
+              data-ready={enterReady ? "true" : "false"}
             >
               Enter trailer
-            </button>
-            <button type="button" className="panel-button" onClick={handleAddSlipbot}>
-              Add SlipBot
-            </button>
-            <button type="button" className="panel-button" onClick={handleAddParkingSlot}>
-              Add parking slot
-            </button>
-            <button type="button" className="panel-button subtle" onClick={handleReset}>
-              Reset layout
             </button>
           </div>
           <div className="panel-section">
