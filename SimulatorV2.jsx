@@ -11,6 +11,8 @@ const TRAILER_LENGTH = SLIPBOT_LENGTH * 3 + 6;
 const TRAILER_WIDTH = SLIPBOT_WIDTH + 6;
 const TRAILER_WALL_THICKNESS = 4;
 const TRAILER_OPENING_WIDTH = SLIPBOT_WIDTH + 4;
+const TRAILER_SLOT_MARGIN = 6;
+const COLLISION_EPSILON = 1e-6;
 
 const SLIPBOT_COLORS = ["#38bdf8", "#22c55e", "#f97316", "#c084fc", "#facc15", "#f43f5e"];
 const PRIMARY_SLIPBOT_SET_ID = "alpha";
@@ -104,7 +106,7 @@ function projectPolygon(axis, polygon) {
 function overlapOnAxis(axis, polygonA, polygonB) {
   const projA = projectPolygon(axis, polygonA);
   const projB = projectPolygon(axis, polygonB);
-  return projA.max >= projB.min && projB.max >= projA.min;
+  return projA.max > projB.min + COLLISION_EPSILON && projB.max > projA.min + COLLISION_EPSILON;
 }
 
 function rectanglesOverlap(rectA, rectB) {
@@ -165,6 +167,21 @@ function drawRoundedRectPath(ctx, x, y, width, height, radius) {
 
 const RIGHT_ANGLE_ORIENTATIONS = [0, 90, 180, 270];
 const ROUTE_GRID_SCALE = 2; // represents half-cell precision
+
+function snapToRouteGrid(value) {
+  return Math.round(value * ROUTE_GRID_SCALE) / ROUTE_GRID_SCALE;
+}
+
+function snapPointToRouteGrid(point) {
+  return {
+    x: snapToRouteGrid(point.x),
+    y: snapToRouteGrid(point.y)
+  };
+}
+
+function pointsAreClose(a, b, threshold = 0.6) {
+  return Math.hypot(a.x - b.x, a.y - b.y) <= threshold;
+}
 
 function alignToRightAngle(angle) {
   const normalized = normalizeAngle(angle);
@@ -243,10 +260,10 @@ function planRoute(start, goal, width, height, obstacles) {
   pushNode({ ...startState, fScore: heuristic(startState.x, startState.y, startState.orientationIndex) });
 
   const directionVectors = [
-    { dx: 0, dy: -ROUTE_GRID_SCALE },
-    { dx: ROUTE_GRID_SCALE, dy: 0 },
-    { dx: 0, dy: ROUTE_GRID_SCALE },
-    { dx: -ROUTE_GRID_SCALE, dy: 0 }
+    { dx: 0, dy: -1 },
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 }
   ];
 
   while (open.length > 0) {
@@ -414,14 +431,26 @@ function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
     };
 
     if (startInside) {
-      pushWaypoint(insideWaypoint);
+      const needsInsideStep =
+        insideWaypoint &&
+        (!pointsAreClose(bot.center, insideWaypoint.center) ||
+          Math.abs(smallestAngleDelta(bot.rotation, insideWaypoint.rotation)) > 0.5);
+      if (needsInsideStep) {
+        pushWaypoint(insideWaypoint);
+      }
       pushWaypoint(outsideWaypoint);
     }
     if (goalInside) {
       if (!startInside) {
         pushWaypoint(outsideWaypoint);
       }
-      pushWaypoint(insideWaypoint);
+      const needsInsideArrival =
+        insideWaypoint &&
+        (!pointsAreClose(goal.center, insideWaypoint.center) ||
+          Math.abs(smallestAngleDelta(goal.rotation ?? 0, insideWaypoint.rotation)) > 0.5);
+      if (needsInsideArrival) {
+        pushWaypoint(insideWaypoint);
+      }
     }
 
     trailerWaypoints = waypoints;
@@ -487,8 +516,8 @@ function computeExitPlan(slipbots, parkingSlots, trailer) {
   const sortedBots = [...trailerBots].sort((a, b) => {
     const aIndex = typeof a.slotIndex === "number" ? a.slotIndex : Number.MAX_SAFE_INTEGER;
     const bIndex = typeof b.slotIndex === "number" ? b.slotIndex : Number.MAX_SAFE_INTEGER;
-    if (aIndex !== bIndex) return aIndex - bIndex;
-    return a.id.localeCompare(b.id);
+    if (aIndex !== bIndex) return bIndex - aIndex;
+    return b.id.localeCompare(a.id);
   });
 
   const uniqueSets = new Set(sortedBots.map(bot => bot.setId).filter(Boolean));
@@ -683,15 +712,17 @@ function computeTrailerSlots(trailer) {
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
   return Array.from({ length: 3 }, (_, index) => {
-    const offset = -trailer.height / 2 + 8 + index * SLIPBOT_LENGTH + SLIPBOT_LENGTH / 2;
+    const offset = -trailer.height / 2 + TRAILER_SLOT_MARGIN + index * SLIPBOT_LENGTH + SLIPBOT_LENGTH / 2;
     const local = { x: 0, y: offset };
+    const rawCenter = {
+      x: trailer.center.x + local.x * cos - local.y * sin,
+      y: trailer.center.y + local.x * sin + local.y * cos
+    };
+    const center = snapPointToRouteGrid(rawCenter);
     return {
       label: String.fromCharCode(65 + index),
       slotIndex: index,
-      center: {
-        x: trailer.center.x + local.x * cos - local.y * sin,
-        y: trailer.center.y + local.x * sin + local.y * cos
-      },
+      center,
       rotation: trailer.rotation
     };
   });
@@ -753,14 +784,16 @@ function computeTrailerExitWaypoints(trailer) {
   const insideOffset = Math.max(0, halfHeight - SLIPBOT_LENGTH / 2 - 0.75);
   const outsideOffset = halfHeight + SLIPBOT_LENGTH / 2 + 2;
 
-  const insideCenter = transformTrailerLocalPoint(trailer, { x: 0, y: insideOffset });
-  const outsideCenter = transformTrailerLocalPoint(trailer, { x: 0, y: outsideOffset });
+  const insideCenter = snapPointToRouteGrid(transformTrailerLocalPoint(trailer, { x: 0, y: insideOffset }));
+  const outsideRaw = transformTrailerLocalPoint(trailer, { x: 0, y: outsideOffset });
+  const outsideSnapped = snapPointToRouteGrid(outsideRaw);
   const clampedOutside = clampCenterToBounds(
-    outsideCenter,
+    outsideSnapped,
     SLIPBOT_WIDTH,
     SLIPBOT_LENGTH,
     trailer.rotation
   );
+  const outsideCenter = snapPointToRouteGrid(clampedOutside);
 
   return {
     insideWaypoint: {
@@ -768,16 +801,22 @@ function computeTrailerExitWaypoints(trailer) {
       rotation: trailer.rotation
     },
     outsideWaypoint: {
-      center: clampedOutside,
+      center: outsideCenter,
       rotation: trailer.rotation
     }
   };
 }
 
 function buildInitialTrailer() {
+  const clearance = SLIPBOT_LENGTH / 2 + 4;
+  const targetCenter = {
+    x: 36,
+    y: GRID_HEIGHT - TRAILER_LENGTH / 2 - clearance
+  };
+  const center = clampCenterToBounds(targetCenter, TRAILER_WIDTH, TRAILER_LENGTH, 0);
   return {
     id: "trailer",
-    center: { x: 36, y: GRID_HEIGHT - 26 },
+    center,
     rotation: 0,
     width: TRAILER_WIDTH,
     height: TRAILER_LENGTH
@@ -801,9 +840,9 @@ function buildInitialParkingSlots(trailer) {
 }
 
 function buildInitialSlipbots(trailer, parkingSlots) {
-  const trailerBots = Array.from({ length: 3 }, (_, index) => {
+  const trailerSlots = computeTrailerSlots(trailer);
+  const trailerBots = trailerSlots.map((slot, index) => {
     const color = SLIPBOT_COLORS[index % SLIPBOT_COLORS.length];
-    const offset = -trailer.height / 2 + 8 + index * SLIPBOT_LENGTH + SLIPBOT_LENGTH / 2;
     const parkingSlot = parkingSlots[index];
     const fallbackStaging = clampCenterToBounds(
       {
@@ -828,11 +867,11 @@ function buildInitialSlipbots(trailer, parkingSlots) {
     return createSlipbot(
       `slipbot-${index + 1}`,
       color,
-      { x: trailer.center.x, y: trailer.center.y + offset },
+      { ...slot.center },
       {
         name: `SlipBot Alpha-${index + 1}`,
         setId: PRIMARY_SLIPBOT_SET_ID,
-        slotIndex: index,
+        slotIndex: slot.slotIndex,
         stagingCenter,
         stagingRotation: 0
       }
