@@ -17,6 +17,7 @@ const COLLISION_EPSILON = 1e-6;
 const SLIPBOT_COLORS = ["#38bdf8", "#22c55e", "#f97316", "#c084fc", "#facc15", "#f43f5e"];
 const PRIMARY_SLIPBOT_SET_ID = "alpha";
 const SECONDARY_SLIPBOT_SET_ID = "beta";
+const FRAME_DURATION_MS = 24;
 
 function degToRad(degrees) {
   return (degrees * Math.PI) / 180;
@@ -121,6 +122,13 @@ function smallestAngleDelta(current, start) {
   while (delta > 180) delta -= 360;
   while (delta < -180) delta += 360;
   return delta;
+}
+
+function interpolateAngle(start, end, t) {
+  const normalizedStart = normalizeAngle(start);
+  const normalizedEnd = normalizeAngle(end);
+  const delta = smallestAngleDelta(normalizedEnd, normalizedStart);
+  return normalizeAngle(normalizedStart + delta * t);
 }
 
 function isSlipbotPlacementValid(candidate, slipbots, ignoreId) {
@@ -980,11 +988,22 @@ function SimulatorV2() {
   const [isAnimatingState, setIsAnimatingState] = useState(false);
   const animationHandlesRef = useRef([]);
   const isAnimatingRef = useRef(false);
+  const slipbotsRef = useRef(slipbots);
+
+  useEffect(() => {
+    slipbotsRef.current = slipbots;
+  }, [slipbots]);
   const [lastExitedSet, setLastExitedSet] = useState(PRIMARY_SLIPBOT_SET_ID);
 
   const clearAnimations = useCallback(() => {
     animationHandlesRef.current.forEach(handle => {
-      window.clearTimeout(handle);
+      if (handle?.type === "frame") {
+        window.cancelAnimationFrame(handle.id);
+      } else if (handle?.type === "timeout") {
+        window.clearTimeout(handle.id);
+      } else if (typeof handle === "number") {
+        window.clearTimeout(handle);
+      }
     });
     animationHandlesRef.current = [];
     isAnimatingRef.current = false;
@@ -1444,30 +1463,86 @@ function SimulatorV2() {
           return;
         }
 
-        let frameIndex = 0;
-        const applyNextFrame = () => {
-          if (frameIndex >= frames.length) {
+        const bot = slipbotsRef.current.find(item => item.id === currentPlan.botId);
+        if (!bot) {
+          runPlan(index + 1);
+          return;
+        }
+
+        const startState = {
+          center: { ...bot.center },
+          rotation: bot.rotation
+        };
+
+        const segments = frames.reduce((acc, frame) => {
+          const previous = acc.length ? acc[acc.length - 1].to : startState;
+          const distanceX = frame.center.x - previous.center.x;
+          const distanceY = frame.center.y - previous.center.y;
+          const rotationDelta = smallestAngleDelta(frame.rotation, previous.rotation);
+          if (Math.abs(distanceX) < 1e-4 && Math.abs(distanceY) < 1e-4 && Math.abs(rotationDelta) < 1e-2) {
+            return acc;
+          }
+          acc.push({
+            from: previous,
+            to: {
+              center: { ...frame.center },
+              rotation: frame.rotation
+            }
+          });
+          return acc;
+        }, []);
+
+        const animateSegment = segmentIndex => {
+          if (segmentIndex >= segments.length) {
             runPlan(index + 1);
             return;
           }
-          const frame = frames[frameIndex];
-          setSlipbots(prev => {
-            const next = [...prev];
-            const botIndex = next.findIndex(item => item.id === currentPlan.botId);
-            if (botIndex === -1) return prev;
-            next[botIndex] = {
-              ...next[botIndex],
-              center: frame.center,
-              rotation: frame.rotation
+
+          const segment = segments[segmentIndex];
+          let startTimestamp = null;
+
+          const step = timestamp => {
+            if (startTimestamp === null) {
+              startTimestamp = timestamp;
+            }
+            const elapsed = timestamp - startTimestamp;
+            const progress = Math.min(1, elapsed / FRAME_DURATION_MS);
+            const nextCenter = {
+              x: segment.from.center.x + (segment.to.center.x - segment.from.center.x) * progress,
+              y: segment.from.center.y + (segment.to.center.y - segment.from.center.y) * progress
             };
-            return next;
-          });
-          frameIndex += 1;
-          const handle = window.setTimeout(applyNextFrame, 120);
-          animationHandlesRef.current.push(handle);
+            const nextRotation = interpolateAngle(segment.from.rotation, segment.to.rotation, progress);
+
+            setSlipbots(prev => {
+              const next = [...prev];
+              const botIndex = next.findIndex(item => item.id === currentPlan.botId);
+              if (botIndex === -1) return prev;
+              next[botIndex] = {
+                ...next[botIndex],
+                center: nextCenter,
+                rotation: nextRotation
+              };
+              return next;
+            });
+
+            if (progress < 1) {
+              const handle = window.requestAnimationFrame(step);
+              animationHandlesRef.current.push({ type: "frame", id: handle });
+            } else {
+              animateSegment(segmentIndex + 1);
+            }
+          };
+
+          const handle = window.requestAnimationFrame(step);
+          animationHandlesRef.current.push({ type: "frame", id: handle });
         };
 
-        applyNextFrame();
+        if (!segments.length) {
+          runPlan(index + 1);
+          return;
+        }
+
+        animateSegment(0);
       };
 
       isAnimatingRef.current = true;
