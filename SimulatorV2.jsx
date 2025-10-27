@@ -746,6 +746,71 @@ function transformTrailerLocalPoint(trailer, local) {
   };
 }
 
+function transformPointToTrailerLocal(trailer, point) {
+  const radians = degToRad(trailer.rotation);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const dx = point.x - trailer.center.x;
+  const dy = point.y - trailer.center.y;
+  return {
+    x: cos * dx + sin * dy,
+    y: -sin * dx + cos * dy
+  };
+}
+
+function transformAttachedSlipbots(previousTrailer, nextTrailer, slipbots) {
+  if (!previousTrailer || !nextTrailer) {
+    return slipbots;
+  }
+  let changed = false;
+  const next = slipbots.map(bot => {
+    const isAttached =
+      (bot.attachedTrailerId && bot.attachedTrailerId === previousTrailer.id) ||
+      (!bot.attachedTrailerId && pointInRectangle(previousTrailer, bot.center));
+    if (!isAttached) {
+      return bot;
+    }
+    const localCenter = transformPointToTrailerLocal(previousTrailer, bot.center);
+    const nextCenter = transformTrailerLocalPoint(nextTrailer, localCenter);
+    const rotationDelta = smallestAngleDelta(bot.rotation, previousTrailer.rotation);
+    const nextRotation = normalizeAngle(nextTrailer.rotation + rotationDelta);
+    if (
+      Math.abs(nextCenter.x - bot.center.x) < 1e-6 &&
+      Math.abs(nextCenter.y - bot.center.y) < 1e-6 &&
+      Math.abs(smallestAngleDelta(nextRotation, bot.rotation)) < 1e-3
+    ) {
+      return bot;
+    }
+    changed = true;
+    return {
+      ...bot,
+      center: nextCenter,
+      rotation: nextRotation
+    };
+  });
+  return changed ? next : slipbots;
+}
+
+function attachSlipbotsToTrailerState(slipbots, trailer) {
+  if (!trailer) {
+    return slipbots;
+  }
+  let changed = false;
+  const next = slipbots.map(bot => {
+    const shouldAttach = pointInRectangle(trailer, bot.center);
+    const attachedTrailerId = shouldAttach ? trailer.id : null;
+    if (bot.attachedTrailerId === attachedTrailerId) {
+      return bot;
+    }
+    changed = true;
+    return {
+      ...bot,
+      attachedTrailerId
+    };
+  });
+  return changed ? next : slipbots;
+}
+
 function buildTrailerWallObstacles(trailer) {
   const halfWidth = trailer.width / 2;
   const halfHeight = trailer.height / 2;
@@ -881,7 +946,8 @@ function buildInitialSlipbots(trailer, parkingSlots) {
         setId: PRIMARY_SLIPBOT_SET_ID,
         slotIndex: slot.slotIndex,
         stagingCenter,
-        stagingRotation: 0
+        stagingRotation: 0,
+        attachedTrailerId: trailer.id
       }
     );
   });
@@ -923,7 +989,7 @@ function buildInitialSlipbots(trailer, parkingSlots) {
     );
   });
 
-  return [...trailerBots, ...gridBots];
+  return attachSlipbotsToTrailerState([...trailerBots, ...gridBots], trailer);
 }
 
 function createSlipbot(id, color, center, options = {}) {
@@ -938,7 +1004,8 @@ function createSlipbot(id, color, center, options = {}) {
     setId: options.setId ?? null,
     slotIndex: options.slotIndex ?? null,
     stagingCenter: options.stagingCenter ?? null,
-    stagingRotation: options.stagingRotation ?? 0
+    stagingRotation: options.stagingRotation ?? 0,
+    attachedTrailerId: options.attachedTrailerId ?? null
   };
 }
 
@@ -989,10 +1056,31 @@ function SimulatorV2() {
   const animationHandlesRef = useRef([]);
   const isAnimatingRef = useRef(false);
   const slipbotsRef = useRef(slipbots);
+  const trailerRef = useRef(trailer);
 
   useEffect(() => {
     slipbotsRef.current = slipbots;
   }, [slipbots]);
+  useEffect(() => {
+    trailerRef.current = trailer;
+  }, [trailer]);
+
+  const updateSlipbotsState = useCallback(
+    (updater, trailerOverride) => {
+      setSlipbots(prev => {
+        const base = typeof updater === "function" ? updater(prev) : updater;
+        if (!base) {
+          return prev;
+        }
+        const trailerState = trailerOverride ?? trailerRef.current;
+        if (!trailerState) {
+          return base;
+        }
+        return attachSlipbotsToTrailerState(base, trailerState);
+      });
+    },
+    []
+  );
   const [lastExitedSet, setLastExitedSet] = useState(PRIMARY_SLIPBOT_SET_ID);
 
   const clearAnimations = useCallback(() => {
@@ -1017,7 +1105,7 @@ function SimulatorV2() {
 
   const exitPlan = useMemo(
     () => computeExitPlan(slipbots, parkingSlots, trailer),
-    [parkingSlots, slipbots, trailer]
+    [parkingSlots, slipbots, trailer, updateSlipbotsState]
   );
 
   const enterPlan = useMemo(
@@ -1277,50 +1365,39 @@ function SimulatorV2() {
       if (interaction.mode === "drag") {
         if (interaction.entityType === "trailer") {
           const previousTrailer = trailer;
-          let translation = { x: 0, y: 0 };
-          setTrailer(prev => {
-            const radians = degToRad(prev.rotation);
-            const cos = Math.cos(radians);
-            const sin = Math.sin(radians);
-            const offsetLocal = interaction.offsetLocal ?? { x: 0, y: 0 };
-            const worldOffset = {
-              x: cos * offsetLocal.x - sin * offsetLocal.y,
-              y: sin * offsetLocal.x + cos * offsetLocal.y
-            };
-            let candidateCenter = {
-              x: pointer.x - worldOffset.x,
-              y: pointer.y - worldOffset.y
-            };
-            candidateCenter = clampCenterToBounds(candidateCenter, prev.width, prev.height, prev.rotation);
-            translation = {
-              x: candidateCenter.x - prev.center.x,
-              y: candidateCenter.y - prev.center.y
-            };
-            if (Math.abs(translation.x) < 1e-6 && Math.abs(translation.y) < 1e-6) {
-              translation = { x: 0, y: 0 };
-              return prev;
-            }
-            return { ...prev, center: candidateCenter };
-          });
-          if (Math.abs(translation.x) > 0 || Math.abs(translation.y) > 0) {
-            setSlipbots(prev =>
-              prev.map(bot =>
-                pointInRectangle(previousTrailer, bot.center)
-                  ? {
-                      ...bot,
-                      center: {
-                        x: bot.center.x + translation.x,
-                        y: bot.center.y + translation.y
-                      }
-                    }
-                  : bot
-              )
-            );
+          const radians = degToRad(previousTrailer.rotation);
+          const cos = Math.cos(radians);
+          const sin = Math.sin(radians);
+          const offsetLocal = interaction.offsetLocal ?? { x: 0, y: 0 };
+          const worldOffset = {
+            x: cos * offsetLocal.x - sin * offsetLocal.y,
+            y: sin * offsetLocal.x + cos * offsetLocal.y
+          };
+          let candidateCenter = {
+            x: pointer.x - worldOffset.x,
+            y: pointer.y - worldOffset.y
+          };
+          candidateCenter = clampCenterToBounds(
+            candidateCenter,
+            previousTrailer.width,
+            previousTrailer.height,
+            previousTrailer.rotation
+          );
+          const translation = {
+            x: candidateCenter.x - previousTrailer.center.x,
+            y: candidateCenter.y - previousTrailer.center.y
+          };
+          if (Math.abs(translation.x) < 1e-6 && Math.abs(translation.y) < 1e-6) {
+            return;
           }
+          const nextTrailer = { ...previousTrailer, center: candidateCenter };
+          trailerRef.current = nextTrailer;
+          setTrailer(nextTrailer);
+          updateSlipbotsState(prev => transformAttachedSlipbots(previousTrailer, nextTrailer, prev), nextTrailer);
           return;
         }
         if (interaction.entityType === "slipbot") {
-          setSlipbots(prev => {
+          updateSlipbotsState(prev => {
             const index = prev.findIndex(item => item.id === interaction.id);
             if (index === -1) return prev;
             const bot = prev[index];
@@ -1375,14 +1452,21 @@ function SimulatorV2() {
 
       if (interaction.mode === "rotate") {
         if (interaction.entityType === "trailer") {
+          const previousTrailer = trailer;
           const centerPx = {
-            x: trailer.center.x * CELL_SIZE,
-            y: trailer.center.y * CELL_SIZE
+            x: previousTrailer.center.x * CELL_SIZE,
+            y: previousTrailer.center.y * CELL_SIZE
           };
           const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
           const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
-          const rotation = normalizeAngle((interaction.startRotation ?? trailer.rotation) + delta);
-          setTrailer(prev => ({ ...prev, rotation }));
+          const rotation = normalizeAngle((interaction.startRotation ?? previousTrailer.rotation) + delta);
+          if (Math.abs(smallestAngleDelta(rotation, previousTrailer.rotation)) < 1e-3) {
+            return;
+          }
+          const nextTrailer = { ...previousTrailer, rotation };
+          trailerRef.current = nextTrailer;
+          setTrailer(nextTrailer);
+          updateSlipbotsState(prev => transformAttachedSlipbots(previousTrailer, nextTrailer, prev), nextTrailer);
           return;
         }
         if (interaction.entityType === "slipbot") {
@@ -1395,7 +1479,7 @@ function SimulatorV2() {
           const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
           const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
           const rotation = normalizeAngle((interaction.startRotation ?? bot.rotation) + delta);
-          setSlipbots(prev => {
+          updateSlipbotsState(prev => {
             const index = prev.findIndex(item => item.id === interaction.id);
             if (index === -1) return prev;
             const candidate = { ...prev[index], rotation };
@@ -1513,7 +1597,7 @@ function SimulatorV2() {
             };
             const nextRotation = interpolateAngle(segment.from.rotation, segment.to.rotation, progress);
 
-            setSlipbots(prev => {
+            updateSlipbotsState(prev => {
               const next = [...prev];
               const botIndex = next.findIndex(item => item.id === currentPlan.botId);
               if (botIndex === -1) return prev;
@@ -1549,7 +1633,7 @@ function SimulatorV2() {
       setIsAnimatingState(true);
       runPlan(0);
     },
-    [clearAnimations]
+    [clearAnimations, updateSlipbotsState]
   );
 
   const handleExitToParking = useCallback(() => {
@@ -1561,7 +1645,7 @@ function SimulatorV2() {
     setPlannedRoutes(exitPlan.routes);
 
     animatePlans(exitPlan.plans, () => {
-      setSlipbots(prev =>
+      updateSlipbotsState(prev =>
         prev.map(bot => {
           const target = exitPlan.targets[bot.id];
           return target ? { ...bot, center: target.center, rotation: target.rotation } : bot;
@@ -1571,7 +1655,7 @@ function SimulatorV2() {
         setLastExitedSet(exitPlan.activeSetId);
       }
     });
-  }, [animatePlans, exitPlan]);
+  }, [animatePlans, exitPlan, updateSlipbotsState]);
 
   const handleEnterTrailer = useCallback(() => {
     if (!enterPlan || !enterPlan.plans?.length) {
@@ -1582,14 +1666,14 @@ function SimulatorV2() {
     setPlannedRoutes(enterPlan.routes);
 
     animatePlans(enterPlan.plans, () => {
-      setSlipbots(prev =>
+      updateSlipbotsState(prev =>
         prev.map(bot => {
           const target = enterPlan.targets[bot.id];
           return target ? { ...bot, center: target.center, rotation: target.rotation } : bot;
         })
       );
     });
-  }, [animatePlans, enterPlan]);
+  }, [animatePlans, enterPlan, updateSlipbotsState]);
 
   const exitHasPlan = Boolean(exitPlan?.plans?.length);
   const enterHasPlan = Boolean(enterPlan?.plans?.length);
