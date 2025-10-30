@@ -10,7 +10,6 @@ const SLIPBOT_WIDTH = 8;
 const TRAILER_LENGTH = SLIPBOT_LENGTH * 3 + 6;
 const TRAILER_WIDTH = SLIPBOT_WIDTH + 6;
 const TRAILER_WALL_THICKNESS = 4;
-const TRAILER_OPENING_WIDTH = SLIPBOT_WIDTH + 4;
 const TRAILER_SLOT_MARGIN = 6;
 const COLLISION_EPSILON = 1e-6;
 
@@ -176,9 +175,15 @@ function drawRoundedRectPath(ctx, x, y, width, height, radius) {
 const RIGHT_ANGLE_ORIENTATIONS = [0, 90, 180, 270];
 const ROUTE_GRID_SCALE = 2; // represents half-cell precision
 const DEFAULT_GRID_STEP = 1 / ROUTE_GRID_SCALE;
-const CENTER_MOVEMENT_SPEED = DEFAULT_GRID_STEP / (FRAME_DURATION_MS / 1000);
+const BASE_MOVEMENT_SPEED = (DEFAULT_GRID_STEP * 3) / (FRAME_DURATION_MS / 1000);
 const TRANSLATION_STEP_COST = 1;
 const ROTATION_STEP_COST = 4;
+
+const SPEED_PRESETS = [
+  { id: "normal", label: "1×", multiplier: 1 },
+  { id: "fast", label: "2×", multiplier: 2 },
+  { id: "hyper", label: "4×", multiplier: 4 }
+];
 
 function snapToRouteGrid(value) {
   return Math.round(value * ROUTE_GRID_SCALE) / ROUTE_GRID_SCALE;
@@ -1003,59 +1008,26 @@ function buildTrailerWallObstacles(trailer) {
     maxThicknessForSlipbot
   );
 
-  const walls = [];
-
-  const sideOffsets = [
-    { x: -(halfWidth - wallThickness / 2), y: 0 },
-    { x: halfWidth - wallThickness / 2, y: 0 }
-  ];
-
-  sideOffsets.forEach(offset => {
-    walls.push({
-      center: transformTrailerLocalPoint(trailer, offset),
+  return [
+    {
+      center: transformTrailerLocalPoint(trailer, { x: -(halfWidth - wallThickness / 2), y: 0 }),
       width: wallThickness,
       height: trailer.height,
       rotation: trailer.rotation
-    });
-  });
-
-  walls.push({
-    center: transformTrailerLocalPoint(trailer, { x: 0, y: -(halfHeight - wallThickness / 2) }),
-    width: trailer.width,
-    height: wallThickness,
-    rotation: trailer.rotation
-  });
-
-  const desiredOpeningWidth = Math.min(TRAILER_OPENING_WIDTH, trailer.width - wallThickness * 0.5);
-  const openingWidth = Math.max(desiredOpeningWidth, 0);
-  const cappedOpeningWidth = Math.min(openingWidth, trailer.width);
-  const remainingWidth = Math.max(0, trailer.width - cappedOpeningWidth);
-  const bottomSegmentWidth = remainingWidth / 2;
-  const bottomY = halfHeight - wallThickness / 2;
-
-  if (bottomSegmentWidth > 0) {
-    const bottomSegments = [
-      {
-        x: -(cappedOpeningWidth / 2 + bottomSegmentWidth / 2),
-        y: bottomY
-      },
-      {
-        x: cappedOpeningWidth / 2 + bottomSegmentWidth / 2,
-        y: bottomY
-      }
-    ];
-
-    bottomSegments.forEach(offset => {
-      walls.push({
-        center: transformTrailerLocalPoint(trailer, offset),
-        width: bottomSegmentWidth,
-        height: wallThickness,
-        rotation: trailer.rotation
-      });
-    });
-  }
-
-  return walls;
+    },
+    {
+      center: transformTrailerLocalPoint(trailer, { x: halfWidth - wallThickness / 2, y: 0 }),
+      width: wallThickness,
+      height: trailer.height,
+      rotation: trailer.rotation
+    },
+    {
+      center: transformTrailerLocalPoint(trailer, { x: 0, y: -(halfHeight - wallThickness / 2) }),
+      width: trailer.width,
+      height: wallThickness,
+      rotation: trailer.rotation
+    }
+  ];
 }
 
 function computeTrailerExitWaypoints(trailer) {
@@ -1264,10 +1236,20 @@ function SimulatorV2() {
   const [plannedRoutes, setPlannedRoutes] = useState({});
   const [isAnimatingState, setIsAnimatingState] = useState(false);
   const [planningIssues, setPlanningIssues] = useState(null);
+  const defaultSpeedPreset = useMemo(
+    () => SPEED_PRESETS.find(preset => preset.id === "fast") ?? SPEED_PRESETS[0],
+    []
+  );
+  const [speedPresetId, setSpeedPresetId] = useState(defaultSpeedPreset.id);
+  const speedPreset = useMemo(
+    () => SPEED_PRESETS.find(preset => preset.id === speedPresetId) ?? defaultSpeedPreset,
+    [defaultSpeedPreset, speedPresetId]
+  );
   const animationHandlesRef = useRef([]);
   const isAnimatingRef = useRef(false);
   const slipbotsRef = useRef(slipbots);
   const trailerRef = useRef(trailer);
+  const playbackSpeedRef = useRef(speedPreset);
 
   useEffect(() => {
     slipbotsRef.current = slipbots;
@@ -1275,6 +1257,10 @@ function SimulatorV2() {
   useEffect(() => {
     trailerRef.current = trailer;
   }, [trailer]);
+
+  useEffect(() => {
+    playbackSpeedRef.current = speedPreset;
+  }, [speedPreset]);
 
   useEffect(() => {
     setPlanningIssues(null);
@@ -1444,11 +1430,51 @@ function SimulatorV2() {
     ctx.rotate(degToRad(trailer.rotation));
     const trailerWidth = trailer.width * CELL_SIZE;
     const trailerHeight = trailer.height * CELL_SIZE;
-    drawRoundedRectPath(ctx, -trailerWidth / 2, -trailerHeight / 2, trailerWidth, trailerHeight, Math.min(trailerWidth, trailerHeight) * 0.08);
-    ctx.fillStyle = "rgba(15, 118, 110, 0.35)";
-    ctx.fill();
-    ctx.lineWidth = selectedEntity?.type === "trailer" ? 3 : 1.6;
+    const halfTrailerWidth = trailer.width / 2;
+    const halfTrailerHeight = trailer.height / 2;
+    const maxThicknessForSlipbot = Math.max(0, (trailer.width - SLIPBOT_WIDTH) / 2);
+    const wallThickness = Math.min(
+      TRAILER_WALL_THICKNESS,
+      halfTrailerWidth,
+      halfTrailerHeight,
+      maxThicknessForSlipbot
+    );
+    const wallThicknessPx = Math.max(wallThickness * CELL_SIZE, 2);
+    const left = -trailerWidth / 2;
+    const top = -trailerHeight / 2;
+    const right = trailerWidth / 2;
+    const bottom = trailerHeight / 2;
+
+    const interiorLeft = left + wallThicknessPx;
+    const interiorTop = top + wallThicknessPx;
+    const interiorWidth = Math.max(0, trailerWidth - wallThicknessPx * 2);
+    const interiorHeight = Math.max(0, trailerHeight - wallThicknessPx * 1.25);
+
+    if (interiorWidth > 0 && interiorHeight > 0) {
+      ctx.fillStyle = "rgba(15, 118, 110, 0.2)";
+      ctx.fillRect(interiorLeft, interiorTop, interiorWidth, interiorHeight);
+    }
+
+    ctx.fillStyle = "rgba(15, 118, 110, 0.42)";
+    ctx.fillRect(left, top, wallThicknessPx, trailerHeight);
+    ctx.fillRect(right - wallThicknessPx, top, wallThicknessPx, trailerHeight);
+    ctx.fillRect(left + wallThicknessPx, top, trailerWidth - wallThicknessPx * 2, wallThicknessPx);
+
+    ctx.lineWidth = selectedEntity?.type === "trailer" ? 3 : 2;
     ctx.strokeStyle = "rgba(45, 212, 191, 0.9)";
+    ctx.beginPath();
+    ctx.moveTo(left, bottom);
+    ctx.lineTo(left, top);
+    ctx.lineTo(right, top);
+    ctx.lineTo(right, bottom);
+    ctx.stroke();
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(94, 234, 212, 0.55)";
+    ctx.beginPath();
+    ctx.moveTo(left + wallThicknessPx * 0.5, bottom - wallThicknessPx * 0.35);
+    ctx.lineTo(left + wallThicknessPx * 0.5, top + wallThicknessPx * 0.6);
+    ctx.lineTo(right - wallThicknessPx * 0.5, top + wallThicknessPx * 0.6);
+    ctx.lineTo(right - wallThicknessPx * 0.5, bottom - wallThicknessPx * 0.35);
     ctx.stroke();
     ctx.restore();
 
@@ -1880,9 +1906,9 @@ function SimulatorV2() {
           const linearDistance = Math.hypot(distanceX, distanceY);
           const rotationDistance = Math.abs(degToRad(rotationDelta)) * maxCornerRadius;
           const travelDistance = Math.max(linearDistance, rotationDistance);
-          const durationMs =
+          const baseDurationMs =
             travelDistance > 0
-              ? Math.max((travelDistance / CENTER_MOVEMENT_SPEED) * 1000, FRAME_DURATION_MS)
+              ? Math.max((travelDistance / BASE_MOVEMENT_SPEED) * 1000, FRAME_DURATION_MS)
               : FRAME_DURATION_MS;
 
           acc.push({
@@ -1891,7 +1917,7 @@ function SimulatorV2() {
               center: { ...frame.center },
               rotation: frame.rotation
             },
-            duration: durationMs
+            baseDuration: baseDurationMs
           });
           return acc;
         }, []);
@@ -1903,7 +1929,11 @@ function SimulatorV2() {
           }
 
           const segment = segments[segmentIndex];
-          const segmentDuration = Math.max(segment.duration ?? FRAME_DURATION_MS, FRAME_DURATION_MS);
+          const speedMultiplier = Math.max(playbackSpeedRef.current?.multiplier ?? 1, 0.1);
+          const segmentDuration = Math.max(
+            (segment.baseDuration ?? FRAME_DURATION_MS) / speedMultiplier,
+            FRAME_DURATION_MS
+          );
           let startTimestamp = null;
 
           const step = timestamp => {
@@ -2070,6 +2100,30 @@ function SimulatorV2() {
             >
               Enter trailer
             </button>
+          </div>
+          <div className="panel-section speed-controls">
+            <h3>Playback speed</h3>
+            <div className="speed-buttons">
+              {SPEED_PRESETS.map(preset => {
+                const isActive = preset.id === speedPreset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`speed-chip${isActive ? " active" : ""}`}
+                    onClick={() => {
+                      if (!isActive) {
+                        setSpeedPresetId(preset.id);
+                      }
+                    }}
+                    aria-pressed={isActive}
+                    data-active={isActive ? "true" : "false"}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           {planningIssues?.issues?.length && planningIssueMessage && (
             <div className={`panel-section planning-issue ${planningIssues.mode}`}>
