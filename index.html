@@ -3,17 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Lost Sierra Kids offers nature-based childcare and preschool in Graeagle, California with a warm, community-centered approach for ages 2–6." />
+  <meta name="theme-color" content="#264d3b" />
+  <link rel="canonical" href="https://lostsierra.kids/" />
   <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="shortcut icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-  <meta name="apple-mobile-web-app-title" content="MyWebSite" />
+  <meta name="apple-mobile-web-app-title" content="Lost Sierra Kids" />
   <link rel="manifest" href="/site.webmanifest" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://lostsierra.kids/" />
+  <meta property="og:title" content="Lost Sierra Kids | Nature-Based Early Learning in Graeagle, CA" />
+  <meta property="og:description" content="Discover nature-based childcare and preschool for ages 2–6 in Graeagle, California. Schedule a tour and join the Lost Sierra Kids community." />
+  <meta property="og:image" content="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&q=80" />
   <title>Lost Sierra Kids | Nature-Based Early Learning in Graeagle, CA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script>
+    document.documentElement.classList.add('js');
+  </script>
   <style>
+    html {
+      scroll-behavior: smooth;
+    }
+
     :root {
       --forest: #264d3b;
       --sky: #7bb3d1;
@@ -28,12 +43,37 @@
       box-sizing: border-box;
     }
 
+    *:focus-visible {
+      outline: 3px solid var(--sky);
+      outline-offset: 3px;
+    }
+
     body {
       margin: 0;
       font-family: 'Nunito', sans-serif;
       color: var(--slate);
       background-color: var(--cream);
       line-height: 1.6;
+    }
+
+    .skip-link {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: translateY(-120%);
+      background: var(--forest);
+      color: #fff;
+      padding: 0.75rem 1.25rem;
+      border-radius: 0 0 16px 0;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      transition: transform 0.2s ease;
+      z-index: 100;
+    }
+
+    .skip-link:focus-visible {
+      transform: translateY(0);
     }
 
     a {
@@ -83,12 +123,26 @@
       letter-spacing: 0.05em;
     }
 
-    nav {
+    .menu-toggle {
+      background: transparent;
+      border: 2px solid rgba(255, 255, 255, 0.75);
+      color: #fff;
+      padding: 0.5rem 1.2rem;
+      border-radius: 999px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: none;
+    }
+
+    .primary-navigation {
       display: flex;
       gap: 1.5rem;
     }
 
-    nav a {
+    .primary-navigation a {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -96,7 +150,7 @@
       transition: opacity 0.2s ease;
     }
 
-    nav a:hover {
+    .primary-navigation a:hover {
       opacity: 0.7;
     }
 
@@ -530,11 +584,22 @@
       letter-spacing: 0.08em;
     }
 
-    @media (max-width: 800px) {
-      nav {
-        display: none;
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
       }
 
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    @media (max-width: 800px) {
       header {
         padding-bottom: 4rem;
       }
@@ -544,19 +609,44 @@
         gap: 1rem;
       }
 
+      .primary-navigation {
+        flex-direction: column;
+        align-items: flex-end;
+        background: rgba(38, 77, 59, 0.9);
+        padding: 1.2rem;
+        border-radius: 18px;
+        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.25);
+        width: min(260px, 90vw);
+      }
+
       .badge {
         position: static;
         align-self: flex-end;
         margin: 1rem 0 0;
       }
+
+      .js .menu-toggle {
+        display: inline-flex;
+        align-self: flex-end;
+      }
+
+      .js .primary-navigation {
+        display: none;
+      }
+
+      .js .primary-navigation.open {
+        display: flex;
+      }
     }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <header>
     <div class="top-bar">
       <div class="logo">Lost Sierra Kids</div>
-      <nav>
+      <button class="menu-toggle" id="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation">Menu</button>
+      <nav id="primary-navigation" class="primary-navigation" aria-label="Primary">
         <a href="#mission">Mission</a>
         <a href="#curriculum">Curriculum</a>
         <a href="#leadership">Leadership</a>
@@ -587,7 +677,7 @@
     </div>
   </header>
 
-  <main>
+  <main id="main-content">
     <section id="mission">
       <h2 class="section-title">Mission & Philosophy</h2>
       <div class="mission">
@@ -640,7 +730,7 @@
       <h2 class="section-title">Meet Our Leadership</h2>
       <div class="leaders">
         <article class="leader-card">
-          <img src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=800&q=80" alt="Stephanie, Administrative Director" />
+          <img src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=800&q=80" alt="Stephanie, Administrative Director" loading="lazy" decoding="async" />
           <div>
             <h3>Stephanie</h3>
             <h4>Administrative Director</h4>
@@ -648,7 +738,7 @@
           </div>
         </article>
         <article class="leader-card">
-          <img src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80" alt="Mahala, Creative Director" />
+          <img src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80" alt="Mahala, Creative Director" loading="lazy" decoding="async" />
           <div>
             <h3>Mahala</h3>
             <h4>Creative Director</h4>
@@ -749,30 +839,32 @@
     <section id="gallery">
       <h2 class="section-title">Life at Lost Sierra Kids</h2>
       <div class="grid-gallery">
-        <img src="https://images.unsplash.com/photo-1524492449092-0c6adf0cbf7e?auto=format&fit=crop&w=800&q=80" alt="Children exploring a forest trail" />
-        <img src="https://images.unsplash.com/photo-1458253756245-10e1a70f4a0c?auto=format&fit=crop&w=800&q=80" alt="Child painting outdoors" />
-        <img src="https://images.unsplash.com/photo-1516632664305-eda5dfe9c1f8?auto=format&fit=crop&w=800&q=80" alt="Hands holding a nature collection of leaves and pinecones" />
-        <img src="https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=800&q=80" alt="Children playing together in a meadow" />
-        <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=800&q=80" alt="Teacher and child reading a picture book" />
-        <img src="https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=800&q=80" alt="Child creating nature art with sticks and stones" />
+        <img src="https://images.unsplash.com/photo-1524492449092-0c6adf0cbf7e?auto=format&fit=crop&w=800&q=80" alt="Children exploring a forest trail" loading="lazy" decoding="async" />
+        <img src="https://images.unsplash.com/photo-1458253756245-10e1a70f4a0c?auto=format&fit=crop&w=800&q=80" alt="Child painting outdoors" loading="lazy" decoding="async" />
+        <img src="https://images.unsplash.com/photo-1516632664305-eda5dfe9c1f8?auto=format&fit=crop&w=800&q=80" alt="Hands holding a nature collection of leaves and pinecones" loading="lazy" decoding="async" />
+        <img src="https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=800&q=80" alt="Children playing together in a meadow" loading="lazy" decoding="async" />
+        <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=800&q=80" alt="Teacher and child reading a picture book" loading="lazy" decoding="async" />
+        <img src="https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=800&q=80" alt="Child creating nature art with sticks and stones" loading="lazy" decoding="async" />
       </div>
     </section>
 
     <section id="contact">
       <h2 class="section-title">Connect with Lost Sierra Kids</h2>
       <div class="contact">
-        <form>
+        <form action="https://formsubmit.co/hello@lostsierrakids.com" method="POST">
+          <input type="hidden" name="_subject" value="New Lost Sierra Kids inquiry" />
+          <input type="hidden" name="_captcha" value="false" />
           <label for="name">Your Name</label>
-          <input type="text" id="name" name="name" placeholder="Jane Doe" required>
+          <input type="text" id="name" name="name" placeholder="Jane Doe" autocomplete="name" required>
 
           <label for="email">Email</label>
-          <input type="email" id="email" name="email" placeholder="you@email.com" required>
+          <input type="email" id="email" name="email" placeholder="you@email.com" autocomplete="email" required>
 
           <label for="phone">Phone</label>
-          <input type="tel" id="phone" name="phone" placeholder="(555) 555-5555">
+          <input type="tel" id="phone" name="phone" placeholder="(555) 555-5555" autocomplete="tel">
 
           <label for="message">How can we support your family?</label>
-          <textarea id="message" name="message" placeholder="Tell us about your child, schedule needs, or questions."></textarea>
+          <textarea id="message" name="message" placeholder="Tell us about your child, schedule needs, or questions." rows="5" required></textarea>
 
           <button type="submit" class="btn btn-primary">Send Inquiry</button>
         </form>
@@ -802,7 +894,7 @@
   <footer class="footer">
     <div class="footer-content">
       <p>&copy; <span id="year"></span> Lost Sierra Kids • Nature-Based Childcare & Early Learning • Graeagle, California</p>
-      <nav>
+      <nav aria-label="Footer">
         <a href="#mission">Mission</a>
         <a href="#curriculum">Curriculum</a>
         <a href="#leadership">Leadership</a>
@@ -810,15 +902,95 @@
         <a href="#community">Community</a>
         <a href="#contact">Contact</a>
       </nav>
-      <div class="newsletter">
-        <input type="email" placeholder="Join our newsletter for seasonal updates" />
-        <button class="btn btn-primary" type="button">Subscribe</button>
-      </div>
+      <form class="newsletter" action="https://formsubmit.co/newsletter@lostsierrakids.com" method="POST">
+        <input type="hidden" name="_subject" value="Lost Sierra Kids newsletter" />
+        <input type="hidden" name="_captcha" value="false" />
+        <input type="email" name="email" placeholder="Join our newsletter for seasonal updates" aria-label="Email address" autocomplete="email" required />
+        <button class="btn btn-primary" type="submit">Subscribe</button>
+      </form>
     </div>
   </footer>
 
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "ChildCare",
+      "name": "Lost Sierra Kids",
+      "description": "Nature-based childcare and preschool for ages 2–6 in Graeagle, California.",
+      "url": "https://lostsierra.kids/",
+      "telephone": "+1-530-555-1234",
+      "email": "hello@lostsierrakids.com",
+      "sameAs": [
+        "https://www.facebook.com/p/Lost-Sierra-Kids-61555225559244/"
+      ],
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Graeagle",
+        "addressRegion": "CA",
+        "postalCode": "96103",
+        "addressCountry": "US"
+      },
+      "areaServed": "Lost Sierra region",
+      "foundingDate": "2024",
+      "openingHoursSpecification": [
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Monday", "Wednesday", "Friday"],
+          "opens": "08:00",
+          "closes": "18:00"
+        },
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Tuesday", "Thursday"],
+          "opens": "08:00",
+          "closes": "14:00"
+        }
+      ]
+    }
+  </script>
   <script>
     document.getElementById('year').textContent = new Date().getFullYear();
+    const menuToggle = document.getElementById('menu-toggle');
+    const primaryNav = document.getElementById('primary-navigation');
+
+    if (menuToggle && primaryNav) {
+      const mobileQuery = window.matchMedia('(max-width: 800px)');
+
+      const syncNavVisibility = () => {
+        const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+
+        if (mobileQuery.matches) {
+          primaryNav.classList.toggle('open', expanded);
+          primaryNav.hidden = !expanded;
+          menuToggle.textContent = expanded ? 'Close menu' : 'Menu';
+        } else {
+          primaryNav.classList.remove('open');
+          primaryNav.hidden = false;
+          menuToggle.setAttribute('aria-expanded', 'false');
+          menuToggle.textContent = 'Menu';
+        }
+      };
+
+      syncNavVisibility();
+      if (typeof mobileQuery.addEventListener === 'function') {
+        mobileQuery.addEventListener('change', syncNavVisibility);
+      } else if (typeof mobileQuery.addListener === 'function') {
+        mobileQuery.addListener(syncNavVisibility);
+      }
+
+      menuToggle.addEventListener('click', () => {
+        const expanded = menuToggle.getAttribute('aria-expanded') === 'true';
+        menuToggle.setAttribute('aria-expanded', String(!expanded));
+        syncNavVisibility();
+      });
+
+      primaryNav.querySelectorAll('a').forEach((link) => {
+        link.addEventListener('click', () => {
+          menuToggle.setAttribute('aria-expanded', 'false');
+          syncNavVisibility();
+        });
+      });
+    }
   </script>
 </body>
 </html>
