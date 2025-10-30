@@ -175,6 +175,10 @@ function drawRoundedRectPath(ctx, x, y, width, height, radius) {
 
 const RIGHT_ANGLE_ORIENTATIONS = [0, 90, 180, 270];
 const ROUTE_GRID_SCALE = 2; // represents half-cell precision
+const DEFAULT_GRID_STEP = 1 / ROUTE_GRID_SCALE;
+const CENTER_MOVEMENT_SPEED = DEFAULT_GRID_STEP / (FRAME_DURATION_MS / 1000);
+const TRANSLATION_STEP_COST = 1;
+const ROTATION_STEP_COST = 4;
 
 function snapToRouteGrid(value) {
   return Math.round(value * ROUTE_GRID_SCALE) / ROUTE_GRID_SCALE;
@@ -272,7 +276,7 @@ function planRoute(start, goal, width, height, obstacles, diagnostics) {
     const distance = Math.abs(x - goalX) + Math.abs(y - goalY);
     const orientationDelta = Math.abs(orientationIndex - goalOrientation);
     const rotationCost = Math.min(orientationDelta, RIGHT_ANGLE_ORIENTATIONS.length - orientationDelta);
-    return distance + rotationCost * 2;
+    return distance + rotationCost * ROTATION_STEP_COST;
   }
 
   function pushNode(node) {
@@ -323,7 +327,7 @@ function planRoute(start, goal, width, height, obstacles, diagnostics) {
     for (const delta of [-1, 1]) {
       const nextOrientation = (current.orientationIndex + delta + RIGHT_ANGLE_ORIENTATIONS.length) % RIGHT_ANGLE_ORIENTATIONS.length;
       const nextKey = encodeRouteKey(current.x, current.y, nextOrientation);
-      const nextScore = baseScore + 2;
+      const nextScore = baseScore + ROTATION_STEP_COST;
       if (nextScore >= (gScores.get(nextKey) ?? Infinity)) continue;
       const candidate = {
         center: { x: current.x / ROUTE_GRID_SCALE, y: current.y / ROUTE_GRID_SCALE },
@@ -337,13 +341,12 @@ function planRoute(start, goal, width, height, obstacles, diagnostics) {
       pushNode({ x: current.x, y: current.y, orientationIndex: nextOrientation, fScore: nextScore + heuristic(current.x, current.y, nextOrientation) });
     }
 
-    // move forward/backward
-    const direction = directionVectors[current.orientationIndex];
-    for (const directionMultiplier of [1, -1]) {
-      const nextX = current.x + direction.dx * directionMultiplier;
-      const nextY = current.y + direction.dy * directionMultiplier;
+    // move in any cardinal direction without changing orientation
+    for (const direction of directionVectors) {
+      const nextX = current.x + direction.dx;
+      const nextY = current.y + direction.dy;
       const nextKey = encodeRouteKey(nextX, nextY, current.orientationIndex);
-      const nextScore = baseScore + 1;
+      const nextScore = baseScore + TRANSLATION_STEP_COST;
       if (nextScore >= (gScores.get(nextKey) ?? Infinity)) continue;
       const candidate = {
         center: { x: nextX / ROUTE_GRID_SCALE, y: nextY / ROUTE_GRID_SCALE },
@@ -1022,6 +1025,35 @@ function buildTrailerWallObstacles(trailer) {
     height: wallThickness,
     rotation: trailer.rotation
   });
+
+  const desiredOpeningWidth = Math.min(TRAILER_OPENING_WIDTH, trailer.width - wallThickness * 0.5);
+  const openingWidth = Math.max(desiredOpeningWidth, 0);
+  const cappedOpeningWidth = Math.min(openingWidth, trailer.width);
+  const remainingWidth = Math.max(0, trailer.width - cappedOpeningWidth);
+  const bottomSegmentWidth = remainingWidth / 2;
+  const bottomY = halfHeight - wallThickness / 2;
+
+  if (bottomSegmentWidth > 0) {
+    const bottomSegments = [
+      {
+        x: -(cappedOpeningWidth / 2 + bottomSegmentWidth / 2),
+        y: bottomY
+      },
+      {
+        x: cappedOpeningWidth / 2 + bottomSegmentWidth / 2,
+        y: bottomY
+      }
+    ];
+
+    bottomSegments.forEach(offset => {
+      walls.push({
+        center: transformTrailerLocalPoint(trailer, offset),
+        width: bottomSegmentWidth,
+        height: wallThickness,
+        rotation: trailer.rotation
+      });
+    });
+  }
 
   return walls;
 }
@@ -1835,6 +1867,7 @@ function SimulatorV2() {
           rotation: bot.rotation
         };
 
+        const maxCornerRadius = Math.hypot(bot.width, bot.height) / 2;
         const segments = frames.reduce((acc, frame) => {
           const previous = acc.length ? acc[acc.length - 1].to : startState;
           const distanceX = frame.center.x - previous.center.x;
@@ -1843,12 +1876,22 @@ function SimulatorV2() {
           if (Math.abs(distanceX) < 1e-4 && Math.abs(distanceY) < 1e-4 && Math.abs(rotationDelta) < 1e-2) {
             return acc;
           }
+
+          const linearDistance = Math.hypot(distanceX, distanceY);
+          const rotationDistance = Math.abs(degToRad(rotationDelta)) * maxCornerRadius;
+          const travelDistance = Math.max(linearDistance, rotationDistance);
+          const durationMs =
+            travelDistance > 0
+              ? Math.max((travelDistance / CENTER_MOVEMENT_SPEED) * 1000, FRAME_DURATION_MS)
+              : FRAME_DURATION_MS;
+
           acc.push({
             from: previous,
             to: {
               center: { ...frame.center },
               rotation: frame.rotation
-            }
+            },
+            duration: durationMs
           });
           return acc;
         }, []);
@@ -1860,6 +1903,7 @@ function SimulatorV2() {
           }
 
           const segment = segments[segmentIndex];
+          const segmentDuration = Math.max(segment.duration ?? FRAME_DURATION_MS, FRAME_DURATION_MS);
           let startTimestamp = null;
 
           const step = timestamp => {
@@ -1867,7 +1911,7 @@ function SimulatorV2() {
               startTimestamp = timestamp;
             }
             const elapsed = timestamp - startTimestamp;
-            const progress = Math.min(1, elapsed / FRAME_DURATION_MS);
+            const progress = segmentDuration > 0 ? Math.min(1, elapsed / segmentDuration) : 1;
             const nextCenter = {
               x: segment.from.center.x + (segment.to.center.x - segment.from.center.x) * progress,
               y: segment.from.center.y + (segment.to.center.y - segment.from.center.y) * progress
@@ -1894,6 +1938,8 @@ function SimulatorV2() {
             }
           };
 
+          const initialTimestamp = performance.now();
+          step(initialTimestamp);
           const handle = window.requestAnimationFrame(step);
           animationHandlesRef.current.push({ type: "frame", id: handle });
         };
