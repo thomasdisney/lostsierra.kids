@@ -196,6 +196,36 @@ function snapPointToRouteGrid(point) {
   };
 }
 
+function clonePoint(point) {
+  if (!point) return null;
+  return { x: point.x, y: point.y };
+}
+
+function rotatePointAround(point, origin, angle) {
+  if (!point) return null;
+  if (!origin || Math.abs(angle) < 1e-9) {
+    return clonePoint(point);
+  }
+  const radians = degToRad(angle);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const dx = point.x - origin.x;
+  const dy = point.y - origin.y;
+  return {
+    x: origin.x + dx * cos - dy * sin,
+    y: origin.y + dx * sin + dy * cos
+  };
+}
+
+function rotateRectAround(rect, origin, angle) {
+  if (!rect) return null;
+  return {
+    ...rect,
+    center: rotatePointAround(rect.center, origin, angle) ?? { ...rect.center },
+    rotation: normalizeAngle((rect.rotation ?? 0) + angle)
+  };
+}
+
 function pointsAreClose(a, b, threshold = 0.6) {
   return Math.hypot(a.x - b.x, a.y - b.y) <= threshold;
 }
@@ -439,24 +469,63 @@ function buildPlanningObstacles(slipbots, parkingSlots, movingBotId, allowedPark
 }
 
 function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
-  const obstacles = buildPlanningObstacles(
-    slipbots,
-    parkingSlots,
-    bot.id,
-    options.allowedParkingId ?? null
-  );
-  let trailerWaypoints = [];
-
   const attemptDiagnostics = {
     botId: bot.id,
     goal: { center: { ...goal.center }, rotation: goal.rotation }
   };
 
-  if (options.includeTrailer && options.trailer) {
-    obstacles.push(...buildTrailerWallObstacles(options.trailer));
-    const { insideWaypoint, outsideWaypoint } = computeTrailerExitWaypoints(options.trailer);
-    const startInside = pointInRectangle(options.trailer, bot.center);
-    const goalInside = pointInRectangle(options.trailer, goal.center);
+  const includeTrailer = Boolean(options.includeTrailer && options.trailer);
+  const trailerRotationAdjustment = includeTrailer
+    ? smallestAngleDelta(alignToRightAngle(options.trailer.rotation), options.trailer.rotation)
+    : 0;
+  const hasRotationAdjustment = includeTrailer && Math.abs(trailerRotationAdjustment) > 1e-3;
+  const rotationPivot = hasRotationAdjustment ? options.trailer.center : null;
+
+  const adjustPointForPlanning = point =>
+    rotatePointAround(point, rotationPivot, hasRotationAdjustment ? trailerRotationAdjustment : 0) ?? clonePoint(point);
+  const adjustAngleForPlanning = angle =>
+    normalizeAngle((angle ?? 0) + (hasRotationAdjustment ? trailerRotationAdjustment : 0));
+  const restorePointFromPlanning = point =>
+    rotatePointAround(point, rotationPivot, hasRotationAdjustment ? -trailerRotationAdjustment : 0) ?? clonePoint(point);
+  const restoreAngleFromPlanning = angle =>
+    normalizeAngle((angle ?? 0) - (hasRotationAdjustment ? trailerRotationAdjustment : 0));
+
+  const planningBot = {
+    ...bot,
+    center: adjustPointForPlanning(bot.center),
+    rotation: adjustAngleForPlanning(bot.rotation)
+  };
+  const planningGoal = {
+    center: adjustPointForPlanning(goal.center),
+    rotation: adjustAngleForPlanning(goal.rotation ?? 0)
+  };
+  const planningSlipbots = slipbots.map(item => ({
+    ...item,
+    center: adjustPointForPlanning(item.center),
+    rotation: adjustAngleForPlanning(item.rotation)
+  }));
+  const planningParkingSlots = parkingSlots.map(slot => ({
+    ...slot,
+    center: adjustPointForPlanning(slot.center),
+    rotation: adjustAngleForPlanning(slot.rotation)
+  }));
+  const planningTrailer = includeTrailer
+    ? { ...options.trailer, rotation: adjustAngleForPlanning(options.trailer.rotation) }
+    : null;
+
+  const obstacles = buildPlanningObstacles(
+    planningSlipbots,
+    planningParkingSlots,
+    bot.id,
+    options.allowedParkingId ?? null
+  );
+  let trailerWaypoints = [];
+
+  if (includeTrailer && planningTrailer) {
+    obstacles.push(...buildTrailerWallObstacles(planningTrailer));
+    const { insideWaypoint, outsideWaypoint } = computeTrailerExitWaypoints(planningTrailer);
+    const startInside = pointInRectangle(planningTrailer, planningBot.center);
+    const goalInside = pointInRectangle(planningTrailer, planningGoal.center);
 
     const waypoints = [];
     const pushWaypoint = waypoint => {
@@ -475,8 +544,8 @@ function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
     if (startInside) {
       const needsInsideStep =
         insideWaypoint &&
-        (!pointsAreClose(bot.center, insideWaypoint.center) ||
-          Math.abs(smallestAngleDelta(bot.rotation, insideWaypoint.rotation)) > 0.5);
+        (!pointsAreClose(planningBot.center, insideWaypoint.center) ||
+          Math.abs(smallestAngleDelta(planningBot.rotation, insideWaypoint.rotation)) > 0.5);
       if (needsInsideStep) {
         pushWaypoint(insideWaypoint);
       }
@@ -488,8 +557,8 @@ function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
       }
       const needsInsideArrival =
         insideWaypoint &&
-        (!pointsAreClose(goal.center, insideWaypoint.center) ||
-          Math.abs(smallestAngleDelta(goal.rotation ?? 0, insideWaypoint.rotation)) > 0.5);
+        (!pointsAreClose(planningGoal.center, insideWaypoint.center) ||
+          Math.abs(smallestAngleDelta(planningGoal.rotation ?? 0, insideWaypoint.rotation)) > 0.5);
       if (needsInsideArrival) {
         pushWaypoint(insideWaypoint);
       }
@@ -498,16 +567,22 @@ function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
     trailerWaypoints = waypoints;
   }
 
-  const sequence = [...trailerWaypoints, { center: { ...goal.center }, rotation: goal.rotation }];
+  const sequence = [
+    ...trailerWaypoints,
+    { center: { ...planningGoal.center }, rotation: planningGoal.rotation }
+  ];
 
   const combinedFrames = [];
   const combinedPoints = [];
-  let currentState = { center: { ...bot.center }, rotation: bot.rotation };
+  let planningCurrentState = {
+    center: { ...planningBot.center },
+    rotation: planningBot.rotation
+  };
 
   for (const waypoint of sequence) {
     const routeDiagnostics = { botId: bot.id };
     const route = planRoute(
-      { center: currentState.center, rotation: currentState.rotation },
+      { center: planningCurrentState.center, rotation: planningCurrentState.rotation },
       { center: waypoint.center, rotation: waypoint.rotation },
       bot.width,
       bot.height,
@@ -519,15 +594,34 @@ function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
         success: false,
         diagnostics: {
           ...attemptDiagnostics,
-          collision: routeDiagnostics.collision ?? null,
-          boundsViolation: routeDiagnostics.boundsViolation ?? null,
-          failedWaypoint: { center: { ...waypoint.center }, rotation: waypoint.rotation },
-          fromState: { center: { ...currentState.center }, rotation: currentState.rotation }
+          collision: routeDiagnostics.collision
+            ? {
+                candidate: rotateRectAround(routeDiagnostics.collision.candidate, rotationPivot, -trailerRotationAdjustment),
+                obstacle: rotateRectAround(routeDiagnostics.collision.obstacle, rotationPivot, -trailerRotationAdjustment)
+              }
+            : null,
+          boundsViolation: routeDiagnostics.boundsViolation
+            ? {
+                candidate: rotateRectAround(routeDiagnostics.boundsViolation.candidate, rotationPivot, -trailerRotationAdjustment),
+                clampedCenter: restorePointFromPlanning(routeDiagnostics.boundsViolation.clampedCenter)
+              }
+            : null,
+          failedWaypoint: {
+            center: restorePointFromPlanning(waypoint.center),
+            rotation: restoreAngleFromPlanning(waypoint.rotation)
+          },
+          fromState: {
+            center: restorePointFromPlanning(planningCurrentState.center),
+            rotation: restoreAngleFromPlanning(planningCurrentState.rotation)
+          }
         }
       };
     }
 
-    const frames = buildFramesFromPath(route, currentState.rotation, waypoint.rotation);
+    const frames = buildFramesFromPath(route, planningCurrentState.rotation, waypoint.rotation).map(frame => ({
+      center: restorePointFromPlanning(frame.center),
+      rotation: restoreAngleFromPlanning(frame.rotation)
+    }));
     if (frames.length) {
       if (combinedFrames.length) {
         combinedFrames.push(...frames.slice(1));
@@ -536,10 +630,10 @@ function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
       }
     }
 
-    const points = route.map(state => ({
-      x: state.x / ROUTE_GRID_SCALE,
-      y: state.y / ROUTE_GRID_SCALE
-    }));
+    const points = route
+      .map(state => ({ x: state.x / ROUTE_GRID_SCALE, y: state.y / ROUTE_GRID_SCALE }))
+      .map(point => restorePointFromPlanning(point))
+      .filter(Boolean);
     if (points.length) {
       if (combinedPoints.length) {
         combinedPoints.push(...points.slice(1));
@@ -548,7 +642,7 @@ function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
       }
     }
 
-    currentState = { center: { ...waypoint.center }, rotation: waypoint.rotation };
+    planningCurrentState = { center: { ...waypoint.center }, rotation: waypoint.rotation };
   }
 
   return { success: true, frames: combinedFrames, points: combinedPoints };
