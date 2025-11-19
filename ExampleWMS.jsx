@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 function notifyClerk(item) {
   console.log(`Order part ${item.part_number} up to ${item.max_qty}`);
@@ -13,6 +14,7 @@ const initialFormState = {
 };
 
 function ExampleWMS() {
+  const navigate = useNavigate();
   const [inventory, setInventory] = useState([]);
   const [formData, setFormData] = useState(initialFormState);
   const [loading, setLoading] = useState(false);
@@ -112,6 +114,13 @@ function ExampleWMS() {
 
   return (
     <div className="p-6 space-y-6">
+      <button
+        type="button"
+        onClick={() => navigate("/")}
+        className="text-sm text-blue-200 hover:text-white transition"
+      >
+        ← Back to home
+      </button>
       <h1 className="text-3xl font-bold">Example Warehouse Management</h1>
 
       {lowStockItems.length > 0 && (

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./SimulatorV2.css";
 
 const GRID_WIDTH = 200;
@@ -1374,6 +1375,7 @@ function getPointerPosition(event, canvas) {
 }
 
 function SimulatorV2() {
+  const navigate = useNavigate();
   const canvasRef = useRef(null);
   const interactionRef = useRef(null);
 
@@ -2310,6 +2312,11 @@ function SimulatorV2() {
   return (
     <div className="simulator-app">
       <header className="simulator-header">
+        <div className="simulator-nav">
+          <button type="button" className="simulator-back" onClick={() => navigate("/")}>
+            ← Back to home
+          </button>
+        </div>
         <h1>SlipBot Layout Sandbox</h1>
         <p>
           Drag any asset to move it. Hold <strong>Shift</strong> (or use the right mouse button) while
