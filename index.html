@@ -341,17 +341,16 @@
     .leader-card img {
       width: 100%;
       border-radius: 18px;
-      aspect-ratio: 4 / 5;
-      height: auto;
+      height: clamp(320px, 38vw, 380px);
       object-fit: cover;
       object-position: center top;
       filter: saturate(1.05);
     }
 
     .leader-card img.mahala-photo {
-      object-position: center 36%;
-      transform: scale(1.15);
-      transform-origin: center 38%;
+      object-position: 50% 36%;
+      transform: scale(1.22);
+      transform-origin: center 30%;
     }
 
     .leader-card h3 {
@@ -854,12 +853,9 @@
       <div class="gallery">
         <div>
           <p>Explore the moments our families share together—from weekly playgroups to hands-on art and nature lessons. The gallery below pulls directly from our shared Google Drive folder, so it will stay up to date as we add more photos.</p>
-          <div class="cta-group" style="margin-top: 1rem;">
-            <a id="gallery-drive-link" class="btn btn-primary" href="https://drive.google.com/drive/folders/1Wzl7dqFkt-uLJxx4GL5lYU1sV4kKIQoj?usp=sharing" target="_blank" rel="noopener">Open Google Drive Folder</a>
-          </div>
         </div>
         <div class="gallery-embed" data-drive-folder-id="1Wzl7dqFkt-uLJxx4GL5lYU1sV4kKIQoj">
-          <iframe title="Lost Sierra Kids photo gallery" loading="lazy" allow="fullscreen"></iframe>
+          <iframe title="Lost Sierra Kids photo gallery" loading="lazy" allow="fullscreen" src="https://drive.google.com/embeddedfolderview?id=1Wzl7dqFkt-uLJxx4GL5lYU1sV4kKIQoj#grid"></iframe>
         </div>
       </div>
     </section>
@@ -983,17 +979,12 @@
     if (galleryEmbed) {
       const folderId = galleryEmbed.dataset.driveFolderId;
       const iframe = galleryEmbed.querySelector('iframe');
-      const driveLink = document.getElementById('gallery-drive-link');
 
       if (folderId) {
         const embedUrl = `https://drive.google.com/embeddedfolderview?id=${encodeURIComponent(folderId)}#grid`;
 
         if (iframe) {
           iframe.src = embedUrl;
-        }
-
-        if (driveLink) {
-          driveLink.href = `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}?usp=sharing`;
         }
       }
     }
