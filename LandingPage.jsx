@@ -17,10 +17,10 @@ function LandingPage() {
         <a href="https://marsrec.com" className="link-btn">Martian Recreation Company</a>
       </div>
       <button
-        onClick={() => navigate("/dashboard")}
+        onClick={() => navigate("/example-wms")}
         className="mt-8 inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
       >
-        submit a ticket
+        example WMS
       </button>
     </div>
   );
