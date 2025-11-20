@@ -41,7 +41,7 @@
 .toolbar {
   grid-column: 1 / -1;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   padding: 12px;
   background: rgba(17, 24, 39, 0.9);
@@ -76,45 +76,6 @@
   background: #0ea5e9;
   color: #0b1220;
   border-color: #38bdf8;
-}
-
-.controls {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.controls label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #cbd5e1;
-}
-
-.controls input[type="range"] {
-  accent-color: #38bdf8;
-}
-
-.controls .chip {
-  background: rgba(56, 189, 248, 0.12);
-  color: #38bdf8;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  font-size: 12px;
-}
-
-.file-input {
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
-}
-
-.file-input input[type="file"] {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 
 .workspace {
@@ -257,6 +218,12 @@
 .obstacle-label {
   font-size: 6px;
   fill: #fca5a5;
+}
+
+.parking-label {
+  font-size: 7px;
+  fill: #cbd5e1;
+  opacity: 0.6;
 }
 
 .link {
