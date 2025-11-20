@@ -28,9 +28,26 @@ const setupPromise = (async () => {
       part_number text NOT NULL REFERENCES inventory(part_number) ON DELETE CASCADE,
       description text NOT NULL,
       note text,
-      status text NOT NULL CHECK (status IN ('open', 'sent', 'completed')) DEFAULT 'open',
+      request_type text NOT NULL CHECK (request_type IN ('restock', 'adjustment')) DEFAULT 'restock',
+      requested_qty integer,
+      status text NOT NULL CHECK (status IN ('open', 'sent', 'completed', 'pending', 'approved', 'denied')) DEFAULT 'open',
       created_at timestamptz NOT NULL DEFAULT now()
     );
+  `;
+
+  await sql`ALTER TABLE order_queue ADD COLUMN IF NOT EXISTS request_type text DEFAULT 'restock';`;
+  await sql`ALTER TABLE order_queue ADD COLUMN IF NOT EXISTS requested_qty integer;`;
+  await sql`ALTER TABLE order_queue DROP CONSTRAINT IF EXISTS order_queue_status_check;`;
+  await sql`ALTER TABLE order_queue DROP CONSTRAINT IF EXISTS order_queue_request_type_check;`;
+  await sql`
+    ALTER TABLE order_queue
+    ADD CONSTRAINT order_queue_status_check
+    CHECK (status IN ('open', 'sent', 'completed', 'pending', 'approved', 'denied'));
+  `;
+  await sql`
+    ALTER TABLE order_queue
+    ADD CONSTRAINT order_queue_request_type_check
+    CHECK (request_type IN ('restock', 'adjustment'));
   `;
 
   await Promise.all([
@@ -80,9 +97,9 @@ async function fetchInventory() {
 
 async function fetchOrderQueue() {
   const rows = await sql`
-    SELECT id, part_number, description, note, status, created_at
+    SELECT id, part_number, description, note, status, request_type, requested_qty, created_at
     FROM order_queue
-    WHERE status != 'completed'
+    WHERE status NOT IN ('completed', 'approved', 'denied')
     ORDER BY created_at ASC;
   `;
   return rows;
@@ -103,6 +120,64 @@ async function upsertItem(item) {
     SELECT part_number, description, current_qty, min_qty, max_qty
     FROM inventory
     WHERE part_number = ${item.part_number}
+    LIMIT 1;
+  `;
+
+  return rows[0];
+}
+
+async function renameItem(body) {
+  const old_part_number = String(body.old_part_number || "").trim();
+  const normalized = normalizeItem(body);
+
+  if (!old_part_number) {
+    return { status: 400, error: "old_part_number is required for renaming" };
+  }
+
+  if (normalized.error) {
+    return { status: 400, error: normalized.error };
+  }
+
+  const existing = await sql`
+    SELECT part_number FROM inventory WHERE part_number = ${old_part_number} LIMIT 1;
+  `;
+
+  if (existing.length === 0) {
+    return { status: 404, error: "Original part not found" };
+  }
+
+  if (old_part_number !== normalized.part_number) {
+    const conflict = await sql`
+      SELECT part_number FROM inventory WHERE part_number = ${normalized.part_number} LIMIT 1;
+    `;
+    if (conflict.length > 0) {
+      return { status: 409, error: "Another part already exists with that part number" };
+    }
+  }
+
+  await sql.begin(async (tx) => {
+    await tx`
+      UPDATE order_queue
+      SET part_number = ${normalized.part_number},
+          description = ${normalized.description}
+      WHERE part_number = ${old_part_number};
+    `;
+
+    await tx`
+      UPDATE inventory
+      SET part_number = ${normalized.part_number},
+          description = ${normalized.description},
+          current_qty = ${normalized.current_qty},
+          min_qty = ${normalized.min_qty},
+          max_qty = ${normalized.max_qty}
+      WHERE part_number = ${old_part_number};
+    `;
+  });
+
+  const rows = await sql`
+    SELECT part_number, description, current_qty, min_qty, max_qty
+    FROM inventory
+    WHERE part_number = ${normalized.part_number}
     LIMIT 1;
   `;
 
@@ -154,9 +229,9 @@ async function consumeInventory(body) {
 
     if (existing.length === 0) {
       const inserted = await sql`
-        INSERT INTO order_queue (part_number, description, note, status)
-        VALUES (${part_number}, ${item.description}, ${note}, 'open')
-        RETURNING id, part_number, description, note, status, created_at;
+        INSERT INTO order_queue (part_number, description, note, status, request_type)
+        VALUES (${part_number}, ${item.description}, ${note}, 'open', 'restock')
+        RETURNING id, part_number, description, note, status, request_type, requested_qty, created_at;
       `;
       createdOrder = inserted[0];
     }
@@ -224,6 +299,8 @@ async function requestAdjustment(body) {
   const part_number = String(body.part_number || "").trim();
   const requested_qty = Number(body.requested_qty);
   const reason = String(body.reason || "").trim();
+  const request_type = String(body.request_type || "adjustment").trim();
+  const normalizedRequestType = request_type === "restock" ? "restock" : "adjustment";
 
   if (!part_number || Number.isNaN(requested_qty)) {
     return {
@@ -250,9 +327,11 @@ async function requestAdjustment(body) {
   }
 
   const inserted = await sql`
-    INSERT INTO order_queue (part_number, description, note, status)
-    VALUES (${part_number}, ${item.description}, ${noteDetails.join(" | ")}, 'open')
-    RETURNING id, part_number, description, note, status, created_at;
+    INSERT INTO order_queue (part_number, description, note, status, request_type, requested_qty)
+    VALUES (${part_number}, ${item.description}, ${noteDetails.join(" | ")}, ${
+    normalizedRequestType === "restock" ? "open" : "pending"
+  }, ${normalizedRequestType}, ${requested_qty})
+    RETURNING id, part_number, description, note, status, request_type, requested_qty, created_at;
   `;
 
   return { order: inserted[0] };
@@ -267,8 +346,8 @@ async function sendOrder(part_number) {
   const rows = await sql`
     UPDATE order_queue
     SET status = 'sent'
-    WHERE part_number = ${trimmed} AND status = 'open'
-    RETURNING id, part_number, description, note, status, created_at;
+    WHERE part_number = ${trimmed} AND status = 'open' AND request_type = 'restock'
+    RETURNING id, part_number, description, note, status, request_type, requested_qty, created_at;
   `;
 
   if (rows.length === 0) {
@@ -304,6 +383,73 @@ async function reorderToMax(part_number) {
   `;
 
   return { item: updated[0] };
+}
+
+async function approveAdjustment(body) {
+  const id = Number(body.id);
+  if (!id) {
+    return { status: 400, error: "Adjustment id is required" };
+  }
+
+  const rows = await sql`
+    SELECT id, part_number, requested_qty
+    FROM order_queue
+    WHERE id = ${id} AND request_type = 'adjustment'
+    LIMIT 1;
+  `;
+
+  const order = rows[0];
+  if (!order) {
+    return { status: 404, error: "Adjustment request not found" };
+  }
+
+  if (Number.isNaN(Number(order.requested_qty))) {
+    return { status: 400, error: "Adjustment request is missing a quantity" };
+  }
+
+  const updated = await sql.begin(async (tx) => {
+    const updatedInventory = await tx`
+      UPDATE inventory
+      SET current_qty = ${order.requested_qty}
+      WHERE part_number = ${order.part_number}
+      RETURNING part_number, description, current_qty, min_qty, max_qty;
+    `;
+
+    const updatedOrder = await tx`
+      UPDATE order_queue
+      SET status = 'approved'
+      WHERE id = ${id}
+      RETURNING id, part_number, description, note, status, request_type, requested_qty, created_at;
+    `;
+
+    return { inventory: updatedInventory[0], order: updatedOrder[0] };
+  });
+
+  return updated;
+}
+
+async function denyAdjustment(body) {
+  const id = Number(body.id);
+  const decision_note = String(body.decision_note || "").trim();
+
+  if (!id) {
+    return { status: 400, error: "Adjustment id is required" };
+  }
+
+  const rows = await sql`
+    UPDATE order_queue
+    SET status = 'denied', note = COALESCE(note, '') || ${
+    decision_note ? ` | Decision: ${decision_note}` : ""
+  }
+    WHERE id = ${id} AND request_type = 'adjustment'
+    RETURNING id, part_number, description, note, status, request_type, requested_qty, created_at;
+  `;
+
+  if (rows.length === 0) {
+    return { status: 404, error: "Adjustment request not found" };
+  }
+
+  return { order: rows[0] };
 }
 
 export default async function handler(req, res) {
@@ -356,6 +502,35 @@ export default async function handler(req, res) {
         }
         const orderQueue = await fetchOrderQueue();
         return res.status(200).json({ success: true, order: result.order, orderQueue });
+      }
+
+      if (action === "approve_adjustment") {
+        const result = await approveAdjustment(req.body || {});
+        if (result.error) {
+          return res.status(result.status || 400).json({ error: result.error });
+        }
+        const orderQueue = await fetchOrderQueue();
+        return res
+          .status(200)
+          .json({ success: true, item: result.inventory, order: result.order, orderQueue });
+      }
+
+      if (action === "deny_adjustment") {
+        const result = await denyAdjustment(req.body || {});
+        if (result.error) {
+          return res.status(result.status || 400).json({ error: result.error });
+        }
+        const orderQueue = await fetchOrderQueue();
+        return res.status(200).json({ success: true, order: result.order, orderQueue });
+      }
+
+      if (action === "rename_part") {
+        const item = await renameItem(req.body || {});
+        if (item.error) {
+          return res.status(item.status || 400).json({ error: item.error });
+        }
+        const orderQueue = await fetchOrderQueue();
+        return res.status(200).json({ success: true, item, orderQueue });
       }
 
       const parsed = normalizeItem(req.body || {});
