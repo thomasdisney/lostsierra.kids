@@ -15,16 +15,13 @@ function LandingPage() {
         <button onClick={() => navigate("/dashboard")} className="link-btn">
           Deployment Tracker
         </button>
+        <button onClick={() => navigate("/example-wms")} className="link-btn">
+          example WMS
+        </button>
         <a href="https://tdisney.com" className="link-btn">SlipBot Simulator</a>
         <a href="https://x.com/TomGDisney" className="link-btn">me on X.com</a>
         <a href="https://marsrec.com" className="link-btn">Martian Recreation Company</a>
       </div>
-      <button
-        onClick={() => navigate("/example-wms")}
-        className="mt-8 inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
-      >
-        example WMS
-      </button>
     </div>
   );
 }
