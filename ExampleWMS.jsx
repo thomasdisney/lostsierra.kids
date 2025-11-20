@@ -28,10 +28,21 @@ function ExampleWMS() {
   const [openAdjustmentFor, setOpenAdjustmentFor] = useState(null);
   const [adjustmentForm, setAdjustmentForm] = useState(initialAdjustmentState);
   const [shipmentInputs, setShipmentInputs] = useState({});
+  const [inventoryManagerOpen, setInventoryManagerOpen] = useState(false);
+  const [inventoryEdits, setInventoryEdits] = useState([]);
 
   const lowStockItems = useMemo(
     () => inventory.filter((item) => Number(item.current_qty) <= Number(item.min_qty)),
     [inventory]
+  );
+
+  const pendingAdjustments = useMemo(
+    () =>
+      orderQueue.filter(
+        (request) =>
+          request.request_type === "adjustment" && (request.status === "pending" || !request.status)
+      ),
+    [orderQueue]
   );
 
   useEffect(() => {
@@ -73,6 +84,20 @@ function ExampleWMS() {
         : [];
       setInventory(nextInventory);
       setOrderQueue(Array.isArray(data.orderQueue) ? data.orderQueue : []);
+      setInventoryEdits([
+        ...nextInventory.map((item) => ({
+          ...item,
+          original_part_number: item.part_number,
+        })),
+        {
+          part_number: "",
+          description: "",
+          current_qty: "",
+          min_qty: "",
+          max_qty: "",
+          original_part_number: null,
+        },
+      ]);
       if (!consumeForm.part_number && nextInventory.length > 0) {
         setConsumeForm((prev) => ({ ...prev, part_number: nextInventory[0].part_number }));
       }
@@ -171,7 +196,10 @@ function ExampleWMS() {
 
   const ensureOrderExists = async (partNumber) => {
     const hasActiveOrder = orderQueue.some(
-      (order) => order.part_number === partNumber && order.status !== "completed"
+      (order) =>
+        order.part_number === partNumber &&
+        order.request_type === "restock" &&
+        order.status !== "completed"
     );
     if (hasActiveOrder) {
       return orderQueue;
@@ -190,6 +218,7 @@ function ExampleWMS() {
         part_number: partNumber,
         requested_qty: item.max_qty,
         reason: "Auto-created restock request for shipping.",
+        request_type: "restock",
       }),
     });
 
@@ -253,6 +282,127 @@ function ExampleWMS() {
       setOrderQueue(Array.isArray(body.orderQueue) ? body.orderQueue : queueAfterSend);
       setShipmentInputs((prev) => ({ ...prev, [partNumber]: "" }));
       await fetchInventory();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateInventoryEdit = (index, field, value) => {
+    setInventoryEdits((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const saveInventoryRow = async (rowIndex) => {
+    const row = inventoryEdits[rowIndex];
+    const payload = {
+      part_number: String(row.part_number || "").trim(),
+      description: String(row.description || "").trim(),
+      current_qty: Number(row.current_qty),
+      min_qty: Number(row.min_qty),
+      max_qty: Number(row.max_qty),
+    };
+
+    if (
+      !payload.part_number ||
+      !payload.description ||
+      Number.isNaN(payload.current_qty) ||
+      Number.isNaN(payload.min_qty) ||
+      Number.isNaN(payload.max_qty)
+    ) {
+      setError("Fill in part number, description, and numeric quantities for this row.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const isRename =
+      row.original_part_number && row.original_part_number !== payload.part_number;
+
+    try {
+      const response = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          isRename
+            ? { action: "rename_part", old_part_number: row.original_part_number, ...payload }
+            : payload
+        ),
+      });
+
+      if (!response.ok) {
+        const body = await safelyParseJson(response);
+        throw new Error(body.error || "Unable to save inventory changes");
+      }
+
+      await fetchInventory();
+      setInventoryManagerOpen(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addBlankInventoryRow = () => {
+    setInventoryEdits((prev) => [
+      ...prev,
+      {
+        part_number: "",
+        description: "",
+        current_qty: "",
+        min_qty: "",
+        max_qty: "",
+        original_part_number: null,
+      },
+    ]);
+  };
+
+  const handleApproveAdjustment = async (id) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve_adjustment", id }),
+      });
+
+      if (!response.ok) {
+        const body = await safelyParseJson(response);
+        throw new Error(body.error || "Unable to approve adjustment");
+      }
+
+      await fetchInventory();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDenyAdjustment = async (id) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deny_adjustment", id }),
+      });
+
+      if (!response.ok) {
+        const body = await safelyParseJson(response);
+        throw new Error(body.error || "Unable to deny adjustment");
+      }
+
+      const body = await safelyParseJson(response);
+      setOrderQueue(Array.isArray(body.orderQueue) ? body.orderQueue : orderQueue);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -512,6 +662,141 @@ function ExampleWMS() {
           </div>
         ) : (
           <div className="space-y-6">
+            <div className="flex flex-wrap gap-3 items-center justify-between">
+              <div className="space-y-1">
+                <h2 className="text-xl font-semibold text-slate-900">Shipping Clerk tools</h2>
+                <p className="text-sm text-slate-600">
+                  Add parts, edit inventory directly, and handle adjustment approvals alongside shipments.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInventoryManagerOpen(true)}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+                >
+                  Add Parts
+                </button>
+                {inventoryManagerOpen && (
+                  <button
+                    type="button"
+                    onClick={() => setInventoryManagerOpen(false)}
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Hide inventory editor
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {inventoryManagerOpen && (
+              <section className="bg-white/95 border border-slate-200 rounded-2xl shadow-lg p-6 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-semibold text-slate-900">Full inventory management</h3>
+                    <p className="text-sm text-slate-600">
+                      Edit existing records, rename parts, add new items, and adjust quantity, min, and max values.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addBlankInventoryRow}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+                  >
+                    Add another part row
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide text-xs">
+                      <tr>
+                        <th className="p-3">Part Number</th>
+                        <th className="p-3">Description</th>
+                        <th className="p-3">Quantity</th>
+                        <th className="p-3">Min</th>
+                        <th className="p-3">Max</th>
+                        <th className="p-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {inventoryEdits.map((row, index) => (
+                        <tr key={`${row.original_part_number || "new"}-${index}`} className="bg-white">
+                          <td className="p-3 align-top">
+                            <div className="space-y-1">
+                              <input
+                                type="text"
+                                value={row.part_number}
+                                onChange={(e) => updateInventoryEdit(index, "part_number", e.target.value)}
+                                placeholder="Part #"
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                              />
+                              {row.original_part_number && row.original_part_number !== row.part_number && (
+                                <p className="text-[11px] text-amber-600">Renaming from {row.original_part_number}</p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 align-top">
+                            <input
+                              type="text"
+                              value={row.description}
+                              onChange={(e) => updateInventoryEdit(index, "description", e.target.value)}
+                              placeholder="Description"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                            />
+                          </td>
+                          <td className="p-3 align-top">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={row.current_qty}
+                              onChange={(e) => updateInventoryEdit(index, "current_qty", e.target.value)}
+                              placeholder="Qty"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                            />
+                          </td>
+                          <td className="p-3 align-top">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={row.min_qty}
+                              onChange={(e) => updateInventoryEdit(index, "min_qty", e.target.value)}
+                              placeholder="Min"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                            />
+                          </td>
+                          <td className="p-3 align-top">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={row.max_qty}
+                              onChange={(e) => updateInventoryEdit(index, "max_qty", e.target.value)}
+                              placeholder="Max"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                            />
+                          </td>
+                          <td className="p-3 align-top">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveInventoryRow(index)}
+                                disabled={loading}
+                                className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:opacity-70"
+                              >
+                                Save row
+                              </button>
+                              {row.original_part_number && (
+                                <span className="text-[11px] text-slate-500">Existing part</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
             <section className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg">
               <div className="flex items-center justify-between px-6 py-4">
                 <div>
@@ -580,6 +865,53 @@ function ExampleWMS() {
 
             <section className="bg-white/95 border border-slate-200 rounded-2xl shadow-lg p-6 space-y-4">
               <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-slate-900">Approve adjustments</h2>
+                <span className="text-xs text-slate-500">Review requested quantity corrections.</span>
+              </div>
+              {pendingAdjustments.length === 0 ? (
+                <p className="text-sm text-slate-600">No adjustment requests need review.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {pendingAdjustments.map((request) => (
+                    <li key={request.id} className="py-3 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+                        <span>{request.part_number}</span>
+                        <span className="text-slate-500">·</span>
+                        <span className="font-normal text-slate-700">{request.description}</span>
+                        <span className="ml-auto rounded-full bg-indigo-50 px-2 py-1 text-[11px] uppercase tracking-wide text-indigo-700">
+                          Pending
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-sm text-slate-700">
+                        <span>Requested quantity: {request.requested_qty}</span>
+                        {request.note && <span className="text-slate-500">{request.note}</span>}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveAdjustment(request.id)}
+                          disabled={loading}
+                          className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-70"
+                        >
+                          Approve and update inventory
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDenyAdjustment(request.id)}
+                          disabled={loading}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-70"
+                        >
+                          Deny request
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="bg-white/95 border border-slate-200 rounded-2xl shadow-lg p-6 space-y-4">
+              <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold text-slate-900">Shipping clerk queue</h2>
                 <span className="text-xs text-slate-500">Includes low-stock and adjustment requests.</span>
               </div>
@@ -594,7 +926,7 @@ function ExampleWMS() {
                         <span className="text-slate-500">·</span>
                         <span className="font-normal text-slate-700">{request.description}</span>
                         <span className="ml-auto text-xs uppercase tracking-wide rounded-full px-2 py-1 bg-slate-100 text-slate-600">
-                          {request.status}
+                          {request.request_type === "adjustment" ? "Adjustment" : "Restock"} · {request.status}
                         </span>
                       </div>
                       <p className="text-sm text-slate-700">{request.note}</p>
