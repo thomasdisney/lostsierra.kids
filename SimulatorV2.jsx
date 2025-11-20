@@ -4,40 +4,32 @@ import "./SimulatorV2.css";
 
 const WORLD_WIDTH = 220; // feet
 const WORLD_HEIGHT = 120; // feet
-const MIN_SCALE = 3;
-const MAX_SCALE = 10;
 const DEFAULT_SCALE = 6;
 
 const ENTITY_TEMPLATES = {
   slipbot: {
     label: "SlipBot",
-    length: 18,
+    length: 17,
     width: 8,
     color: "#6dcff6"
   },
   trailer: {
     label: "Trailer",
-    length: 72,
-    width: 12,
+    length: 53,
+    width: 8.5,
     color: "#94a3b8"
-  },
-  forklift: {
-    label: "Forklift",
-    length: 15,
-    width: 7,
-    color: "#fbbf24"
-  },
-  cart: {
-    label: "Cart",
-    length: 14,
-    width: 8,
-    color: "#22c55e"
   }
 };
 
 const GRID_GAP = 5;
 const WAYPOINT_THRESHOLD = 0.75;
 const DEFAULT_SPEED = 24; // feet per second
+const PARKING_SPOTS = [
+  { id: "spot-a", center: { x: 60, y: 100 }, rotation: 0 },
+  { id: "spot-b", center: { x: 95, y: 100 }, rotation: 0 },
+  { id: "spot-c", center: { x: 130, y: 100 }, rotation: 0 }
+];
+const OBSTACLE_PADDING = 6;
 
 function toRadians(deg) {
   return (deg * Math.PI) / 180;
@@ -47,24 +39,31 @@ function createId(prefix) {
   return `${prefix}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
-function createEntity(type) {
+function createEntity(type, overrides = {}) {
   const template = ENTITY_TEMPLATES[type];
   if (!template) throw new Error(`Unknown entity type: ${type}`);
-  const center = {
-    x: WORLD_WIDTH / 2 + (Math.random() - 0.5) * 20,
-    y: WORLD_HEIGHT / 2 + (Math.random() - 0.5) * 20
-  };
+  const center =
+    overrides.center || {
+      x: WORLD_WIDTH / 2 + (Math.random() - 0.5) * 20,
+      y: WORLD_HEIGHT / 2 + (Math.random() - 0.5) * 20
+    };
   return {
     id: createId(type),
     type,
     label: template.label,
     center,
-    rotation: 0,
+    rotation: overrides.rotation ?? 0,
     length: template.length,
     width: template.width,
     color: template.color,
     route: [],
-    speed: DEFAULT_SPEED
+    speed: DEFAULT_SPEED,
+    parkingSpotId: overrides.parkingSpotId || null,
+    status: overrides.status || "idle",
+    attachedTo: null,
+    finalRotation: null,
+    trailerSlotIndex: null,
+    attachedOffset: null
   };
 }
 
@@ -160,6 +159,60 @@ function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+function rotateOffset(point, rotation) {
+  const radians = toRadians(rotation);
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos };
+}
+
+function worldPointFromLocal(localPoint, reference) {
+  const rotated = rotateOffset(localPoint, reference.rotation);
+  return { x: reference.center.x + rotated.x, y: reference.center.y + rotated.y };
+}
+
+function localPointFromWorld(worldPoint, reference) {
+  const translated = { x: worldPoint.x - reference.center.x, y: worldPoint.y - reference.center.y };
+  return rotateOffset(translated, -reference.rotation);
+}
+
+function lineIntersectsRect(a, b, rect, padding = 0) {
+  const expanded = {
+    x: rect.x - padding,
+    y: rect.y - padding,
+    length: rect.length + padding * 2,
+    width: rect.width + padding * 2
+  };
+  const left = Math.min(a.x, b.x);
+  const right = Math.max(a.x, b.x);
+  const top = Math.min(a.y, b.y);
+  const bottom = Math.max(a.y, b.y);
+  if (right < expanded.x || left > expanded.x + expanded.length || bottom < expanded.y || top > expanded.y + expanded.width) {
+    return false;
+  }
+
+  const x1 = a.x;
+  const y1 = a.y;
+  const x2 = b.x;
+  const y2 = b.y;
+
+  const intersects = (px, py, qx, qy) => {
+    const det = (qx - px) * (y1 - py) - (qy - py) * (x1 - px);
+    const det2 = (qx - px) * (y2 - py) - (qy - py) * (x2 - px);
+    return det * det2 <= 0;
+  };
+
+  const withinX = (expanded.x <= Math.max(x1, x2) && expanded.x + expanded.length >= Math.min(x1, x2));
+  const withinY = (expanded.y <= Math.max(y1, y2) && expanded.y + expanded.width >= Math.min(y1, y2));
+
+  const topEdge = intersects(expanded.x, expanded.y, expanded.x + expanded.length, expanded.y);
+  const bottomEdge = intersects(expanded.x, expanded.y + expanded.width, expanded.x + expanded.length, expanded.y + expanded.width);
+  const leftEdge = intersects(expanded.x, expanded.y, expanded.x, expanded.y + expanded.width);
+  const rightEdge = intersects(expanded.x + expanded.length, expanded.y, expanded.x + expanded.length, expanded.y + expanded.width);
+
+  return (withinX && withinY) && (topEdge || bottomEdge || leftEdge || rightEdge);
+}
+
 function SlipbotShape({ entity, isSelected }) {
   const { center, length, width, rotation, color } = entity;
   const bodyRadius = Math.min(2, width / 3);
@@ -216,46 +269,6 @@ function TrailerShape({ entity, isSelected }) {
   );
 }
 
-function ForkliftShape({ entity, isSelected }) {
-  const { center, length, width, rotation, color } = entity;
-  return (
-    <g transform={`translate(${center.x}, ${center.y}) rotate(${rotation})`}>
-      <rect
-        x={-length / 2}
-        y={-width / 2}
-        width={length}
-        height={width}
-        rx={1.2}
-        fill={color}
-        stroke={isSelected ? "#22d3ee" : "#0f172a"}
-        strokeWidth={0.6}
-      />
-      <rect x={length / 2 - 4} y={-width / 2 - 1} width={3.5} height={width + 2} fill="#1f2937" opacity={0.9} />
-      <line x1={-length / 4} y1={-width / 2} x2={-length / 4} y2={width / 2} stroke="#f8fafc" strokeDasharray="1 1" strokeWidth={0.8} />
-    </g>
-  );
-}
-
-function CartShape({ entity, isSelected }) {
-  const { center, length, width, rotation, color } = entity;
-  return (
-    <g transform={`translate(${center.x}, ${center.y}) rotate(${rotation})`}>
-      <rect
-        x={-length / 2}
-        y={-width / 2}
-        width={length}
-        height={width}
-        rx={1.6}
-        fill={color}
-        stroke={isSelected ? "#22d3ee" : "#0f172a"}
-        strokeWidth={0.6}
-        opacity={0.9}
-      />
-      <rect x={-length / 3} y={-width / 2 + 1} width={length / 1.5} height={width - 2} fill="#0f172a" opacity={0.18} />
-    </g>
-  );
-}
-
 function ObstacleShape({ obstacle }) {
   const { x, y, length, width } = obstacle;
   const areaCenter = { x: x + length / 2, y: y + width / 2 };
@@ -270,36 +283,83 @@ function ObstacleShape({ obstacle }) {
   );
 }
 
+function ParkingSpotShadow({ spot }) {
+  const length = ENTITY_TEMPLATES.slipbot.length + 1;
+  const width = ENTITY_TEMPLATES.slipbot.width + 1;
+  return (
+    <g transform={`translate(${spot.center.x}, ${spot.center.y}) rotate(${spot.rotation})`}>
+      <rect
+        x={-length / 2}
+        y={-width / 2}
+        width={length}
+        height={width}
+        fill="rgba(148,163,184,0.12)"
+        stroke="rgba(148,163,184,0.35)"
+        strokeDasharray="4 2"
+      />
+      <text x={0} y={width / 2 + 2.5} className="parking-label" textAnchor="middle">
+        Parking
+      </text>
+    </g>
+  );
+}
+
 const ENTITY_RENDERERS = {
   slipbot: SlipbotShape,
-  trailer: TrailerShape,
-  forklift: ForkliftShape,
-  cart: CartShape
+  trailer: TrailerShape
 };
+
+function createInitialEntities() {
+  const trailer = createEntity("trailer", { center: { x: 165, y: 60 } });
+  const slipbots = PARKING_SPOTS.map(spot =>
+    createEntity("slipbot", {
+      center: { ...spot.center },
+      rotation: spot.rotation,
+      parkingSpotId: spot.id,
+      status: "parked"
+    })
+  );
+  return [trailer, ...slipbots];
+}
 
 function SimulatorV2() {
   const navigate = useNavigate();
-  const [entities, setEntities] = useState(() => [createEntity("slipbot")]);
+  const [entities, setEntities] = useState(() => createInitialEntities());
   const [obstacles, setObstacles] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [drawMode, setDrawMode] = useState(false);
   const [draftObstacle, setDraftObstacle] = useState(null);
-  const [scale, setScale] = useState(DEFAULT_SCALE);
-  const [background, setBackground] = useState(null);
+  const scale = DEFAULT_SCALE;
   const svgRef = useRef(null);
   const dragRef = useRef(null);
   const lastFrameRef = useRef(null);
 
   const selectedEntity = useMemo(() => entities.find(e => e.id === selectedId) || null, [entities, selectedId]);
+  const trailer = useMemo(() => entities.find(e => e.type === "trailer") || null, [entities]);
 
-  const addEntity = useCallback(type => {
-    const newEntity = createEntity(type);
-    setEntities(prev => [...prev, newEntity]);
-    setSelectedId(newEntity.id);
+  const addSlipbot = useCallback(() => {
+    let created = null;
+    setEntities(prev => {
+      const usedSpots = new Set(prev.filter(e => e.type === "slipbot").map(e => e.parkingSpotId).filter(Boolean));
+      const availableSpot = PARKING_SPOTS.find(spot => !usedSpots.has(spot.id));
+      const fallbackCenter = { x: 40 + (prev.length % 5) * 24, y: 96 + (prev.length % 3) * 6 };
+      created = createEntity("slipbot", {
+        center: availableSpot ? { ...availableSpot.center } : fallbackCenter,
+        rotation: availableSpot?.rotation ?? 0,
+        parkingSpotId: availableSpot?.id || null,
+        status: availableSpot ? "parked" : "idle"
+      });
+      return [...prev, created];
+    });
+    if (created) setSelectedId(created.id);
   }, []);
 
   const removeEntity = useCallback(id => {
-    setEntities(prev => prev.filter(entity => entity.id !== id));
+    setEntities(prev => {
+      const target = prev.find(entity => entity.id === id);
+      if (!target || target.type === "trailer") return prev;
+      return prev.filter(entity => entity.id !== id);
+    });
     setSelectedId(current => (current === id ? null : current));
   }, []);
 
@@ -351,14 +411,159 @@ function SimulatorV2() {
     setEntities(prev => prev.map(entity => (entity.id === id ? { ...entity, ...updater(entity) } : entity)));
   }, []);
 
+  const isSegmentClear = useCallback(
+    (from, to) =>
+      !obstacles.some(obstacle =>
+        lineIntersectsRect(from, to, { x: obstacle.x, y: obstacle.y, length: obstacle.length, width: obstacle.width }, OBSTACLE_PADDING)
+      ),
+    [obstacles]
+  );
+
+  const findParkingSpot = useCallback(id => PARKING_SPOTS.find(spot => spot.id === id) || null, []);
+
+  const buildPath = useCallback(
+    (start, goal) => {
+      if (isSegmentClear(start, goal)) return [goal];
+
+      const candidates = [];
+      const detours = obstacles.map(obstacle => {
+        const top = obstacle.y - OBSTACLE_PADDING;
+        const bottom = obstacle.y + obstacle.width + OBSTACLE_PADDING;
+        const left = obstacle.x - OBSTACLE_PADDING;
+        const right = obstacle.x + obstacle.length + OBSTACLE_PADDING;
+        return [
+          [
+            { x: start.x, y: top },
+            { x: goal.x, y: top },
+            goal
+          ],
+          [
+            { x: start.x, y: bottom },
+            { x: goal.x, y: bottom },
+            goal
+          ],
+          [
+            { x: left, y: start.y },
+            { x: left, y: goal.y },
+            goal
+          ],
+          [
+            { x: right, y: start.y },
+            { x: right, y: goal.y },
+            goal
+          ]
+        ];
+      });
+
+      const flattened = detours.flat();
+      const pathIsClear = path =>
+        path.every((point, index) => {
+          if (index === 0) return true;
+          return isSegmentClear(path[index - 1], point);
+        });
+
+      flattened.forEach(path => {
+        if (!pathIsClear([start, ...path])) return;
+        const withStart = [start, ...path];
+        const cost = withStart.reduce((sum, point, index) => {
+          if (index === 0) return sum;
+          return sum + distance(point, withStart[index - 1]);
+        }, 0);
+        candidates.push({ cost, path: path });
+      });
+
+      if (!candidates.length) return [goal];
+
+      candidates.sort((a, b) => a.cost - b.cost);
+      return candidates[0].path;
+    },
+    [isSegmentClear, obstacles]
+  );
+
+  const withHeadings = useCallback((start, points) => {
+    const routed = [];
+    let cursor = start;
+    for (const point of points) {
+      const heading = Math.atan2(point.y - cursor.y, point.x - cursor.x);
+      routed.push({ ...point, heading });
+      cursor = point;
+    }
+    return routed;
+  }, []);
+
+  const computeTrailerSlots = useCallback(
+    trailerEntity => {
+      if (!trailerEntity) return [];
+      const spacing = ENTITY_TEMPLATES.slipbot.length;
+      const startOffset = -trailerEntity.length / 2 + spacing / 2 + 1;
+      return [0, 1, 2].map(index => ({
+        index,
+        point: worldPointFromLocal({ x: startOffset + spacing * index, y: 0 }, trailerEntity)
+      }));
+    },
+    []
+  );
+
+  const commandEnter = useCallback(() => {
+    if (!trailer) return;
+    const slots = computeTrailerSlots(trailer);
+    setEntities(prev => {
+      const slipbots = prev.filter(entity => entity.type === "slipbot");
+      const ordered = [...slipbots].sort((a, b) => (a.parkingSpotId || a.id).localeCompare(b.parkingSpotId || b.id));
+      return prev.map(entity => {
+        if (entity.type !== "slipbot") return entity;
+        const slotIndex = ordered.findIndex(item => item.id === entity.id);
+        const slot = slots[slotIndex] || slots[slots.length - 1];
+        if (!slot) return entity;
+        const path = buildPath(entity.center, slot.point);
+        const route = withHeadings(entity.center, path);
+        return {
+          ...entity,
+          route,
+          status: "entering",
+          trailerSlotIndex: slot.index,
+          finalRotation: trailer.rotation,
+          attachedTo: null,
+          attachedOffset: null
+        };
+      });
+    });
+  }, [buildPath, computeTrailerSlots, trailer, withHeadings]);
+
+  const commandExit = useCallback(() => {
+    setEntities(prev => {
+      return prev.map(entity => {
+        if (entity.type !== "slipbot") return entity;
+        const parking = findParkingSpot(entity.parkingSpotId);
+        if (!parking) return entity;
+        const startingPoint = entity.attachedTo && trailer && entity.attachedOffset
+          ? worldPointFromLocal(entity.attachedOffset, trailer)
+          : entity.center;
+        const path = buildPath(startingPoint, parking.center);
+        const route = withHeadings(startingPoint, path);
+        return {
+          ...entity,
+          route,
+          status: "exiting",
+          attachedTo: null,
+          attachedOffset: null,
+          finalRotation: parking.rotation,
+          trailerSlotIndex: null,
+          center: startingPoint
+        };
+      });
+    });
+  }, [buildPath, findParkingSpot, trailer, withHeadings]);
+
   const handleEntityMouseDown = (event, entity) => {
-    if (drawMode) return;
+    if (drawMode || entity.attachedTo) return;
     event.stopPropagation();
     setSelectedId(entity.id);
     const point = onMousePosition(event);
     if (!point) return;
     dragRef.current = {
       id: entity.id,
+      type: entity.type,
       offset: { x: point.x - entity.center.x, y: point.y - entity.center.y }
     };
   };
@@ -373,7 +578,9 @@ function SimulatorV2() {
     const point = onMousePosition(event);
     if (!point) return;
     setEntities(prev => {
-      return prev.map(entity => {
+      let translation = null;
+      let draggedEntity = null;
+      const updated = prev.map(entity => {
         if (entity.id !== dragState.id) return entity;
         const clampedCenter = clampToWorld(
           { x: point.x - dragState.offset.x, y: point.y - dragState.offset.y },
@@ -385,8 +592,21 @@ function SimulatorV2() {
         if (entityCollides(candidate, prev, obstacles, entity.id)) {
           return entity;
         }
+        translation = { x: clampedCenter.x - entity.center.x, y: clampedCenter.y - entity.center.y };
+        draggedEntity = candidate;
         return candidate;
       });
+
+      if (dragState.type === "trailer" && translation && (translation.x !== 0 || translation.y !== 0)) {
+        const trailerEntity = draggedEntity || prev.find(e => e.id === dragState.id);
+        return updated.map(entity => {
+          if (entity.attachedTo !== dragState.id || !entity.attachedOffset || !trailerEntity) return entity;
+          const nextCenter = worldPointFromLocal(entity.attachedOffset, trailerEntity);
+          return { ...entity, center: nextCenter, rotation: trailerEntity.rotation };
+        });
+      }
+
+      return updated;
     });
   };
 
@@ -395,28 +615,6 @@ function SimulatorV2() {
       handleObstacleFinish();
     }
     dragRef.current = null;
-  };
-
-  const handleBackgroundUpload = event => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => setBackground(e.target?.result || null);
-    reader.readAsDataURL(file);
-  };
-
-  const handleAddWaypoint = event => {
-    if (!selectedEntity) return;
-    if (!(event.metaKey || event.ctrlKey)) return;
-    const point = onMousePosition(event);
-    if (!point) return;
-    setEntities(prev =>
-      prev.map(entity =>
-        entity.id === selectedEntity.id
-          ? { ...entity, route: [...entity.route, { x: point.x, y: point.y }] }
-          : entity
-      )
-    );
   };
 
   const tick = useCallback(
@@ -428,10 +626,21 @@ function SimulatorV2() {
       lastFrameRef.current = timestamp;
       setEntities(prev =>
         prev.map(entity => {
-          if (!entity.route.length) return entity;
+          if (entity.attachedTo && trailer && entity.attachedOffset) {
+            const center = worldPointFromLocal(entity.attachedOffset, trailer);
+            return { ...entity, center, rotation: trailer.rotation, route: [] };
+          }
+
+          if (!entity.route.length) {
+            if (entity.finalRotation != null) {
+              return { ...entity, rotation: entity.finalRotation, finalRotation: null };
+            }
+            return entity;
+          }
+
           const target = entity.route[0];
           const step = entity.speed * delta;
-          const heading = Math.atan2(target.y - entity.center.y, target.x - entity.center.x);
+          const heading = target.heading ?? Math.atan2(target.y - entity.center.y, target.x - entity.center.x);
           const nextCenter = {
             x: entity.center.x + Math.cos(heading) * step,
             y: entity.center.y + Math.sin(heading) * step
@@ -439,20 +648,40 @@ function SimulatorV2() {
           const remaining = distance(entity.center, target);
           const newCenter = remaining <= step ? target : nextCenter;
           const desiredRotation = (heading * 180) / Math.PI;
-          const candidate = {
+          let candidate = {
             ...entity,
             center: clampToWorld(newCenter, entity.length, entity.width, desiredRotation),
             rotation: desiredRotation
           };
           if (entityCollides(candidate, prev, obstacles, entity.id)) {
-            return { ...entity, route: [] };
+            return { ...entity, route: [], status: "idle" };
           }
           const route = remaining <= WAYPOINT_THRESHOLD ? entity.route.slice(1) : entity.route;
-          return { ...candidate, route };
+          candidate = { ...candidate, route };
+
+          if (!candidate.route.length) {
+            if (candidate.finalRotation != null) {
+              candidate = { ...candidate, rotation: candidate.finalRotation, finalRotation: null };
+            }
+            if (candidate.status === "entering" && trailer) {
+              const offset = localPointFromWorld(candidate.center, trailer);
+              candidate = {
+                ...candidate,
+                status: "inTrailer",
+                attachedTo: trailer.id,
+                attachedOffset: offset,
+                rotation: trailer.rotation
+              };
+            } else if (candidate.status === "exiting") {
+              candidate = { ...candidate, status: candidate.parkingSpotId ? "parked" : "idle" };
+            }
+          }
+
+          return candidate;
         })
       );
     },
-    [obstacles]
+    [obstacles, trailer]
   );
 
   useEffect(() => {
@@ -465,6 +694,17 @@ function SimulatorV2() {
     return () => cancelAnimationFrame(frameId);
   }, [tick]);
 
+  useEffect(() => {
+    if (!trailer) return;
+    setEntities(prev =>
+      prev.map(entity => {
+        if (entity.attachedTo !== trailer.id || !entity.attachedOffset) return entity;
+        const center = worldPointFromLocal(entity.attachedOffset, trailer);
+        return { ...entity, center, rotation: trailer.rotation };
+      })
+    );
+  }, [trailer]);
+
   const renderEntities = entities.map(entity => {
     const Renderer = ENTITY_RENDERERS[entity.type];
     if (!Renderer) return null;
@@ -473,7 +713,7 @@ function SimulatorV2() {
         key={entity.id}
         className="draggable"
         onMouseDown={event => handleEntityMouseDown(event, entity)}
-        onDoubleClick={() => removeEntity(entity.id)}
+        onDoubleClick={entity.type === "slipbot" ? () => removeEntity(entity.id) : undefined}
       >
         <Renderer entity={entity} isSelected={selectedId === entity.id} />
       </g>
@@ -520,37 +760,17 @@ function SimulatorV2() {
 
       <section className="toolbar">
         <div className="button-group">
-          <button onClick={() => addEntity("slipbot")}>Add SlipBot</button>
-          <button onClick={() => addEntity("trailer")}>Add Trailer</button>
-          <button onClick={() => addEntity("forklift")}>Add Forklift</button>
-          <button onClick={() => addEntity("cart")}>Add Cart</button>
+          <button onClick={addSlipbot}>Add SlipBot</button>
           <button className={drawMode ? "active" : ""} onClick={() => setDrawMode(v => !v)}>
             {drawMode ? "Drawing…" : "Draw"}
           </button>
-        </div>
-        <div className="controls">
-          <label>
-            Scale
-            <input
-              type="range"
-              min={MIN_SCALE}
-              max={MAX_SCALE}
-              step={0.5}
-              value={scale}
-              onChange={e => setScale(Number(e.target.value))}
-            />
-            <span className="chip">{scale.toFixed(1)} px/ft</span>
-          </label>
-          <label className="file-input">
-            Upload Background
-            <input type="file" accept="image/*" onChange={handleBackgroundUpload} />
-          </label>
+          <button onClick={commandEnter}>Enter</button>
+          <button onClick={commandExit}>Exit</button>
         </div>
       </section>
 
       <section className="workspace">
         <div className="workspace-inner">
-          <div className="background" style={{ backgroundImage: background ? `url(${background})` : "none" }} />
           <svg
             ref={svgRef}
             className="world"
@@ -566,7 +786,6 @@ function SimulatorV2() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            onClick={handleAddWaypoint}
           >
             <defs>
               <pattern id="grid" width={GRID_GAP} height={GRID_GAP} patternUnits="userSpaceOnUse">
@@ -575,6 +794,9 @@ function SimulatorV2() {
             </defs>
             <rect x="0" y="0" width={WORLD_WIDTH} height={WORLD_HEIGHT} fill="url(#grid)" />
 
+            {PARKING_SPOTS.map(spot => (
+              <ParkingSpotShadow key={spot.id} spot={spot} />
+            ))}
             {renderRoutes}
             {obstacles.map(obstacle => (
               <ObstacleShape key={obstacle.id} obstacle={obstacle} />
@@ -637,7 +859,7 @@ function SimulatorV2() {
                   Clear Route
                 </button>
               </div>
-              <p className="hint">Ctrl/Cmd + click anywhere to add waypoints for automated movement.</p>
+              <p className="hint">Use Enter to load the trailer and Exit to return to parking.</p>
             </div>
           ) : (
             <p className="panel-body muted">Click an object to manage it.</p>
