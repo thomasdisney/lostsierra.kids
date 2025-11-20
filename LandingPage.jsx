@@ -16,10 +16,10 @@ function LandingPage() {
           Deployment Tracker
         </button>
         <button onClick={() => navigate("/example-wms")} className="link-btn">
-          example WMS
+          Example WMS
         </button>
         <a href="https://tdisney.com" className="link-btn">SlipBot Simulator</a>
-        <a href="https://x.com/TomGDisney" className="link-btn">me on X.com</a>
+        <a href="https://x.com/TomDisney" className="link-btn">X.COM</a>
         <a href="https://marsrec.com" className="link-btn">Martian Recreation Company</a>
       </div>
     </div>
