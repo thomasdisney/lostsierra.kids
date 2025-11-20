@@ -30,6 +30,7 @@ function ExampleWMS() {
   const [shipmentInputs, setShipmentInputs] = useState({});
   const [inventoryManagerOpen, setInventoryManagerOpen] = useState(false);
   const [inventoryEdits, setInventoryEdits] = useState([]);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   const lowStockItems = useMemo(
     () => inventory.filter((item) => Number(item.current_qty) <= Number(item.min_qty)),
@@ -443,7 +444,7 @@ function ExampleWMS() {
 
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Example Warehouse Management
+            On-site inventory Tool
           </h1>
           <p className="text-base text-slate-600 leading-relaxed">
             {viewMode === "user"
@@ -475,9 +476,6 @@ function ExampleWMS() {
             <section className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg p-6 space-y-5">
               <div className="flex flex-col gap-2">
                 <h2 className="text-xl font-semibold text-slate-900">Consume tool</h2>
-                <p className="text-sm text-slate-600">
-                  Submit consumption with the same validation as before, now organized in a single sentence.
-                </p>
               </div>
               <form onSubmit={handleConsumeSubmit} className="space-y-4">
                 <div className="flex flex-col gap-3">
@@ -543,121 +541,138 @@ function ExampleWMS() {
                   <h2 className="text-xl font-semibold text-slate-900">Audit tool</h2>
                   <p className="text-sm text-slate-600">Review the full inventory and request corrections.</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setAuditOpen((prev) => !prev)}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition ${
+                    auditOpen
+                      ? "border border-slate-200 text-slate-800 hover:bg-slate-50 bg-white"
+                      : "bg-indigo-500 text-white hover:bg-indigo-600"
+                  }`}
+                >
+                  {auditOpen ? "Hide audit tool" : "Complete audit"}
+                </button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide text-xs">
-                    <tr>
-                      <th className="p-4">Part Number</th>
-                      <th className="p-4">Description</th>
-                      <th className="p-4">Current Qty</th>
-                      <th className="p-4">Min</th>
-                      <th className="p-4">Max</th>
-                      <th className="p-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {inventory.map((item) => (
-                      <Fragment key={item.part_number}>
-                        <tr className="bg-white hover:bg-slate-50/60 transition">
-                          <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
-                          <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
-                          <td className="p-4 text-slate-900">{item.current_qty}</td>
-                          <td className="p-4 text-slate-900">{item.min_qty}</td>
-                          <td className="p-4 text-slate-900">{item.max_qty}</td>
-                          <td className="p-4">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenAdjustmentFor(item.part_number);
-                                setAdjustmentForm({
-                                  requested_qty: item.current_qty,
-                                  reason: "",
-                                });
-                              }}
-                              className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-600"
-                            >
-                              Request Adjustment
-                            </button>
-                          </td>
-                        </tr>
-                        {openAdjustmentFor === item.part_number && (
-                          <tr className="bg-slate-50">
-                            <td colSpan={6} className="p-4">
-                              <div className="grid gap-4 md:grid-cols-4 items-end">
-                                <div className="space-y-1">
-                                  <label className="text-xs font-semibold uppercase text-slate-500">Part</label>
-                                  <input
-                                    type="text"
-                                    value={`${item.part_number} — ${item.description}`}
-                                    disabled
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-xs font-semibold uppercase text-slate-500">Current quantity</label>
-                                  <input
-                                    type="text"
-                                    value={item.current_qty}
-                                    disabled
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-xs font-semibold uppercase text-slate-500">Correct quantity</label>
-                                  <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={adjustmentForm.requested_qty}
-                                    onChange={(e) =>
-                                      setAdjustmentForm((prev) => ({
-                                        ...prev,
-                                        requested_qty: e.target.value,
-                                      }))
-                                    }
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                                  />
-                                </div>
-                                <div className="space-y-1 md:col-span-1">
-                                  <label className="text-xs font-semibold uppercase text-slate-500">Reason</label>
-                                  <textarea
-                                    value={adjustmentForm.reason}
-                                    onChange={(e) =>
-                                      setAdjustmentForm((prev) => ({ ...prev, reason: e.target.value }))
-                                    }
-                                    rows={2}
-                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                                  />
-                                </div>
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-3">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRequestAdjustment(item.part_number)}
-                                  disabled={loading}
-                                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-70"
-                                >
-                                  Submit request
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenAdjustmentFor(null);
-                                    setAdjustmentForm(initialAdjustmentState);
-                                  }}
-                                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
+              {auditOpen ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide text-xs">
+                      <tr>
+                        <th className="p-4">Part Number</th>
+                        <th className="p-4">Description</th>
+                        <th className="p-4">Current Qty</th>
+                        <th className="p-4">Min</th>
+                        <th className="p-4">Max</th>
+                        <th className="p-4">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {inventory.map((item) => (
+                        <Fragment key={item.part_number}>
+                          <tr className="bg-white hover:bg-slate-50/60 transition">
+                            <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
+                            <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
+                            <td className="p-4 text-slate-900">{item.current_qty}</td>
+                            <td className="p-4 text-slate-900">{item.min_qty}</td>
+                            <td className="p-4 text-slate-900">{item.max_qty}</td>
+                            <td className="p-4">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenAdjustmentFor(item.part_number);
+                                  setAdjustmentForm({
+                                    requested_qty: item.current_qty,
+                                    reason: "",
+                                  });
+                                }}
+                                className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-600"
+                              >
+                                Request Adjustment
+                              </button>
                             </td>
                           </tr>
-                        )}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          {openAdjustmentFor === item.part_number && (
+                            <tr className="bg-slate-50">
+                              <td colSpan={6} className="p-4">
+                                <div className="grid gap-4 md:grid-cols-4 items-end">
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-semibold uppercase text-slate-500">Part</label>
+                                    <input
+                                      type="text"
+                                      value={`${item.part_number} — ${item.description}`}
+                                      disabled
+                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-semibold uppercase text-slate-500">Current quantity</label>
+                                    <input
+                                      type="text"
+                                      value={item.current_qty}
+                                      disabled
+                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-semibold uppercase text-slate-500">Correct quantity</label>
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={adjustmentForm.requested_qty}
+                                      onChange={(e) =>
+                                        setAdjustmentForm((prev) => ({
+                                          ...prev,
+                                          requested_qty: e.target.value,
+                                        }))
+                                      }
+                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                    />
+                                  </div>
+                                  <div className="space-y-1 md:col-span-1">
+                                    <label className="text-xs font-semibold uppercase text-slate-500">Reason</label>
+                                    <textarea
+                                      value={adjustmentForm.reason}
+                                      onChange={(e) =>
+                                        setAdjustmentForm((prev) => ({ ...prev, reason: e.target.value }))
+                                      }
+                                      rows={2}
+                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRequestAdjustment(item.part_number)}
+                                    disabled={loading}
+                                    className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-600 disabled:opacity-70"
+                                  >
+                                    Submit adjustment request
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenAdjustmentFor(null);
+                                      setAdjustmentForm(initialAdjustmentState);
+                                    }}
+                                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="px-6 pb-6 text-sm text-slate-600">
+                  Press "Complete audit" to review inventory and request corrections.
+                </div>
+              )}
             </section>
           </div>
         ) : (
@@ -872,40 +887,56 @@ function ExampleWMS() {
                 <p className="text-sm text-slate-600">No adjustment requests need review.</p>
               ) : (
                 <ul className="divide-y divide-slate-100">
-                  {pendingAdjustments.map((request) => (
-                    <li key={request.id} className="py-3 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
-                        <span>{request.part_number}</span>
-                        <span className="text-slate-500">·</span>
-                        <span className="font-normal text-slate-700">{request.description}</span>
-                        <span className="ml-auto rounded-full bg-indigo-50 px-2 py-1 text-[11px] uppercase tracking-wide text-indigo-700">
-                          Pending
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-3 text-sm text-slate-700">
-                        <span>Requested quantity: {request.requested_qty}</span>
-                        {request.note && <span className="text-slate-500">{request.note}</span>}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleApproveAdjustment(request.id)}
-                          disabled={loading}
-                          className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-70"
-                        >
-                          Approve and update inventory
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDenyAdjustment(request.id)}
-                          disabled={loading}
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-70"
-                        >
-                          Deny request
-                        </button>
-                      </div>
-                    </li>
-                  ))}
+                  {pendingAdjustments.map((request) => {
+                    const currentQty = findInventoryItem(request.part_number)?.current_qty;
+                    const parsedCurrent = Number(currentQty);
+                    const requestedQty = Number(request.requested_qty);
+                    const netChange =
+                      Number.isNaN(parsedCurrent) || Number.isNaN(requestedQty)
+                        ? null
+                        : requestedQty - parsedCurrent;
+
+                    return (
+                      <li key={request.id} className="py-3 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
+                          <span>{request.part_number}</span>
+                          <span className="text-slate-500">·</span>
+                          <span className="font-normal text-slate-700">{request.description}</span>
+                          <span className="ml-auto rounded-full bg-indigo-50 px-2 py-1 text-[11px] uppercase tracking-wide text-indigo-700">
+                            Pending
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-3 text-sm text-slate-700">
+                          <span>
+                            Current quantity: {Number.isNaN(parsedCurrent) ? "N/A" : parsedCurrent}
+                          </span>
+                          <span>New quantity: {Number.isNaN(requestedQty) ? "N/A" : requestedQty}</span>
+                          <span>
+                            Net change: {netChange === null ? "N/A" : `${netChange > 0 ? "+" : ""}${netChange}`}
+                          </span>
+                          {request.note && <span className="text-slate-500">{request.note}</span>}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveAdjustment(request.id)}
+                            disabled={loading}
+                            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-70"
+                          >
+                            Approve and update inventory
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDenyAdjustment(request.id)}
+                            disabled={loading}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-70"
+                          >
+                            Deny request
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>
@@ -919,19 +950,43 @@ function ExampleWMS() {
                 <p className="text-sm text-slate-600">No pending requests yet.</p>
               ) : (
                 <ul className="divide-y divide-slate-100">
-                  {orderQueue.map((request) => (
-                    <li key={`${request.part_number}-${request.id || request.created_at}`} className="py-3 flex flex-col gap-1">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                        <span>{request.part_number}</span>
-                        <span className="text-slate-500">·</span>
-                        <span className="font-normal text-slate-700">{request.description}</span>
-                        <span className="ml-auto text-xs uppercase tracking-wide rounded-full px-2 py-1 bg-slate-100 text-slate-600">
-                          {request.request_type === "adjustment" ? "Adjustment" : "Restock"} · {request.status}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-700">{request.note}</p>
-                    </li>
-                  ))}
+                  {orderQueue.map((request) => {
+                    const currentQty = findInventoryItem(request.part_number)?.current_qty;
+                    const parsedCurrent = Number(currentQty);
+                    const requestedQty = Number(request.requested_qty);
+                    const netChange =
+                      Number.isNaN(parsedCurrent) || Number.isNaN(requestedQty)
+                        ? null
+                        : requestedQty - parsedCurrent;
+
+                    return (
+                      <li
+                        key={`${request.part_number}-${request.id || request.created_at}`}
+                        className="py-3 flex flex-col gap-2"
+                      >
+                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                          <span>{request.part_number}</span>
+                          <span className="text-slate-500">·</span>
+                          <span className="font-normal text-slate-700">{request.description}</span>
+                          <span className="ml-auto text-xs uppercase tracking-wide rounded-full px-2 py-1 bg-slate-100 text-slate-600">
+                            {request.request_type === "adjustment" ? "Adjustment" : "Restock"} · {request.status}
+                          </span>
+                        </div>
+                        {request.request_type === "adjustment" && (
+                          <div className="flex flex-wrap gap-3 text-sm text-slate-700">
+                            <span>
+                              Current quantity: {Number.isNaN(parsedCurrent) ? "N/A" : parsedCurrent}
+                            </span>
+                            <span>New quantity: {Number.isNaN(requestedQty) ? "N/A" : requestedQty}</span>
+                            <span>
+                              Net change: {netChange === null ? "N/A" : `${netChange > 0 ? "+" : ""}${netChange}`}
+                            </span>
+                          </div>
+                        )}
+                        {request.note && <p className="text-sm text-slate-700">{request.note}</p>}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>
