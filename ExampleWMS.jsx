@@ -1,36 +1,37 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 function notifyClerk(item) {
   console.log(`Order part ${item.part_number} up to ${item.max_qty}`);
 }
 
-const initialFormState = {
+const initialConsumeState = {
   part_number: "",
-  description: "",
-  current_qty: "",
-  min_qty: "",
-  max_qty: "",
+  qty: "",
+  tfiTicket: "",
+  note: "",
+};
+
+const initialAdjustmentState = {
+  requested_qty: "",
+  reason: "",
 };
 
 function ExampleWMS() {
   const navigate = useNavigate();
   const [inventory, setInventory] = useState([]);
-  const [formData, setFormData] = useState(initialFormState);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState("user");
   const [orderQueue, setOrderQueue] = useState([]);
-  const [actionInputs, setActionInputs] = useState({});
+  const [consumeForm, setConsumeForm] = useState(initialConsumeState);
+  const [openAdjustmentFor, setOpenAdjustmentFor] = useState(null);
+  const [adjustmentForm, setAdjustmentForm] = useState(initialAdjustmentState);
+  const [shipmentInputs, setShipmentInputs] = useState({});
 
   const lowStockItems = useMemo(
     () => inventory.filter((item) => Number(item.current_qty) <= Number(item.min_qty)),
     [inventory]
-  );
-
-  const openOrders = useMemo(
-    () => orderQueue.filter((order) => order.status === "open"),
-    [orderQueue]
   );
 
   useEffect(() => {
@@ -40,6 +41,9 @@ function ExampleWMS() {
   useEffect(() => {
     lowStockItems.forEach((item) => notifyClerk(item));
   }, [lowStockItems]);
+
+  const findInventoryItem = (partNumber) =>
+    inventory.find((item) => item.part_number === partNumber);
 
   const safelyParseJson = async (response) => {
     try {
@@ -69,45 +73,9 @@ function ExampleWMS() {
         : [];
       setInventory(nextInventory);
       setOrderQueue(Array.isArray(data.orderQueue) ? data.orderQueue : []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    const payload = {
-      part_number: formData.part_number,
-      description: formData.description,
-      current_qty: Number(formData.current_qty),
-      min_qty: Number(formData.min_qty),
-      max_qty: Number(formData.max_qty),
-    };
-
-    try {
-      const response = await fetch("/api/inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const body = await safelyParseJson(response);
-        throw new Error(body.error || "Unable to save item");
+      if (!consumeForm.part_number && nextInventory.length > 0) {
+        setConsumeForm((prev) => ({ ...prev, part_number: nextInventory[0].part_number }));
       }
-
-      await fetchInventory();
-      setFormData(initialFormState);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -115,27 +83,15 @@ function ExampleWMS() {
     }
   };
 
-  const updateActionInputs = (partNumber, field, value) => {
-    setActionInputs((prev) => ({
-      ...prev,
-      [partNumber]: {
-        consumeQty: "",
-        receiveQty: "",
-        tfiTicket: "",
-        note: "",
-        minEdit: "",
-        maxEdit: "",
-        ...prev[partNumber],
-        [field]: value,
-      },
-    }));
-  };
+  const handleConsumeSubmit = async (e) => {
+    e.preventDefault();
+    const qty = Number(consumeForm.qty);
+    if (!consumeForm.part_number) {
+      setError("Select a part to consume.");
+      return;
+    }
 
-  const handleConsume = (item) => {
-    const inputs = actionInputs[item.part_number] || {};
-    const qty = Number(inputs.consumeQty);
-
-    if (!inputs.tfiTicket) {
+    if (!consumeForm.tfiTicket) {
       setError("TFI Ticket # is required to consume inventory.");
       return;
     }
@@ -148,89 +104,39 @@ function ExampleWMS() {
     setLoading(true);
     setError(null);
 
-    fetch("/api/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "consume",
-        part_number: item.part_number,
-        qty,
-        tfiTicket: inputs.tfiTicket,
-        note: inputs.note,
-      }),
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const body = await safelyParseJson(response);
-          throw new Error(body.error || "Unable to consume inventory");
-        }
-        await fetchInventory();
-        setActionInputs((prev) => ({
-          ...prev,
-          [item.part_number]: {
-            ...prev[item.part_number],
-            consumeQty: "",
-            tfiTicket: "",
-            note: "",
-          },
-        }));
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    try {
+      const response = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "consume",
+          part_number: consumeForm.part_number,
+          qty,
+          tfiTicket: consumeForm.tfiTicket,
+          note: consumeForm.note,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await safelyParseJson(response);
+        throw new Error(body.error || "Unable to consume inventory");
+      }
+
+      await fetchInventory();
+      setConsumeForm((prev) => ({ ...prev, qty: "", tfiTicket: "", note: "" }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReceive = (item) => {
-    const inputs = actionInputs[item.part_number] || {};
-    const qty = Number(inputs.receiveQty);
-
-    const hasSentOrder = orderQueue.some(
-      (order) => order.part_number === item.part_number && order.status === "sent"
-    );
-
-    if (!qty || qty <= 0) {
-      setError("Enter a valid quantity to receive.");
+  const handleRequestAdjustment = async (partNumber) => {
+    const requested_qty = Number(adjustmentForm.requested_qty);
+    if (Number.isNaN(requested_qty) || requested_qty < 0) {
+      setError("Enter a valid corrected quantity.");
       return;
     }
-
-    if (!hasSentOrder) {
-      setError("Shipping clerk must send an order before receiving this item.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    fetch("/api/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "receive",
-        part_number: item.part_number,
-        qty,
-      }),
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const body = await safelyParseJson(response);
-          throw new Error(body.error || "Unable to receive inventory");
-        }
-        await fetchInventory();
-        setActionInputs((prev) => ({
-          ...prev,
-          [item.part_number]: {
-            ...prev[item.part_number],
-            receiveQty: "",
-          },
-        }));
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  };
-
-  const handleThresholdUpdate = async (item) => {
-    const inputs = actionInputs[item.part_number] || {};
-    const nextMin = inputs.minEdit === "" ? item.min_qty : Number(inputs.minEdit);
-    const nextMax = inputs.maxEdit === "" ? item.max_qty : Number(inputs.maxEdit);
 
     setLoading(true);
     setError(null);
@@ -240,28 +146,22 @@ function ExampleWMS() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          part_number: item.part_number,
-          description: item.description,
-          current_qty: Number(item.current_qty),
-          min_qty: nextMin,
-          max_qty: nextMax,
+          action: "request_adjustment",
+          part_number: partNumber,
+          requested_qty,
+          reason: adjustmentForm.reason,
         }),
       });
 
       if (!response.ok) {
         const body = await safelyParseJson(response);
-        throw new Error(body.error || "Unable to update thresholds");
+        throw new Error(body.error || "Unable to request adjustment");
       }
 
-      await fetchInventory();
-      setActionInputs((prev) => ({
-        ...prev,
-        [item.part_number]: {
-          ...prev[item.part_number],
-          minEdit: "",
-          maxEdit: "",
-        },
-      }));
+      const body = await safelyParseJson(response);
+      setOrderQueue(Array.isArray(body.orderQueue) ? body.orderQueue : orderQueue);
+      setOpenAdjustmentFor(null);
+      setAdjustmentForm(initialAdjustmentState);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -269,47 +169,95 @@ function ExampleWMS() {
     }
   };
 
-  const reorderToMax = async (item) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/inventory", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ part_number: item.part_number }),
-      });
-
-      if (!response.ok) {
-        const body = await safelyParseJson(response);
-        throw new Error(body.error || "Unable to reorder item");
-      }
-
-      await fetchInventory();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+  const ensureOrderExists = async (partNumber) => {
+    const hasActiveOrder = orderQueue.some(
+      (order) => order.part_number === partNumber && order.status !== "completed"
+    );
+    if (hasActiveOrder) {
+      return orderQueue;
     }
-  };
 
-  const handleSendOrder = (partNumber) => {
-    setLoading(true);
-    setError(null);
+    const item = findInventoryItem(partNumber);
+    if (!item) {
+      throw new Error("Part not found in inventory.");
+    }
 
-    fetch("/api/inventory", {
+    const response = await fetch("/api/inventory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "send_order", part_number: partNumber }),
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const body = await safelyParseJson(response);
+      body: JSON.stringify({
+        action: "request_adjustment",
+        part_number: partNumber,
+        requested_qty: item.max_qty,
+        reason: "Auto-created restock request for shipping.",
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await safelyParseJson(response);
+      throw new Error(body.error || "Unable to create order for this part");
+    }
+
+    const body = await safelyParseJson(response);
+    const nextQueue = Array.isArray(body.orderQueue) ? body.orderQueue : orderQueue;
+    setOrderQueue(nextQueue);
+    return nextQueue;
+  };
+
+  const completeShipment = async (partNumber) => {
+    const qty = Number(shipmentInputs[partNumber]);
+    if (!qty || qty <= 0) {
+      setError("Enter a quantity shipped before completing the order.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const queueAfterEnsure = await ensureOrderExists(partNumber);
+      const hasSentOrder = queueAfterEnsure.some(
+        (order) => order.part_number === partNumber && order.status === "sent"
+      );
+
+      let queueAfterSend = queueAfterEnsure;
+      if (!hasSentOrder) {
+        const sendResponse = await fetch("/api/inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "send_order", part_number: partNumber }),
+        });
+
+        if (!sendResponse.ok) {
+          const body = await safelyParseJson(sendResponse);
           throw new Error(body.error || "Unable to send order");
         }
-        await fetchInventory();
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+
+        const body = await safelyParseJson(sendResponse);
+        queueAfterSend = Array.isArray(body.orderQueue) ? body.orderQueue : queueAfterEnsure;
+        setOrderQueue(queueAfterSend);
+      }
+
+      const receiveResponse = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "receive", part_number: partNumber, qty }),
+      });
+
+      if (!receiveResponse.ok) {
+        const body = await safelyParseJson(receiveResponse);
+        throw new Error(body.error || "Unable to complete shipment");
+      }
+
+      const body = await safelyParseJson(receiveResponse);
+      setOrderQueue(Array.isArray(body.orderQueue) ? body.orderQueue : queueAfterSend);
+      setShipmentInputs((prev) => ({ ...prev, [partNumber]: "" }));
+      await fetchInventory();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -349,8 +297,8 @@ function ExampleWMS() {
           </h1>
           <p className="text-base text-slate-600 leading-relaxed">
             {viewMode === "user"
-              ? "View live inventory, receive stock, and consume with a TFI Ticket #."
-              : "Adjust min/max thresholds, add new parts, and process reorder requests."}
+              ? "Use consume and audit tools to keep live inventory aligned with work orders."
+              : "Ship only what is requested and complete restock orders without directly editing inventory."}
           </p>
         </div>
 
@@ -372,266 +320,289 @@ function ExampleWMS() {
             Error: {error}
           </div>
         )}
-
-        {viewMode === "shippingClerk" && (
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-5 bg-white/90 backdrop-blur-sm border border-slate-200 p-6 rounded-2xl shadow-lg"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <input
-                type="text"
-                name="part_number"
-                placeholder="Part Number"
-                value={formData.part_number}
-                onChange={handleChange}
-                className="p-3 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:border-blue-400 focus:outline-none"
-                required
-              />
-              <input
-                type="text"
-                name="description"
-                placeholder="Description"
-                value={formData.description}
-                onChange={handleChange}
-                className="p-3 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:border-blue-400 focus:outline-none"
-                required
-              />
-              <input
-                type="number"
-                name="current_qty"
-                placeholder="Current Qty"
-                value={formData.current_qty}
-                onChange={handleChange}
-                className="p-3 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:border-blue-400 focus:outline-none"
-                required
-              />
-              <input
-                type="number"
-                name="min_qty"
-                placeholder="Min Qty"
-                value={formData.min_qty}
-                onChange={handleChange}
-                className="p-3 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:border-blue-400 focus:outline-none"
-                required
-              />
-              <input
-                type="number"
-                name="max_qty"
-                placeholder="Max Qty"
-                value={formData.max_qty}
-                onChange={handleChange}
-                className="p-3 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:border-blue-400 focus:outline-none"
-                required
-              />
-            </div>
-            <div className="flex flex-wrap gap-3 items-center">
-              <button
-                type="submit"
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md"
-                disabled={loading}
-              >
-                {loading ? "Saving..." : "Add / Update Item"}
-              </button>
-              <p className="text-sm text-slate-500">
-                Shipping clerks can add new parts and adjust thresholds.
-              </p>
-            </div>
-          </form>
-        )}
-
-        <div className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide text-xs">
-                <tr>
-                  <th className="p-4">Part Number</th>
-                  <th className="p-4">Description</th>
-                  <th className="p-4">Current Qty</th>
-                  <th className="p-4">Min Qty</th>
-                  <th className="p-4">Max Qty</th>
-                  <th className="p-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {inventory.map((item) => {
-                  const hasSentOrder = orderQueue.some(
-                    (order) => order.part_number === item.part_number && order.status === "sent"
-                  );
-
-                  return (
-                    <tr
-                      key={item.part_number}
-                      className="bg-white hover:bg-slate-50/60 transition"
-                    >
-                      <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
-                      <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
-                      <td className="p-4 text-slate-900">{item.current_qty}</td>
-                      <td className="p-4 text-slate-900">{item.min_qty}</td>
-                      <td className="p-4 text-slate-900">{item.max_qty}</td>
-                      <td className="p-4">
-                        {viewMode === "user" ? (
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
-                              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                                Consume
-                              </p>
-                              <div className="flex flex-col gap-2">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={actionInputs[item.part_number]?.consumeQty || ""}
-                                  onChange={(e) =>
-                                    updateActionInputs(item.part_number, "consumeQty", e.target.value)
-                                  }
-                                  placeholder="Qty"
-                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                                />
-                                <input
-                                  type="text"
-                                  value={actionInputs[item.part_number]?.tfiTicket || ""}
-                                  onChange={(e) =>
-                                    updateActionInputs(item.part_number, "tfiTicket", e.target.value)
-                                  }
-                                  placeholder="TFI Ticket #"
-                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                                />
-                                <input
-                                  type="text"
-                                  value={actionInputs[item.part_number]?.note || ""}
-                                  onChange={(e) =>
-                                    updateActionInputs(item.part_number, "note", e.target.value)
-                                  }
-                                  placeholder="Note for clerk"
-                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                                />
-                                <button
-                                  onClick={() => handleConsume(item)}
-                                  className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-600 disabled:opacity-70"
-                                  disabled={loading}
-                                  type="button"
-                                >
-                                  Consume
-                                </button>
-                              </div>
-                            </div>
-                            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
-                              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                                Receive
-                              </p>
-                              <div className="flex flex-col gap-2">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={actionInputs[item.part_number]?.receiveQty || ""}
-                                  onChange={(e) =>
-                                    updateActionInputs(item.part_number, "receiveQty", e.target.value)
-                                  }
-                                  placeholder="Qty"
-                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                                />
-                                <button
-                                  onClick={() => handleReceive(item)}
-                                  className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:opacity-70"
-                                  disabled={loading || !hasSentOrder}
-                                  type="button"
-                                >
-                                  Receive
-                                </button>
-                                {!hasSentOrder && (
-                                  <p className="text-xs text-slate-500">
-                                    Waiting for shipping clerk to send this order.
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="grid gap-4 lg:grid-cols-3">
-                            <div className="space-y-2">
-                              <label className="text-xs text-slate-500">Min Qty</label>
-                              <input
-                                type="number"
-                                value={actionInputs[item.part_number]?.minEdit ?? ""}
-                                onChange={(e) =>
-                                  updateActionInputs(item.part_number, "minEdit", e.target.value)
-                                }
-                                placeholder={item.min_qty}
-                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-xs text-slate-500">Max Qty</label>
-                              <input
-                                type="number"
-                                value={actionInputs[item.part_number]?.maxEdit ?? ""}
-                                onChange={(e) =>
-                                  updateActionInputs(item.part_number, "maxEdit", e.target.value)
-                                }
-                                placeholder={item.max_qty}
-                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              <button
-                                onClick={() => handleThresholdUpdate(item)}
-                                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-70"
-                                disabled={loading}
-                                type="button"
-                              >
-                                Save Min/Max
-                              </button>
-                              <button
-                                className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-600 disabled:opacity-70"
-                                onClick={() => reorderToMax(item)}
-                                disabled={loading}
-                                type="button"
-                              >
-                                Reorder to Max
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {viewMode === "shippingClerk" && (
-          <div className="bg-white/90 border border-slate-200 rounded-2xl shadow-lg p-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-900">Order request queue</h2>
-              <span className="text-xs text-slate-500">(auto-filled when users reach minimum)</span>
-            </div>
-            {openOrders.length === 0 ? (
-              <p className="text-sm text-slate-600">No pending requests yet.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100">
-                {openOrders.map((request, idx) => (
-                  <li key={`${request.part_number}-${idx}`} className="py-3 flex flex-col gap-1">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                      <span>{request.part_number}</span>
-                      <span className="text-slate-500">·</span>
-                      <span className="font-normal text-slate-700">{request.description}</span>
-                    </div>
-                    <p className="text-sm text-slate-700">{request.note}</p>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleSendOrder(request.part_number)}
-                        className="text-sm text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1.5 rounded-lg shadow-sm transition"
+        {viewMode === "user" ? (
+          <div className="space-y-6">
+            <section className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg p-6 space-y-5">
+              <div className="flex flex-col gap-2">
+                <h2 className="text-xl font-semibold text-slate-900">Consume tool</h2>
+                <p className="text-sm text-slate-600">
+                  Submit consumption with the same validation as before, now organized in a single sentence.
+                </p>
+              </div>
+              <form onSubmit={handleConsumeSubmit} className="space-y-4">
+                <div className="flex flex-col gap-3">
+                  <label className="text-sm font-medium text-slate-800">
+                    I am consuming
+                    <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-center md:gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={consumeForm.qty}
+                        onChange={(e) => setConsumeForm((prev) => ({ ...prev, qty: e.target.value }))}
+                        placeholder="Qty"
+                        className="w-full md:w-24 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                      />
+                      <select
+                        value={consumeForm.part_number}
+                        onChange={(e) => setConsumeForm((prev) => ({ ...prev, part_number: e.target.value }))}
+                        className="w-full md:w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                       >
-                        Send order
-                      </button>
+                        {inventory.map((item) => (
+                          <option key={item.part_number} value={item.part_number}>
+                            {item.part_number} - {item.description}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-sm font-medium text-slate-700">for</span>
+                      <input
+                        type="text"
+                        value={consumeForm.tfiTicket}
+                        onChange={(e) => setConsumeForm((prev) => ({ ...prev, tfiTicket: e.target.value }))}
+                        placeholder="TFI Ticket #"
+                        className="w-full md:w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                      />
+                      <span className="text-sm font-medium text-slate-700">.</span>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+                  </label>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold uppercase text-slate-500">Optional note</label>
+                    <input
+                      type="text"
+                      value={consumeForm.note}
+                      onChange={(e) => setConsumeForm((prev) => ({ ...prev, note: e.target.value }))}
+                      placeholder="Note for the shipping clerk"
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-600 disabled:opacity-70"
+                >
+                  Submit consumption
+                </button>
+              </form>
+            </section>
+
+            <section className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg">
+              <div className="flex items-center justify-between px-6 py-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Audit tool</h2>
+                  <p className="text-sm text-slate-600">Review the full inventory and request corrections.</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide text-xs">
+                    <tr>
+                      <th className="p-4">Part Number</th>
+                      <th className="p-4">Description</th>
+                      <th className="p-4">Current Qty</th>
+                      <th className="p-4">Min</th>
+                      <th className="p-4">Max</th>
+                      <th className="p-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {inventory.map((item) => (
+                      <Fragment key={item.part_number}>
+                        <tr className="bg-white hover:bg-slate-50/60 transition">
+                          <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
+                          <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
+                          <td className="p-4 text-slate-900">{item.current_qty}</td>
+                          <td className="p-4 text-slate-900">{item.min_qty}</td>
+                          <td className="p-4 text-slate-900">{item.max_qty}</td>
+                          <td className="p-4">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenAdjustmentFor(item.part_number);
+                                setAdjustmentForm({
+                                  requested_qty: item.current_qty,
+                                  reason: "",
+                                });
+                              }}
+                              className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-600"
+                            >
+                              Request Adjustment
+                            </button>
+                          </td>
+                        </tr>
+                        {openAdjustmentFor === item.part_number && (
+                          <tr className="bg-slate-50">
+                            <td colSpan={6} className="p-4">
+                              <div className="grid gap-4 md:grid-cols-4 items-end">
+                                <div className="space-y-1">
+                                  <label className="text-xs font-semibold uppercase text-slate-500">Part</label>
+                                  <input
+                                    type="text"
+                                    value={`${item.part_number} — ${item.description}`}
+                                    disabled
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-semibold uppercase text-slate-500">Current quantity</label>
+                                  <input
+                                    type="text"
+                                    value={item.current_qty}
+                                    disabled
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs font-semibold uppercase text-slate-500">Correct quantity</label>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={adjustmentForm.requested_qty}
+                                    onChange={(e) =>
+                                      setAdjustmentForm((prev) => ({
+                                        ...prev,
+                                        requested_qty: e.target.value,
+                                      }))
+                                    }
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                  />
+                                </div>
+                                <div className="space-y-1 md:col-span-1">
+                                  <label className="text-xs font-semibold uppercase text-slate-500">Reason</label>
+                                  <textarea
+                                    value={adjustmentForm.reason}
+                                    onChange={(e) =>
+                                      setAdjustmentForm((prev) => ({ ...prev, reason: e.target.value }))
+                                    }
+                                    rows={2}
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRequestAdjustment(item.part_number)}
+                                  disabled={loading}
+                                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-70"
+                                >
+                                  Submit request
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenAdjustmentFor(null);
+                                    setAdjustmentForm(initialAdjustmentState);
+                                  }}
+                                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <section className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg">
+              <div className="flex items-center justify-between px-6 py-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Items requiring shipment</h2>
+                  <p className="text-sm text-slate-600">Only items at or below minimum are shown. Enter what you shipped to update inventory.</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide text-xs">
+                    <tr>
+                      <th className="p-4">Part Number</th>
+                      <th className="p-4">Description</th>
+                      <th className="p-4">Current / Min / Max</th>
+                      <th className="p-4">Quantity Shipped</th>
+                      <th className="p-4">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {lowStockItems.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-4 text-sm text-slate-600">
+                          All parts are above minimums.
+                        </td>
+                      </tr>
+                    )}
+                    {lowStockItems.map((item) => (
+                      <tr key={item.part_number} className="bg-white">
+                        <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
+                        <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
+                        <td className="p-4 text-slate-900">
+                          <div className="text-sm font-medium">{item.current_qty}</div>
+                          <div className="text-xs text-slate-500">Min {item.min_qty} · Max {item.max_qty}</div>
+                        </td>
+                        <td className="p-4">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={shipmentInputs[item.part_number] || ""}
+                            onChange={(e) =>
+                              setShipmentInputs((prev) => ({
+                                ...prev,
+                                [item.part_number]: e.target.value,
+                              }))
+                            }
+                            placeholder="Qty shipped"
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                          />
+                        </td>
+                        <td className="p-4">
+                          <button
+                            type="button"
+                            onClick={() => completeShipment(item.part_number)}
+                            disabled={loading}
+                            className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:opacity-70"
+                          >
+                            Complete Order
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="bg-white/95 border border-slate-200 rounded-2xl shadow-lg p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-slate-900">Shipping clerk queue</h2>
+                <span className="text-xs text-slate-500">Includes low-stock and adjustment requests.</span>
+              </div>
+              {orderQueue.length === 0 ? (
+                <p className="text-sm text-slate-600">No pending requests yet.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {orderQueue.map((request) => (
+                    <li key={`${request.part_number}-${request.id || request.created_at}`} className="py-3 flex flex-col gap-1">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                        <span>{request.part_number}</span>
+                        <span className="text-slate-500">·</span>
+                        <span className="font-normal text-slate-700">{request.description}</span>
+                        <span className="ml-auto text-xs uppercase tracking-wide rounded-full px-2 py-1 bg-slate-100 text-slate-600">
+                          {request.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700">{request.note}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
         )}
       </div>

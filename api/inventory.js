@@ -220,6 +220,44 @@ async function receiveInventory(body) {
   };
 }
 
+async function requestAdjustment(body) {
+  const part_number = String(body.part_number || "").trim();
+  const requested_qty = Number(body.requested_qty);
+  const reason = String(body.reason || "").trim();
+
+  if (!part_number || Number.isNaN(requested_qty)) {
+    return {
+      status: 400,
+      error: "part_number and requested_qty are required",
+    };
+  }
+
+  const rows = await sql`
+    SELECT part_number, description, current_qty
+    FROM inventory
+    WHERE part_number = ${part_number}
+    LIMIT 1;
+  `;
+
+  const item = rows[0];
+  if (!item) {
+    return { status: 404, error: "Item not found" };
+  }
+
+  const noteDetails = [`Requested quantity: ${requested_qty}`];
+  if (reason) {
+    noteDetails.push(`Reason: ${reason}`);
+  }
+
+  const inserted = await sql`
+    INSERT INTO order_queue (part_number, description, note, status)
+    VALUES (${part_number}, ${item.description}, ${noteDetails.join(" | ")}, 'open')
+    RETURNING id, part_number, description, note, status, created_at;
+  `;
+
+  return { order: inserted[0] };
+}
+
 async function sendOrder(part_number) {
   const trimmed = String(part_number || "").trim();
   if (!trimmed) {
@@ -300,6 +338,15 @@ export default async function handler(req, res) {
         }
         const orderQueue = await fetchOrderQueue();
         return res.status(200).json({ success: true, item: result.item, orderQueue });
+      }
+
+      if (action === "request_adjustment") {
+        const result = await requestAdjustment(req.body || {});
+        if (result.error) {
+          return res.status(result.status || 400).json({ error: result.error });
+        }
+        const orderQueue = await fetchOrderQueue();
+        return res.status(200).json({ success: true, order: result.order, orderQueue });
       }
 
       if (action === "send_order") {
