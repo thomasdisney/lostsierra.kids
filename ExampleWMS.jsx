@@ -36,16 +36,28 @@ function ExampleWMS() {
     lowStockItems.forEach((item) => notifyClerk(item));
   }, [lowStockItems]);
 
+  const safelyParseJson = async (response) => {
+    try {
+      return await response.clone().json();
+    } catch (parseError) {
+      const fallbackText = await response.text();
+      throw new Error(
+        fallbackText || "Unexpected response from the server. Please try again."
+      );
+    }
+  };
+
   const fetchInventory = async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await fetch("/api/inventory");
       if (!response.ok) {
-        throw new Error("Failed to load inventory");
+        const body = await safelyParseJson(response);
+        throw new Error(body.error || "Failed to load inventory");
       }
-      const data = await response.json();
-      setInventory(data || []);
+      const data = await safelyParseJson(response);
+      setInventory(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -79,7 +91,7 @@ function ExampleWMS() {
       });
 
       if (!response.ok) {
-        const body = await response.json();
+        const body = await safelyParseJson(response);
         throw new Error(body.error || "Unable to save item");
       }
 
@@ -209,7 +221,7 @@ function ExampleWMS() {
       });
 
       if (!response.ok) {
-        const body = await response.json();
+        const body = await safelyParseJson(response);
         throw new Error(body.error || "Unable to update thresholds");
       }
 
@@ -240,7 +252,7 @@ function ExampleWMS() {
       });
 
       if (!response.ok) {
-        const body = await response.json();
+        const body = await safelyParseJson(response);
         throw new Error(body.error || "Unable to reorder item");
       }
 
@@ -253,8 +265,8 @@ function ExampleWMS() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 text-slate-800">
-      <div className="mx-auto max-w-screen-xl px-6 py-8 space-y-6">
+    <div className="min-h-screen bg-gradient-to-b from-[#f8fafc] via-[#eef2ff] to-[#e0f2fe] text-slate-800">
+      <div className="mx-auto max-w-6xl px-6 py-10 space-y-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
@@ -263,7 +275,7 @@ function ExampleWMS() {
           >
             ← Back to home
           </button>
-          <div className="flex items-center gap-3 bg-white/80 rounded-full border border-slate-200 shadow-sm p-1">
+          <div className="flex items-center gap-3 bg-white/90 rounded-full border border-slate-200 shadow-md p-1.5">
             {[
               { label: "User view", value: "user" },
               { label: "Shipping clerk", value: "shippingClerk" },
@@ -287,7 +299,7 @@ function ExampleWMS() {
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">
             Example Warehouse Management
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="text-base text-slate-600 leading-relaxed">
             {viewMode === "user"
               ? "View live inventory, receive stock, and consume with a TFI Ticket #."
               : "Adjust min/max thresholds, add new parts, and process reorder requests."}
@@ -295,9 +307,9 @@ function ExampleWMS() {
         </div>
 
         {lowStockItems.length > 0 && (
-          <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl shadow-sm">
+          <div className="p-5 bg-gradient-to-r from-amber-50 via-amber-50 to-orange-50 border border-amber-100 text-amber-800 rounded-2xl shadow-sm">
             <p className="font-semibold">Low stock alert!</p>
-            <ul className="list-disc list-inside text-sm">
+            <ul className="list-disc list-inside text-sm leading-relaxed">
               {lowStockItems.map((item) => (
                 <li key={item.part_number}>
                   {item.part_number} - current {item.current_qty}, min {item.min_qty}
@@ -316,7 +328,7 @@ function ExampleWMS() {
         {viewMode === "shippingClerk" && (
           <form
             onSubmit={handleSubmit}
-            className="space-y-4 bg-white border border-slate-200 p-5 rounded-2xl shadow-sm"
+            className="space-y-5 bg-white/90 backdrop-blur-sm border border-slate-200 p-6 rounded-2xl shadow-lg"
           >
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <input
@@ -365,50 +377,50 @@ function ExampleWMS() {
                 required
               />
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 items-center">
               <button
                 type="submit"
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm"
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition shadow-md"
                 disabled={loading}
               >
                 {loading ? "Saving..." : "Add / Update Item"}
               </button>
-              <span className="text-xs text-slate-500 self-center">
+              <p className="text-sm text-slate-500">
                 Shipping clerks can add new parts and adjust thresholds.
-              </span>
+              </p>
             </div>
           </form>
         )}
 
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide text-xs">
                 <tr>
-                  <th className="p-3">Part Number</th>
-                  <th className="p-3">Description</th>
-                  <th className="p-3">Current Qty</th>
-                  <th className="p-3">Min Qty</th>
-                  <th className="p-3">Max Qty</th>
-                  <th className="p-3">Actions</th>
+                  <th className="p-4">Part Number</th>
+                  <th className="p-4">Description</th>
+                  <th className="p-4">Current Qty</th>
+                  <th className="p-4">Min Qty</th>
+                  <th className="p-4">Max Qty</th>
+                  <th className="p-4">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100">
                 {inventory.map((item) => (
                   <tr
                     key={item.part_number}
-                    className="border-t border-slate-100 bg-white hover:bg-slate-50/80"
+                    className="bg-white hover:bg-slate-50/60 transition"
                   >
-                    <td className="p-3 font-medium text-slate-900">{item.part_number}</td>
-                    <td className="p-3 text-slate-700">{item.description}</td>
-                    <td className="p-3 text-slate-900">{item.current_qty}</td>
-                    <td className="p-3 text-slate-900">{item.min_qty}</td>
-                    <td className="p-3 text-slate-900">{item.max_qty}</td>
-                    <td className="p-3">
+                    <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
+                    <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
+                    <td className="p-4 text-slate-900">{item.current_qty}</td>
+                    <td className="p-4 text-slate-900">{item.min_qty}</td>
+                    <td className="p-4 text-slate-900">{item.max_qty}</td>
+                    <td className="p-4">
                       {viewMode === "user" ? (
-                        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
-                          <div className="space-y-2">
-                            <p className="text-xs font-semibold text-slate-600">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
                               Consume
                             </p>
                             <div className="flex flex-col gap-2">
@@ -420,7 +432,7 @@ function ExampleWMS() {
                                   updateActionInputs(item.part_number, "consumeQty", e.target.value)
                                 }
                                 placeholder="Qty"
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:bg-white focus:border-blue-400 focus:outline-none"
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                               />
                               <input
                                 type="text"
@@ -429,7 +441,7 @@ function ExampleWMS() {
                                   updateActionInputs(item.part_number, "tfiTicket", e.target.value)
                                 }
                                 placeholder="TFI Ticket #"
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:bg-white focus:border-blue-400 focus:outline-none"
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                               />
                               <input
                                 type="text"
@@ -438,7 +450,7 @@ function ExampleWMS() {
                                   updateActionInputs(item.part_number, "note", e.target.value)
                                 }
                                 placeholder="Note for clerk"
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:bg-white focus:border-blue-400 focus:outline-none"
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                               />
                               <button
                                 onClick={() => handleConsume(item)}
@@ -450,8 +462,8 @@ function ExampleWMS() {
                               </button>
                             </div>
                           </div>
-                          <div className="space-y-2">
-                            <p className="text-xs font-semibold text-slate-600">
+                          <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
                               Receive
                             </p>
                             <div className="flex flex-col gap-2">
@@ -463,7 +475,7 @@ function ExampleWMS() {
                                   updateActionInputs(item.part_number, "receiveQty", e.target.value)
                                 }
                                 placeholder="Qty"
-                                className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:bg-white focus:border-blue-400 focus:outline-none"
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                               />
                               <button
                                 onClick={() => handleReceive(item)}
@@ -477,8 +489,8 @@ function ExampleWMS() {
                           </div>
                         </div>
                       ) : (
-                        <div className="grid gap-3 lg:grid-cols-3">
-                          <div className="space-y-1">
+                        <div className="grid gap-4 lg:grid-cols-3">
+                          <div className="space-y-2">
                             <label className="text-xs text-slate-500">Min Qty</label>
                             <input
                               type="number"
@@ -487,10 +499,10 @@ function ExampleWMS() {
                                 updateActionInputs(item.part_number, "minEdit", e.target.value)
                               }
                               placeholder={item.min_qty}
-                              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:bg-white focus:border-blue-400 focus:outline-none"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                             />
                           </div>
-                          <div className="space-y-1">
+                          <div className="space-y-2">
                             <label className="text-xs text-slate-500">Max Qty</label>
                             <input
                               type="number"
@@ -499,7 +511,7 @@ function ExampleWMS() {
                                 updateActionInputs(item.part_number, "maxEdit", e.target.value)
                               }
                               placeholder={item.max_qty}
-                              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:bg-white focus:border-blue-400 focus:outline-none"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                             />
                           </div>
                           <div className="flex flex-col gap-2">
@@ -531,7 +543,7 @@ function ExampleWMS() {
         </div>
 
         {viewMode === "shippingClerk" && (
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 space-y-3">
+          <div className="bg-white/90 border border-slate-200 rounded-2xl shadow-lg p-6 space-y-4">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-slate-900">Order request queue</h2>
               <span className="text-xs text-slate-500">(auto-filled when users reach minimum)</span>
