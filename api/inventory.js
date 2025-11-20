@@ -157,6 +157,11 @@ async function renameItem(body) {
 
   await sql.begin(async (tx) => {
     await tx`
+      INSERT INTO inventory (part_number, description, current_qty, min_qty, max_qty)
+      VALUES (${normalized.part_number}, ${normalized.description}, ${normalized.current_qty}, ${normalized.min_qty}, ${normalized.max_qty});
+    `;
+
+    await tx`
       UPDATE order_queue
       SET part_number = ${normalized.part_number},
           description = ${normalized.description}
@@ -164,12 +169,7 @@ async function renameItem(body) {
     `;
 
     await tx`
-      UPDATE inventory
-      SET part_number = ${normalized.part_number},
-          description = ${normalized.description},
-          current_qty = ${normalized.current_qty},
-          min_qty = ${normalized.min_qty},
-          max_qty = ${normalized.max_qty}
+      DELETE FROM inventory
       WHERE part_number = ${old_part_number};
     `;
   });
