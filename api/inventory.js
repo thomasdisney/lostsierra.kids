@@ -1,4 +1,7 @@
-import { sql } from "@vercel/postgres";
+import postgres from "postgres";
+
+ensureDatabaseConfigured();
+const sql = postgres(process.env.DATABASE_URL, { ssl: "verify-full" });
 
 function ensureDatabaseConfigured() {
   if (!process.env.DATABASE_URL) {
@@ -9,7 +12,6 @@ function ensureDatabaseConfigured() {
 }
 
 const setupPromise = (async () => {
-  ensureDatabaseConfigured();
   await sql`
     CREATE TABLE IF NOT EXISTS inventory (
       part_number text PRIMARY KEY,
@@ -68,7 +70,7 @@ function normalizeItem(body) {
 }
 
 async function fetchInventory() {
-  const { rows } = await sql`
+  const rows = await sql`
     SELECT part_number, description, current_qty, min_qty, max_qty
     FROM inventory
     ORDER BY part_number;
@@ -77,7 +79,7 @@ async function fetchInventory() {
 }
 
 async function fetchOrderQueue() {
-  const { rows } = await sql`
+  const rows = await sql`
     SELECT id, part_number, description, note, status, created_at
     FROM order_queue
     WHERE status != 'completed'
@@ -97,7 +99,7 @@ async function upsertItem(item) {
       max_qty = EXCLUDED.max_qty;
   `;
 
-  const { rows } = await sql`
+  const rows = await sql`
     SELECT part_number, description, current_qty, min_qty, max_qty
     FROM inventory
     WHERE part_number = ${item.part_number}
@@ -123,7 +125,7 @@ async function consumeInventory(body) {
     String(body.note || "").trim() ||
     `Hit minimum after consuming ${qty} (Ticket #${tfiTicket}).`;
 
-  const { rows } = await sql`
+  const rows = await sql`
     SELECT part_number, description, current_qty, min_qty, max_qty
     FROM inventory
     WHERE part_number = ${part_number}
@@ -150,13 +152,13 @@ async function consumeInventory(body) {
       LIMIT 1;
     `;
 
-    if (existing.rowCount === 0) {
+    if (existing.length === 0) {
       const inserted = await sql`
         INSERT INTO order_queue (part_number, description, note, status)
         VALUES (${part_number}, ${item.description}, ${note}, 'open')
         RETURNING id, part_number, description, note, status, created_at;
       `;
-      createdOrder = inserted.rows[0];
+      createdOrder = inserted[0];
     }
   }
 
@@ -173,7 +175,7 @@ async function receiveInventory(body) {
     return { status: 400, error: "Valid part_number and qty are required" };
   }
 
-  const { rows } = await sql`
+  const rows = await sql`
     SELECT part_number, description, current_qty, min_qty, max_qty
     FROM inventory
     WHERE part_number = ${part_number}
@@ -191,7 +193,7 @@ async function receiveInventory(body) {
     LIMIT 1;
   `;
 
-  if (sentOrders.rowCount === 0) {
+  if (sentOrders.length === 0) {
     return {
       status: 400,
       error: "Shipping clerk must send an order before receiving this item.",
@@ -214,7 +216,7 @@ async function receiveInventory(body) {
   `;
 
   return {
-    item: updatedItemResult.rows[0],
+    item: updatedItemResult[0],
   };
 }
 
@@ -224,7 +226,7 @@ async function sendOrder(part_number) {
     return { status: 400, error: "part_number is required" };
   }
 
-  const { rows } = await sql`
+  const rows = await sql`
     UPDATE order_queue
     SET status = 'sent'
     WHERE part_number = ${trimmed} AND status = 'open'
@@ -244,7 +246,7 @@ async function reorderToMax(part_number) {
     return { status: 400, error: "part_number is required" };
   }
 
-  const { rows } = await sql`
+  const rows = await sql`
     SELECT part_number, description, current_qty, min_qty, max_qty
     FROM inventory
     WHERE part_number = ${trimmed}
@@ -263,7 +265,7 @@ async function reorderToMax(part_number) {
     RETURNING part_number, description, current_qty, min_qty, max_qty;
   `;
 
-  return { item: updated.rows[0] };
+  return { item: updated[0] };
 }
 
 export default async function handler(req, res) {
