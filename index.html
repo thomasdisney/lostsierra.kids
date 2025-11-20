@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Lost Sierra Kids is a California nonprofit remodeling the Historic Graeagle School House to open a community daycare while continuing a free weekly playgroup for Plumas County families." />
+  <meta name="description" content="Lost Sierra Kids is a California nonprofit remodeling the Historic Graeagle School House to open a community learning center while continuing a free weekly playgroup for Plumas County families." />
   <meta name="theme-color" content="#264d3b" />
   <link rel="canonical" href="https://lostsierra.kids/" />
   <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
@@ -14,10 +14,10 @@
   <link rel="manifest" href="/site.webmanifest" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://lostsierra.kids/" />
-  <meta property="og:title" content="Lost Sierra Kids | Community Daycare Initiative in Graeagle, CA" />
-  <meta property="og:description" content="Local nonprofit Lost Sierra Kids is remodeling the Historic Graeagle School House to open a community daycare while sustaining a free weekly playgroup across Plumas County." />
+  <meta property="og:title" content="Lost Sierra Kids | Community Learning Center Initiative in Graeagle, CA" />
+  <meta property="og:description" content="Local nonprofit Lost Sierra Kids is remodeling the Historic Graeagle School House to open a community learning center while sustaining a free weekly playgroup across Plumas County." />
   <meta property="og:image" content="https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=1600&q=80" />
-  <title>Lost Sierra Kids | Community Daycare Initiative in Graeagle, CA</title>
+  <title>Lost Sierra Kids | Community Learning Center Initiative in Graeagle, CA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -91,7 +91,7 @@
       background: linear-gradient(135deg, rgba(38, 77, 59, 0.9), rgba(123, 179, 209, 0.75)),
       url('/pic1.jpg') center/cover;
       color: #fff;
-      padding-bottom: 6rem;
+      padding-bottom: 5rem;
       overflow: hidden;
     }
 
@@ -122,7 +122,7 @@
     }
 
     .logo img {
-      height: 110px;
+      height: clamp(160px, 22vw, 300px);
       width: auto;
       display: block;
     }
@@ -161,8 +161,8 @@
     .hero {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 2.5rem;
-      padding: 4rem 5vw 8rem;
+      gap: 2.25rem;
+      padding: 3.5rem 5vw 6.5rem;
       position: relative;
       z-index: 2;
     }
@@ -242,7 +242,7 @@
     }
 
     section {
-      padding: 6rem 5vw;
+      padding: 4.75rem 5vw;
       position: relative;
       z-index: 1;
     }
@@ -255,14 +255,14 @@
       font-family: 'Playfair Display', serif;
       font-size: clamp(2.1rem, 4vw, 3rem);
       text-align: center;
-      margin-bottom: 3rem;
+      margin-bottom: 2.5rem;
       color: var(--forest);
     }
 
     .mission {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 2.5rem;
+      gap: 2rem;
       align-items: start;
     }
 
@@ -283,16 +283,20 @@
     .split {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 2.5rem;
+      gap: 2.25rem;
       align-items: center;
     }
 
     .leaf-card {
       background: linear-gradient(135deg, rgba(123, 179, 209, 0.3), rgba(120, 145, 116, 0.3));
       border-radius: 28px;
-      padding: 2.2rem;
+      padding: 1.9rem;
       position: relative;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      height: 100%;
     }
 
     .leaf-card::after {
@@ -311,11 +315,15 @@
       font-size: 1.5rem;
       margin-top: 0;
       color: var(--forest);
+      min-height: 3.2rem;
+      display: flex;
+      align-items: flex-end;
     }
 
     .leaf-card ul {
       padding-left: 1rem;
       margin: 0;
+      flex: 1;
     }
 
     .leaf-card li {
@@ -325,22 +333,27 @@
     .leaders {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.75rem;
+      gap: 1.25rem;
+      align-items: start;
     }
 
     .leader-card {
       background: #fff;
       border-radius: 24px;
-      padding: 1.75rem;
+      padding: 1.6rem;
       box-shadow: 0 15px 35px rgba(38, 77, 59, 0.15);
       display: grid;
-      gap: 0.65rem;
+      gap: 0.6rem;
+      grid-auto-rows: auto 1fr;
+      height: 100%;
       overflow: hidden;
     }
 
-    .leader-card > div {
-      display: grid;
-      gap: 0.3rem;
+    .leader-card__body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      margin-top: 0.2rem;
     }
 
     .leader-card__photo {
@@ -348,8 +361,8 @@
       width: 100%;
       border-radius: 18px;
       overflow: hidden;
-      padding-top: 125%;
       background: #f7f2e8;
+      aspect-ratio: 4 / 5;
     }
 
     .leader-card__photo img {
@@ -358,7 +371,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      object-position: center top;
+      object-position: center 20%;
       filter: saturate(1.05);
       display: block;
     }
@@ -380,7 +393,8 @@
 
     .leader-card p {
       font-size: 1rem;
-      line-height: 1.7;
+      line-height: 1.65;
+      margin: 0;
     }
 
     .shared-leadership {
@@ -388,7 +402,7 @@
         url('https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=1600&q=80') center/cover;
       color: #fff;
       border-radius: 32px;
-      padding: 3rem;
+      padding: 2.6rem;
       text-align: center;
       box-shadow: 0 20px 45px rgba(38, 77, 59, 0.4);
     }
@@ -408,13 +422,13 @@
     .schedule {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 2.5rem;
+      gap: 2rem;
     }
 
     .schedule-card {
       background: #fff;
       border-radius: 24px;
-      padding: 2rem;
+      padding: 1.85rem;
       box-shadow: 0 12px 30px rgba(38, 77, 59, 0.15);
     }
 
@@ -459,7 +473,7 @@
     .contact {
       background: #fff;
       border-radius: 28px;
-      padding: 3rem;
+      padding: 2.6rem;
       box-shadow: 0 20px 45px rgba(38, 77, 59, 0.15);
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -491,15 +505,15 @@
 
     .partner-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
-      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+      gap: 0.85rem;
       align-items: center;
       justify-items: center;
     }
 
     .partner-grid img {
-      max-height: 48px;
-      width: auto;
+      max-height: 60px;
+      width: 100%;
       object-fit: contain;
       filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.08));
     }
@@ -778,7 +792,7 @@
       }
 
       .logo img {
-        height: 95px;
+        height: 120px;
       }
     }
   </style>
@@ -796,6 +810,7 @@
         <a href="#curriculum">Vision</a>
         <a href="#leadership">Leadership</a>
         <a href="#schedule">Phases</a>
+        <a href="#photos">Photos</a>
         <a href="#community">Community</a>
         <a href="#contact">Connect</a>
       </nav>
@@ -803,8 +818,8 @@
     </div>
     <div class="hero">
       <div class="hero-copy">
-        <h1>Building a Community Daycare for Plumas County Families</h1>
-        <p>Lost Sierra Kids is a local nonprofit in California currently working to remodel the Historic Graeagle School House and open a community daycare center that keeps families close to home. While we raise funds and garner material donations, we continue to host a free weekly playgroup for babies through age five (and siblings close in age) and their caregivers across Plumas County.</p>
+        <h1>Building a Community Learning Center for Plumas County Families</h1>
+        <p>Lost Sierra Kids is a local nonprofit in California currently working to remodel the Historic Graeagle School House and open a community learning center that keeps families close to home. While we raise funds and garner material donations, we continue to host a free weekly playgroup for babies through age five (and siblings close in age) and their caregivers across Plumas County.</p>
         <div class="cta-group">
           <a class="btn btn-primary" href="#contact">Partner With Lost Sierra Kids</a>
           <a class="btn btn-outline" href="#mission">Read Our Story</a>
@@ -830,13 +845,13 @@
           “ We believe that family comes first, and our families of Plumas County are so treasured. Therefore, we never charge for our playgroup meetups as we feel they bring such enrichment and connection to the families of Plumas County.”
         </blockquote>
         <p>
-          Lost Sierra Kids is a local nonprofit in California seeking funding and material donations to open a daycare facility in Graeagle, CA. Each week, we welcome babies through age five (and siblings close in age) and their caregivers free of charge to our community playgroup filled with led music instruction, hands-on nature-based art instruction, and lots of social interaction. Depending on the season, we set up the Mohawk Resource Center in Blairsden or the Graeagle Soccer Field in Graeagle with various children's equipment such as educational learning toys for fine motor development; puppets, wooden trains, and imagination tents for creative play; toddler climbing equipment, stepping stones and balance toys for gross motor development, and so much more. Each week our theme and curriculum is different to allow maximum learning and fun.  Some weekly themes have included “Can You Find Them?: All About Mushrooms”, “Harvest Day: Veggie Exploration” and “Feathered Friends: All About Birds”.
+          Lost Sierra Kids is a local nonprofit in California seeking funding and material donations to open a learning center facility in Graeagle, CA. Each week, we welcome babies through age five (and siblings close in age) and their caregivers free of charge to our community playgroup filled with led music instruction, hands-on nature-based art instruction, and lots of social interaction. Depending on the season, we set up the Mohawk Resource Center in Blairsden or the Graeagle Soccer Field in Graeagle with various children's equipment such as educational learning toys for fine motor development; puppets, wooden trains, and imagination tents for creative play; toddler climbing equipment, stepping stones and balance toys for gross motor development, and so much more. Each week our theme and curriculum is different to allow maximum learning and fun.  Some weekly themes have included “Can You Find Them?: All About Mushrooms”, “Harvest Day: Veggie Exploration” and “Feathered Friends: All About Birds”.
         </p>
         <p>
           Founded in January 2024 by Stephanie McCoy after the First 5 Plumas playgroups were unable to continue. Lost Sierra Kids currently connects with dozens of families from all over Plumas County including Portola, Quincy, Clio, Blairsden, Beckwourth, and beyond. On average we host 20-30 children and 10-15 caregivers every week, and we have already served more than 60 families across Plumas County, and welcome new families each week.
         </p>
         <p>
-          After nearly two years of listening to our community, we realize there is a desperate need for additional accessible childcare in Plumas County. Families routinely face tiring commutes, long waitlists, and construction delays just to reach care. Opening a daycare in Graeagle will let parents work closer to home and keep their young children rooted in the beauty of the Lost Sierra.
+          After nearly two years of listening to our community, we realize there is a desperate need for additional accessible childcare in Plumas County. Families routinely face tiring commutes, long waitlists, and construction delays just to reach care. Opening a learning center in Graeagle will let parents work closer to home and keep their young children rooted in the beauty of the Lost Sierra.
         </p>
       </div>
     </section>
@@ -855,7 +870,7 @@
           </ul>
         </div>
         <div class="leaf-card">
-          <h3>Phase 1 Daycare Remodel</h3>
+          <h3>Phase 1 Schoolhouse Remodel</h3>
           <ul>
             <li>Remodeling the Historic Graeagle School House to include our main classroom space, administration office, kitchen, and storage,  and outdoor play yard and Community Garden next to the Graeagle Emporium and across from the Graeagle Frosty in the heart of Downtown Graeagle.</li>
             <li>Targeting ages 2–6 for full and part-time care, as well as up to 14+ for hourly drop-offs during summer, allows the widest possible age range to accommodate as many families as possible. We aim to offer learning and care to not only the residents of Plumas County but also have room to support our visitors to Plumas County as well, with a dedicated playspace and community family classes throughout the year.</li>
@@ -882,24 +897,24 @@
           <div class="leader-card__photo">
             <img src="Stephanie.jpg" alt="Photograph of Stephanie McCoy, Administrator and Director" loading="lazy" decoding="async" />
           </div>
-          <div>
+          <div class="leader-card__body">
             <h3>Stephanie McCoy</h3>
             <h4>Center Administrator</h4>
-            <p>Stephanie founded Lost Sierra Kids in January 2024 after the First 5 Plumas playgroups were no longer able to continue. She has not only taught music, theater, and early childhood education across Northern Nevada since 2003, but also has 12+ years of Non-Profit and organizational leadership and management experience. She now channels that knowledge and experience into building a daycare that is rooted in the beloved Lost Sierra. Stephanie oversees the remodel, program development, and day-to-day care, ensuring every child and caregiver feels welcomed and supported. Stephanie will also teach our music, dramatic arts, and age appropriate kitchen learning on a weekly basis.</p>
+            <p>Stephanie founded Lost Sierra Kids in January 2024 after the First 5 Plumas playgroups were no longer able to continue. She has not only taught music, theater, and early childhood education across Northern Nevada since 2003, but also has 12+ years of Non-Profit and organizational leadership and management experience. She now channels that knowledge and experience into building a learning center that is rooted in the beloved Lost Sierra. Stephanie oversees the remodel, program development, and day-to-day care, ensuring every child and caregiver feels welcomed and supported. Stephanie will also teach our music, dramatic arts, and age appropriate kitchen learning on a weekly basis.</p>
           </div>
         </article>
         <article class="leader-card leader-card--mahala">
           <div class="leader-card__photo">
             <img src="mahala.JPG" alt="Photograph of Mahala Disney, Center Director" loading="lazy" decoding="async" />
           </div>
-          <div>
+          <div class="leader-card__body">
             <h3>Mahala Disney</h3>
             <h4>Center Director</h4>
             <p>Experienced early childhood educator with 16 years of experience working with children in settings ranging from home childcare and private nannying to the Head Start program. Passionate about providing novel, nature-based childcare that nurtures independence, curiosity, and confidence. Dedicated to creating structured yet playful environments where children learn through hands-on exploration, outdoor play, and child-led discovery. Committed to fostering a lifelong love of learning, creativity, and connection through nature, cooking, and meaningful daily rhythms.</p>
           </div>
         </article>
         <article class="leader-card">
-          <div>
+          <div class="leader-card__body">
             <h3>Educator Team & Partners</h3>
             <h4>Local Expertise</h4>
             <p>Lost Sierra Kids will employ local educators and assistant teachers from Plumas County. All educators and aids will be fully licensed and accredited, upholding our high level of education standards for this area. Lost Sierra Kids will assist all educators and aids to ensure their certifications. Every staff member will be able to pass a fingerprinting and background check, not only for state guidelines, but to ensure the safety of all the children that visit Lost Sierra Kids.  We currently are partners with First 5 Plumas and Plumas STARS, connecting us to additional county agencies and community resources. We also will bring in experts around Plumas County to lead our community classes (watercolor artists, yoga instructors, wood building and workshoping, acrylic artists,  and so many others). We aim to be a staple in our heartfelt community as well as a focal point for all things Children and Family in Plumas County. It takes a village to raise kind, creative, and educated children; therefore, we plan to showcase those in our community with so much to give.</p>
@@ -908,7 +923,7 @@
       </div>
       <div class="shared-leadership">
         <h3>Commitment to Quality Care</h3>
-        <p>We will uphold the highest state and county standards for our staff, curriculum, and teaching methods. Our goal is to provide a safe place where parents can leave their children knowing they will be well cared for and encouraged to learn and grow. By investing in training and partnerships now, we are laying the groundwork for a trusted daycare that reflects the true heart of the Lost Sierra and the loving community that surrounds it.</p>
+        <p>We will uphold the highest state and county standards for our staff, curriculum, and teaching methods. Our goal is to provide a safe place where parents can leave their children knowing they will be well cared for and encouraged to learn and grow. By investing in training and partnerships now, we are laying the groundwork for a trusted learning center that reflects the true heart of the Lost Sierra and the loving community that surrounds it.</p>
       </div>
     </section>
 
@@ -959,14 +974,14 @@
     </section>
 
     <section id="photos">
-      <h2 class="section-title">Photo Carousel</h2>
+      <h2 class="section-title">Adventure Photo Parade</h2>
       <div class="photo-carousel">
         <div class="carousel-track" aria-live="polite">
           <div class="carousel-slides"></div>
         </div>
         <div class="carousel-controls">
           <div class="carousel-text">
-            <p>Snapshots from our community playgroups and team leading the daycare remodel.</p>
+            <p>Snapshots from our community playgroups and team leading the learning center remodel.</p>
             <p class="carousel-status" aria-live="polite">Loading photos…</p>
           </div>
           <div class="carousel-buttons">
@@ -981,7 +996,7 @@
       <h2 class="section-title">Rooted in Community</h2>
       <div class="split">
         <div>
-          <p>Once the daycare is open, our free community playgroup will continue weekly as the cornerstone of Lost Sierra Kids. We believe in the power of play and community,  and will always welcome you each week to come play, learn, and grow with us.  A dedicated space will let us tailor gatherings to different ages while offering cross-class programming such as holiday celebrations, performances, a community garden, and collaborative learning opportunities.</p>
+          <p>Once the learning center is open, our free community playgroup will continue weekly as the cornerstone of Lost Sierra Kids. We believe in the power of play and community,  and will always welcome you each week to come play, learn, and grow with us.  A dedicated space will let us tailor gatherings to different ages while offering cross-class programming such as holiday celebrations, performances, a community garden, and collaborative learning opportunities.</p>
           <p>We aim to be a hub for all things family in Plumas County. By inviting educators and experts from within our community, we can expand resources for locals and visitors alike and ensure every family has access to enriching, affordable support. Because every family deserves support.</p>
           <div class="cta-group">
             <a class="btn btn-primary" href="https://www.facebook.com/p/Lost-Sierra-Kids-61555225559244/" target="_blank" rel="noopener">Follow on Facebook: @lostsierrakids</a>
@@ -1038,13 +1053,10 @@
             <iframe title="Map of Lost Sierra Kids near Graeagle, CA" src="https://maps.google.com/maps?q=loc:39.770946,-120.619486&ll=39.770946,-120.619486&z=18&t=m&output=embed" width="100%" height="220" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
           </div>
         </div>
-        <aside class="partners" aria-labelledby="partners-title">
+        <aside class="partners" aria-labelledby="partners-title" hidden>
           <h3 id="partners-title">Partners</h3>
           <p>We appreciate the local businesses supporting families in the Lost Sierra.</p>
-          <div class="partner-grid" role="list">
-            <img role="listitem" src="/Logos/FB_IMG_1763564064370.jpg" alt="Graeagle Family Dental logo">
-            <img role="listitem" src="/Logos/logo-stacked-white.png" alt="Lost Sierra Chamber of Commerce logo">
-          </div>
+          <div class="partner-grid" role="list"></div>
         </aside>
       </div>
     </section>
@@ -1052,12 +1064,13 @@
 
   <footer class="footer">
     <div class="footer-content">
-      <p>&copy; <span id="year"></span> Lost Sierra Kids • Community Daycare Initiative • Graeagle, California</p>
+      <p>&copy; <span id="year"></span> Lost Sierra Kids • Community Learning Center Initiative • Graeagle, California</p>
       <nav aria-label="Footer">
         <a href="#mission">Our Story</a>
         <a href="#curriculum">Vision</a>
         <a href="#leadership">Leadership</a>
         <a href="#schedule">Phases</a>
+        <a href="#photos">Photos</a>
         <a href="#community">Community</a>
         <a href="#contact">Connect</a>
       </nav>
@@ -1075,7 +1088,7 @@
       "@context": "https://schema.org",
       "@type": "ChildCare",
       "name": "Lost Sierra Kids",
-      "description": "Local nonprofit seeking funding to open a daycare at the Historic Graeagle School House while sustaining a free weekly playgroup for families across Plumas County.",
+      "description": "Local nonprofit seeking funding to open a learning center at the Historic Graeagle School House while sustaining a free weekly playgroup for families across Plumas County.",
       "url": "https://lostsierra.kids/",
       "telephone": "coming soon",
       "email": "Lostsierrakids@gmail.com",
@@ -1265,6 +1278,92 @@
 
       loadPhotos();
     }
+
+    const partnerSection = document.querySelector('.partners');
+    const partnerGrid = document.querySelector('.partner-grid');
+
+    const formatLogoAlt = (filePath) => {
+      const base = (filePath.split('/').pop() || '').replace(/\.[^.]+$/, '');
+      const cleaned = base.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+      return cleaned ? `${cleaned} logo` : 'Community partner logo';
+    };
+
+    const fetchLogos = async () => {
+      try {
+        const response = await fetch('Logos/logos.json', { cache: 'no-store' });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data)) {
+            return data;
+          }
+        }
+      } catch (error) {
+        console.warn('Could not load logos manifest', error);
+      }
+
+      return [];
+    };
+
+    const normalizeLogos = (list) => {
+      const seen = new Set();
+      return list
+        .map((item) => (typeof item === 'string' ? { src: item, alt: '' } : item || {}))
+        .map(({ src, alt }) => {
+          const trimmedSrc = (src || '').toString().trim();
+          if (!trimmedSrc) return null;
+
+          const prefixed = trimmedSrc.startsWith('Logos/') ? trimmedSrc : `Logos/${trimmedSrc.replace(/^\/?/, '')}`;
+          if (seen.has(prefixed)) return null;
+          seen.add(prefixed);
+
+          return {
+            src: prefixed,
+            alt: alt && alt.trim() ? alt : formatLogoAlt(prefixed),
+          };
+        })
+        .filter(Boolean);
+    };
+
+    const renderPartners = async () => {
+      if (!partnerSection || !partnerGrid) return;
+
+      const manifest = await fetchLogos();
+      const logos = normalizeLogos(manifest);
+
+      const images = await Promise.all(
+        logos.map(
+          (logo) =>
+            new Promise((resolve) => {
+              const img = new Image();
+              img.loading = 'lazy';
+              img.decoding = 'async';
+              img.src = logo.src;
+              img.alt = logo.alt;
+
+              img.onload = () => resolve(img);
+              img.onerror = () => resolve(null);
+            })
+        )
+      );
+
+      const validImages = images.filter(Boolean);
+
+      if (!validImages.length) {
+        partnerSection.hidden = true;
+        return;
+      }
+
+      partnerGrid.innerHTML = '';
+      validImages.forEach((img) => {
+        img.setAttribute('role', 'listitem');
+        partnerGrid.appendChild(img);
+      });
+
+      partnerSection.hidden = false;
+    };
+
+    renderPartners();
 
     if (menuToggle && primaryNav) {
       const mobileQuery = window.matchMedia('(max-width: 800px)');
