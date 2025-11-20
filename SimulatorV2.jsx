@@ -2,2434 +2,667 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import "./SimulatorV2.css";
 
-const GRID_WIDTH = 200;
-const GRID_HEIGHT = 100;
-const CELL_SIZE = 6;
+const WORLD_WIDTH = 220; // feet
+const WORLD_HEIGHT = 120; // feet
+const MIN_SCALE = 3;
+const MAX_SCALE = 10;
+const DEFAULT_SCALE = 6;
 
-const SLIPBOT_LENGTH = 17;
-const SLIPBOT_WIDTH = SLIPBOT_LENGTH / 2.125;
-const TRAILER_LENGTH = SLIPBOT_LENGTH * 3 + 6;
-const TRAILER_WIDTH = SLIPBOT_WIDTH + 6;
-const TRAILER_WALL_THICKNESS = 4;
-const TRAILER_SLOT_MARGIN = 6;
-const COLLISION_EPSILON = 1e-6;
+const ENTITY_TEMPLATES = {
+  slipbot: {
+    label: "SlipBot",
+    length: 18,
+    width: 8,
+    color: "#6dcff6"
+  },
+  trailer: {
+    label: "Trailer",
+    length: 72,
+    width: 12,
+    color: "#94a3b8"
+  },
+  forklift: {
+    label: "Forklift",
+    length: 15,
+    width: 7,
+    color: "#fbbf24"
+  },
+  cart: {
+    label: "Cart",
+    length: 14,
+    width: 8,
+    color: "#22c55e"
+  }
+};
 
-const SLIPBOT_COLORS = ["#38bdf8", "#22c55e", "#f97316", "#c084fc", "#facc15", "#f43f5e"];
-const PRIMARY_SLIPBOT_SET_ID = "alpha";
-const SECONDARY_SLIPBOT_SET_ID = "beta";
-const FRAME_DURATION_MS = 24;
+const GRID_GAP = 5;
+const WAYPOINT_THRESHOLD = 0.75;
+const DEFAULT_SPEED = 24; // feet per second
 
-function degToRad(degrees) {
-  return (degrees * Math.PI) / 180;
+function toRadians(deg) {
+  return (deg * Math.PI) / 180;
 }
 
-function radToDeg(radians) {
-  return (radians * 180) / Math.PI;
+function createId(prefix) {
+  return `${prefix}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
-function normalizeAngle(angle) {
-  const value = Number.isFinite(angle) ? angle : 0;
-  return ((value % 360) + 360) % 360;
-}
-
-function getRotatedBoundingBox(width, height, rotation) {
-  const radians = degToRad(rotation);
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const boxWidth = Math.abs(width * cos) + Math.abs(height * sin);
-  const boxHeight = Math.abs(width * sin) + Math.abs(height * cos);
-  return { width: boxWidth, height: boxHeight };
-}
-
-function clampCenterToBounds(center, width, height, rotation) {
-  const { width: boxWidth, height: boxHeight } = getRotatedBoundingBox(width, height, rotation);
-  const halfWidth = boxWidth / 2;
-  const halfHeight = boxHeight / 2;
+function createEntity(type) {
+  const template = ENTITY_TEMPLATES[type];
+  if (!template) throw new Error(`Unknown entity type: ${type}`);
+  const center = {
+    x: WORLD_WIDTH / 2 + (Math.random() - 0.5) * 20,
+    y: WORLD_HEIGHT / 2 + (Math.random() - 0.5) * 20
+  };
   return {
-    x: Math.min(Math.max(center.x, halfWidth), GRID_WIDTH - halfWidth),
-    y: Math.min(Math.max(center.y, halfHeight), GRID_HEIGHT - halfHeight)
+    id: createId(type),
+    type,
+    label: template.label,
+    center,
+    rotation: 0,
+    length: template.length,
+    width: template.width,
+    color: template.color,
+    route: [],
+    speed: DEFAULT_SPEED
   };
 }
 
-function pointInRectangle(entity, point) {
-  const radians = degToRad(entity.rotation);
+function rotatePoint(point, center, rotation) {
+  const radians = toRadians(rotation);
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
-  const dx = point.x - entity.center.x;
-  const dy = point.y - entity.center.y;
-  const localX = cos * dx + sin * dy;
-  const localY = -sin * dx + cos * dy;
-  return Math.abs(localX) <= entity.width / 2 && Math.abs(localY) <= entity.height / 2;
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos
+  };
 }
 
-function getRectPolygon(entity) {
-  const radians = degToRad(entity.rotation);
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const halfWidth = entity.width / 2;
-  const halfHeight = entity.height / 2;
+function rectanglePolygon({ center, length, width, rotation }) {
+  const halfL = length / 2;
+  const halfW = width / 2;
   const corners = [
-    { x: -halfWidth, y: -halfHeight },
-    { x: halfWidth, y: -halfHeight },
-    { x: halfWidth, y: halfHeight },
-    { x: -halfWidth, y: halfHeight }
+    { x: center.x - halfL, y: center.y - halfW },
+    { x: center.x + halfL, y: center.y - halfW },
+    { x: center.x + halfL, y: center.y + halfW },
+    { x: center.x - halfL, y: center.y + halfW }
   ];
-  return corners.map(corner => ({
-    x: entity.center.x + corner.x * cos - corner.y * sin,
-    y: entity.center.y + corner.x * sin + corner.y * cos
-  }));
+  return rotation === 0
+    ? corners
+    : corners.map(corner => rotatePoint(corner, center, rotation));
 }
 
-function getAxesFromPolygon(polygon) {
+function polygonAxes(points) {
   const axes = [];
-  for (let i = 0; i < polygon.length; i += 1) {
-    const current = polygon[i];
-    const next = polygon[(i + 1) % polygon.length];
+  for (let i = 0; i < points.length; i += 1) {
+    const current = points[i];
+    const next = points[(i + 1) % points.length];
     const edge = { x: next.x - current.x, y: next.y - current.y };
-    const length = Math.hypot(edge.x, edge.y);
-    if (length === 0) continue;
-    axes.push({ x: -edge.y / length, y: edge.x / length });
+    const magnitude = Math.hypot(edge.x, edge.y) || 1;
+    axes.push({ x: -edge.y / magnitude, y: edge.x / magnitude });
   }
   return axes;
 }
 
-function projectPolygon(axis, polygon) {
+function project(points, axis) {
   let min = Infinity;
   let max = -Infinity;
-  for (const point of polygon) {
-    const projection = point.x * axis.x + point.y * axis.y;
-    if (projection < min) min = projection;
-    if (projection > max) max = projection;
+  for (const p of points) {
+    const value = p.x * axis.x + p.y * axis.y;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
   }
   return { min, max };
 }
 
-function overlapOnAxis(axis, polygonA, polygonB) {
-  const projA = projectPolygon(axis, polygonA);
-  const projB = projectPolygon(axis, polygonB);
-  return projA.max > projB.min + COLLISION_EPSILON && projB.max > projA.min + COLLISION_EPSILON;
-}
-
-function rectanglesOverlap(rectA, rectB) {
-  const polygonA = getRectPolygon(rectA);
-  const polygonB = getRectPolygon(rectB);
-  const axes = [...getAxesFromPolygon(polygonA), ...getAxesFromPolygon(polygonB)];
-  return axes.every(axis => overlapOnAxis(axis, polygonA, polygonB));
-}
-
-function smallestAngleDelta(current, start) {
-  let delta = current - start;
-  while (delta > 180) delta -= 360;
-  while (delta < -180) delta += 360;
-  return delta;
-}
-
-function interpolateAngle(start, end, t) {
-  const normalizedStart = normalizeAngle(start);
-  const normalizedEnd = normalizeAngle(end);
-  const delta = smallestAngleDelta(normalizedEnd, normalizedStart);
-  return normalizeAngle(normalizedStart + delta * t);
-}
-
-function isSlipbotPlacementValid(candidate, slipbots, ignoreId) {
-  const { width, height, rotation } = candidate;
-  const clamped = clampCenterToBounds(candidate.center, width, height, rotation);
-  if (clamped.x !== candidate.center.x || clamped.y !== candidate.center.y) {
-    return false;
-  }
-  const candidateRect = {
-    center: candidate.center,
-    width: candidate.width,
-    height: candidate.height,
-    rotation: candidate.rotation
-  };
-  for (const bot of slipbots) {
-    if (bot.id === ignoreId) continue;
-    const otherRect = {
-      center: bot.center,
-      width: bot.width,
-      height: bot.height,
-      rotation: bot.rotation
-    };
-    if (rectanglesOverlap(candidateRect, otherRect)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function drawRoundedRectPath(ctx, x, y, width, height, radius) {
-  const corner = Math.max(0, Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2));
-  ctx.beginPath();
-  ctx.moveTo(x + corner, y);
-  ctx.lineTo(x + width - corner, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + corner);
-  ctx.lineTo(x + width, y + height - corner);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - corner, y + height);
-  ctx.lineTo(x + corner, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - corner);
-  ctx.lineTo(x, y + corner);
-  ctx.quadraticCurveTo(x, y, x + corner, y);
-  ctx.closePath();
-}
-
-const RIGHT_ANGLE_ORIENTATIONS = [0, 90, 180, 270];
-const ROUTE_GRID_SCALE = 2; // represents half-cell precision
-const DEFAULT_GRID_STEP = 1 / ROUTE_GRID_SCALE;
-const BASE_MOVEMENT_SPEED = (DEFAULT_GRID_STEP * 3) / (FRAME_DURATION_MS / 1000);
-const TRANSLATION_STEP_COST = 1;
-const ROTATION_STEP_COST = 4;
-
-const SPEED_PRESETS = [
-  { id: "normal", label: "1×", multiplier: 1 },
-  { id: "fast", label: "2×", multiplier: 2 },
-  { id: "hyper", label: "4×", multiplier: 4 }
-];
-
-function snapToRouteGrid(value) {
-  return Math.round(value * ROUTE_GRID_SCALE) / ROUTE_GRID_SCALE;
-}
-
-function snapPointToRouteGrid(point) {
-  return {
-    x: snapToRouteGrid(point.x),
-    y: snapToRouteGrid(point.y)
-  };
-}
-
-function clonePoint(point) {
-  if (!point) return null;
-  return { x: point.x, y: point.y };
-}
-
-function rotatePointAround(point, origin, angle) {
-  if (!point) return null;
-  if (!origin || Math.abs(angle) < 1e-9) {
-    return clonePoint(point);
-  }
-  const radians = degToRad(angle);
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const dx = point.x - origin.x;
-  const dy = point.y - origin.y;
-  return {
-    x: origin.x + dx * cos - dy * sin,
-    y: origin.y + dx * sin + dy * cos
-  };
-}
-
-function rotateRectAround(rect, origin, angle) {
-  if (!rect) return null;
-  return {
-    ...rect,
-    center: rotatePointAround(rect.center, origin, angle) ?? { ...rect.center },
-    rotation: normalizeAngle((rect.rotation ?? 0) + angle)
-  };
-}
-
-function pointsAreClose(a, b, threshold = 0.6) {
-  return Math.hypot(a.x - b.x, a.y - b.y) <= threshold;
-}
-
-function alignToRightAngle(angle) {
-  const normalized = normalizeAngle(angle);
-  let best = RIGHT_ANGLE_ORIENTATIONS[0];
-  let smallest = Infinity;
-  RIGHT_ANGLE_ORIENTATIONS.forEach(candidate => {
-    const diff = Math.abs(smallestAngleDelta(normalized, candidate));
-    if (diff < smallest) {
-      smallest = diff;
-      best = candidate;
-    }
+function polygonsOverlap(a, b) {
+  const axes = [...polygonAxes(a), ...polygonAxes(b)];
+  return axes.every(axis => {
+    const projA = project(a, axis);
+    const projB = project(b, axis);
+    return projA.max > projB.min && projB.max > projA.min;
   });
-  return best;
 }
 
-function orientationIndexFromAngle(angle) {
-  const normalized = alignToRightAngle(angle);
-  return RIGHT_ANGLE_ORIENTATIONS.indexOf(normalized);
-}
-
-function angleFromOrientationIndex(index) {
-  return RIGHT_ANGLE_ORIENTATIONS[((index % RIGHT_ANGLE_ORIENTATIONS.length) + RIGHT_ANGLE_ORIENTATIONS.length) % RIGHT_ANGLE_ORIENTATIONS.length];
-}
-
-function encodeRouteKey(x, y, orientationIndex) {
-  return `${x},${y},${orientationIndex}`;
-}
-
-function cloneRect(entity) {
-  return {
-    center: { ...entity.center },
-    width: entity.width,
-    height: entity.height,
-    rotation: entity.rotation ?? 0
-  };
-}
-
-function isPlacementCollisionFree(candidate, obstacles, diagnostics) {
-  const clamped = clampCenterToBounds(candidate.center, candidate.width, candidate.height, candidate.rotation);
-  if (clamped.x !== candidate.center.x || clamped.y !== candidate.center.y) {
-    if (diagnostics && !diagnostics.boundsViolation) {
-      diagnostics.boundsViolation = {
-        candidate: cloneRect(candidate),
-        clampedCenter: { ...clamped }
-      };
+function entityCollides(candidate, entities, obstacles, ignoreId) {
+  const candidatePoly = rectanglePolygon(candidate);
+  for (const entity of entities) {
+    if (entity.id === ignoreId) continue;
+    if (polygonsOverlap(candidatePoly, rectanglePolygon(entity))) {
+      return true;
     }
-    return false;
   }
   for (const obstacle of obstacles) {
-    if (rectanglesOverlap(candidate, obstacle)) {
-      if (diagnostics && !diagnostics.collision) {
-        diagnostics.collision = {
-          candidate: cloneRect(candidate),
-          obstacle: cloneRect(obstacle)
-        };
-      }
-      return false;
+    const obstaclePoly = rectanglePolygon({ ...obstacle, rotation: 0 });
+    if (polygonsOverlap(candidatePoly, obstaclePoly)) {
+      return true;
     }
   }
-  return true;
+  return false;
 }
 
-function planRoute(start, goal, width, height, obstacles, diagnostics) {
-  const startX = Math.round(start.center.x * ROUTE_GRID_SCALE);
-  const startY = Math.round(start.center.y * ROUTE_GRID_SCALE);
-  const goalX = Math.round(goal.center.x * ROUTE_GRID_SCALE);
-  const goalY = Math.round(goal.center.y * ROUTE_GRID_SCALE);
-  const startOrientation = orientationIndexFromAngle(start.rotation);
-  const goalOrientation = orientationIndexFromAngle(goal.rotation);
-
-  const startState = { x: startX, y: startY, orientationIndex: startOrientation };
-  const goalKey = encodeRouteKey(goalX, goalY, goalOrientation);
-
-  const open = [];
-  const gScores = new Map();
-  const cameFrom = new Map();
-  const visited = new Set();
-
-  function heuristic(x, y, orientationIndex) {
-    const distance = Math.abs(x - goalX) + Math.abs(y - goalY);
-    const orientationDelta = Math.abs(orientationIndex - goalOrientation);
-    const rotationCost = Math.min(orientationDelta, RIGHT_ANGLE_ORIENTATIONS.length - orientationDelta);
-    return distance + rotationCost * ROTATION_STEP_COST;
-  }
-
-  function pushNode(node) {
-    const index = open.findIndex(item => item.fScore > node.fScore);
-    if (index === -1) {
-      open.push(node);
-    } else {
-      open.splice(index, 0, node);
-    }
-  }
-
-  const startKey = encodeRouteKey(startState.x, startState.y, startState.orientationIndex);
-  gScores.set(startKey, 0);
-  pushNode({ ...startState, fScore: heuristic(startState.x, startState.y, startState.orientationIndex) });
-
-  const directionVectors = [
-    { dx: 0, dy: -1 },
-    { dx: 1, dy: 0 },
-    { dx: 0, dy: 1 },
-    { dx: -1, dy: 0 }
-  ];
-
-  while (open.length > 0) {
-    const current = open.shift();
-    const currentKey = encodeRouteKey(current.x, current.y, current.orientationIndex);
-    if (visited.has(currentKey)) {
-      continue;
-    }
-    visited.add(currentKey);
-
-    if (currentKey === goalKey) {
-      const path = [];
-      let nodeKey = currentKey;
-      let node = current;
-      while (node) {
-        path.push(node);
-        const previousKey = cameFrom.get(nodeKey);
-        if (!previousKey) break;
-        node = previousKey.node;
-        nodeKey = previousKey.key;
-      }
-      return path.reverse();
-    }
-
-    const baseScore = gScores.get(currentKey) ?? Infinity;
-
-    // rotate left/right
-    for (const delta of [-1, 1]) {
-      const nextOrientation = (current.orientationIndex + delta + RIGHT_ANGLE_ORIENTATIONS.length) % RIGHT_ANGLE_ORIENTATIONS.length;
-      const nextKey = encodeRouteKey(current.x, current.y, nextOrientation);
-      const nextScore = baseScore + ROTATION_STEP_COST;
-      if (nextScore >= (gScores.get(nextKey) ?? Infinity)) continue;
-      const candidate = {
-        center: { x: current.x / ROUTE_GRID_SCALE, y: current.y / ROUTE_GRID_SCALE },
-        width,
-        height,
-        rotation: angleFromOrientationIndex(nextOrientation)
-      };
-      if (!isPlacementCollisionFree(candidate, obstacles, diagnostics)) continue;
-      cameFrom.set(nextKey, { key: currentKey, node: current });
-      gScores.set(nextKey, nextScore);
-      pushNode({ x: current.x, y: current.y, orientationIndex: nextOrientation, fScore: nextScore + heuristic(current.x, current.y, nextOrientation) });
-    }
-
-    // move in any cardinal direction without changing orientation
-    for (const direction of directionVectors) {
-      const nextX = current.x + direction.dx;
-      const nextY = current.y + direction.dy;
-      const nextKey = encodeRouteKey(nextX, nextY, current.orientationIndex);
-      const nextScore = baseScore + TRANSLATION_STEP_COST;
-      if (nextScore >= (gScores.get(nextKey) ?? Infinity)) continue;
-      const candidate = {
-        center: { x: nextX / ROUTE_GRID_SCALE, y: nextY / ROUTE_GRID_SCALE },
-        width,
-        height,
-        rotation: angleFromOrientationIndex(current.orientationIndex)
-      };
-      if (!isPlacementCollisionFree(candidate, obstacles, diagnostics)) continue;
-      cameFrom.set(nextKey, { key: currentKey, node: current });
-      gScores.set(nextKey, nextScore);
-      pushNode({ x: nextX, y: nextY, orientationIndex: current.orientationIndex, fScore: nextScore + heuristic(nextX, nextY, current.orientationIndex) });
-    }
-  }
-
-  return null;
+function clampToWorld(center, length, width, rotation) {
+  const poly = rectanglePolygon({ center, length, width, rotation });
+  const xs = poly.map(p => p.x);
+  const ys = poly.map(p => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const dx = Math.min(0, minX) + Math.min(0, WORLD_WIDTH - maxX);
+  const dy = Math.min(0, minY) + Math.min(0, WORLD_HEIGHT - maxY);
+  return { x: center.x + dx, y: center.y + dy };
 }
 
-function buildFramesFromPath(path, startRotation, goalRotation) {
-  if (!path || path.length === 0) return [];
-  const frames = [];
-  const normalizedStart = normalizeAngle(startRotation);
-  const initialState = path[0];
-  const initialAngle = angleFromOrientationIndex(initialState.orientationIndex);
-  const initialCenter = {
-    x: initialState.x / ROUTE_GRID_SCALE,
-    y: initialState.y / ROUTE_GRID_SCALE
-  };
-  if (Math.abs(smallestAngleDelta(initialAngle, normalizedStart)) > 1) {
-    frames.push({ center: initialCenter, rotation: initialAngle });
-  }
-  for (let i = 1; i < path.length; i += 1) {
-    const state = path[i];
-    frames.push({
-      center: { x: state.x / ROUTE_GRID_SCALE, y: state.y / ROUTE_GRID_SCALE },
-      rotation: angleFromOrientationIndex(state.orientationIndex)
-    });
-  }
-  const goalState = path[path.length - 1];
-  const lastFrameRotation = frames.length
-    ? frames[frames.length - 1].rotation
-    : angleFromOrientationIndex(goalState.orientationIndex);
-  const desiredGoalRotation = normalizeAngle(goalRotation);
-  if (Math.abs(smallestAngleDelta(desiredGoalRotation, lastFrameRotation)) > 1) {
-    frames.push({
-      center: { x: goalState.x / ROUTE_GRID_SCALE, y: goalState.y / ROUTE_GRID_SCALE },
-      rotation: desiredGoalRotation
-    });
-  }
-  return frames.reduce((acc, frame) => {
-    const previous = acc[acc.length - 1];
-    if (
-      previous &&
-      Math.abs(previous.center.x - frame.center.x) < 1e-3 &&
-      Math.abs(previous.center.y - frame.center.y) < 1e-3 &&
-      Math.abs(smallestAngleDelta(previous.rotation, frame.rotation)) < 0.5
-    ) {
-      return acc;
-    }
-    acc.push(frame);
-    return acc;
-  }, []);
+function distance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function buildPlanningObstacles(slipbots, parkingSlots, movingBotId, allowedParkingId) {
-  const obstacles = [];
-  slipbots.forEach(bot => {
-    if (bot.id === movingBotId) return;
-    obstacles.push({
-      center: { ...bot.center },
-      width: bot.width,
-      height: bot.height,
-      rotation: bot.rotation
-    });
-  });
-  parkingSlots.forEach(slot => {
-    if (slot.id === allowedParkingId) return;
-    obstacles.push({
-      center: { ...slot.center },
-      width: slot.width,
-      height: slot.height,
-      rotation: slot.rotation
-    });
-  });
-  return obstacles;
-}
-
-function planSlipbotMovement(bot, goal, slipbots, parkingSlots, options = {}) {
-  const attemptDiagnostics = {
-    botId: bot.id,
-    goal: { center: { ...goal.center }, rotation: goal.rotation }
-  };
-
-  const includeTrailer = Boolean(options.includeTrailer && options.trailer);
-  const trailerRotationAdjustment = includeTrailer
-    ? smallestAngleDelta(alignToRightAngle(options.trailer.rotation), options.trailer.rotation)
-    : 0;
-  const hasRotationAdjustment = includeTrailer && Math.abs(trailerRotationAdjustment) > 1e-3;
-  const rotationPivot = hasRotationAdjustment ? options.trailer.center : null;
-
-  const adjustPointForPlanning = point =>
-    rotatePointAround(point, rotationPivot, hasRotationAdjustment ? trailerRotationAdjustment : 0) ?? clonePoint(point);
-  const adjustAngleForPlanning = angle =>
-    normalizeAngle((angle ?? 0) + (hasRotationAdjustment ? trailerRotationAdjustment : 0));
-  const restorePointFromPlanning = point =>
-    rotatePointAround(point, rotationPivot, hasRotationAdjustment ? -trailerRotationAdjustment : 0) ?? clonePoint(point);
-  const restoreAngleFromPlanning = angle =>
-    normalizeAngle((angle ?? 0) - (hasRotationAdjustment ? trailerRotationAdjustment : 0));
-
-  const planningBot = {
-    ...bot,
-    center: adjustPointForPlanning(bot.center),
-    rotation: adjustAngleForPlanning(bot.rotation)
-  };
-  const planningGoal = {
-    center: adjustPointForPlanning(goal.center),
-    rotation: adjustAngleForPlanning(goal.rotation ?? 0)
-  };
-  const planningSlipbots = slipbots.map(item => ({
-    ...item,
-    center: adjustPointForPlanning(item.center),
-    rotation: adjustAngleForPlanning(item.rotation)
-  }));
-  const planningParkingSlots = parkingSlots.map(slot => ({
-    ...slot,
-    center: adjustPointForPlanning(slot.center),
-    rotation: adjustAngleForPlanning(slot.rotation)
-  }));
-  const planningTrailer = includeTrailer
-    ? { ...options.trailer, rotation: adjustAngleForPlanning(options.trailer.rotation) }
-    : null;
-
-  const obstacles = buildPlanningObstacles(
-    planningSlipbots,
-    planningParkingSlots,
-    bot.id,
-    options.allowedParkingId ?? null
+function SlipbotShape({ entity, isSelected }) {
+  const { center, length, width, rotation, color } = entity;
+  const bodyRadius = Math.min(2, width / 3);
+  const stroke = isSelected ? "#22d3ee" : "#0f172a";
+  return (
+    <g transform={`translate(${center.x}, ${center.y}) rotate(${rotation})`}>
+      <rect
+        x={-length / 2}
+        y={-width / 2}
+        width={length}
+        height={width}
+        rx={bodyRadius}
+        ry={bodyRadius}
+        fill={color}
+        stroke={stroke}
+        strokeWidth={0.6}
+        opacity={0.95}
+      />
+      <rect
+        x={-length / 2 + 1}
+        y={-width / 2 + 1}
+        width={length / 3}
+        height={width - 2}
+        rx={bodyRadius}
+        fill="#0ea5e9"
+        opacity={0.35}
+      />
+      <line x1={0} y1={-width / 2} x2={0} y2={width / 2} stroke="#0f172a" strokeDasharray="2 2" strokeWidth={0.8} />
+      <polygon
+        points={`${-length / 2 + 2},0 ${-length / 2 + 6},-2 ${-length / 2 + 6},2`}
+        fill="#0f172a"
+      />
+    </g>
   );
-  let trailerWaypoints = [];
-
-  if (includeTrailer && planningTrailer) {
-    obstacles.push(...buildTrailerWallObstacles(planningTrailer));
-    const { insideWaypoint, outsideWaypoint } = computeTrailerExitWaypoints(planningTrailer);
-    const startInside = pointInRectangle(planningTrailer, planningBot.center);
-    const goalInside = pointInRectangle(planningTrailer, planningGoal.center);
-
-    const waypoints = [];
-    const pushWaypoint = waypoint => {
-      if (!waypoint) return;
-      const last = waypoints[waypoints.length - 1];
-      if (
-        last &&
-        Math.hypot(last.center.x - waypoint.center.x, last.center.y - waypoint.center.y) < 1e-3 &&
-        Math.abs(smallestAngleDelta(last.rotation, waypoint.rotation)) < 0.5
-      ) {
-        return;
-      }
-      waypoints.push(waypoint);
-    };
-
-    if (startInside) {
-      const needsInsideStep =
-        insideWaypoint &&
-        (!pointsAreClose(planningBot.center, insideWaypoint.center) ||
-          Math.abs(smallestAngleDelta(planningBot.rotation, insideWaypoint.rotation)) > 0.5);
-      if (needsInsideStep) {
-        pushWaypoint(insideWaypoint);
-      }
-      pushWaypoint(outsideWaypoint);
-    }
-    if (goalInside) {
-      if (!startInside) {
-        pushWaypoint(outsideWaypoint);
-      }
-      const needsInsideArrival =
-        insideWaypoint &&
-        (!pointsAreClose(planningGoal.center, insideWaypoint.center) ||
-          Math.abs(smallestAngleDelta(planningGoal.rotation ?? 0, insideWaypoint.rotation)) > 0.5);
-      if (needsInsideArrival) {
-        pushWaypoint(insideWaypoint);
-      }
-    }
-
-    trailerWaypoints = waypoints;
-  }
-
-  const sequence = [
-    ...trailerWaypoints,
-    { center: { ...planningGoal.center }, rotation: planningGoal.rotation }
-  ];
-
-  const combinedFrames = [];
-  const combinedPoints = [];
-  let planningCurrentState = {
-    center: { ...planningBot.center },
-    rotation: planningBot.rotation
-  };
-
-  for (const waypoint of sequence) {
-    const routeDiagnostics = { botId: bot.id };
-    const route = planRoute(
-      { center: planningCurrentState.center, rotation: planningCurrentState.rotation },
-      { center: waypoint.center, rotation: waypoint.rotation },
-      bot.width,
-      bot.height,
-      obstacles,
-      routeDiagnostics
-    );
-    if (!route) {
-      return {
-        success: false,
-        diagnostics: {
-          ...attemptDiagnostics,
-          collision: routeDiagnostics.collision
-            ? {
-                candidate: rotateRectAround(routeDiagnostics.collision.candidate, rotationPivot, -trailerRotationAdjustment),
-                obstacle: rotateRectAround(routeDiagnostics.collision.obstacle, rotationPivot, -trailerRotationAdjustment)
-              }
-            : null,
-          boundsViolation: routeDiagnostics.boundsViolation
-            ? {
-                candidate: rotateRectAround(routeDiagnostics.boundsViolation.candidate, rotationPivot, -trailerRotationAdjustment),
-                clampedCenter: restorePointFromPlanning(routeDiagnostics.boundsViolation.clampedCenter)
-              }
-            : null,
-          failedWaypoint: {
-            center: restorePointFromPlanning(waypoint.center),
-            rotation: restoreAngleFromPlanning(waypoint.rotation)
-          },
-          fromState: {
-            center: restorePointFromPlanning(planningCurrentState.center),
-            rotation: restoreAngleFromPlanning(planningCurrentState.rotation)
-          }
-        }
-      };
-    }
-
-    const frames = buildFramesFromPath(route, planningCurrentState.rotation, waypoint.rotation).map(frame => ({
-      center: restorePointFromPlanning(frame.center),
-      rotation: restoreAngleFromPlanning(frame.rotation)
-    }));
-    if (frames.length) {
-      if (combinedFrames.length) {
-        combinedFrames.push(...frames.slice(1));
-      } else {
-        combinedFrames.push(...frames);
-      }
-    }
-
-    const points = route
-      .map(state => ({ x: state.x / ROUTE_GRID_SCALE, y: state.y / ROUTE_GRID_SCALE }))
-      .map(point => restorePointFromPlanning(point))
-      .filter(Boolean);
-    if (points.length) {
-      if (combinedPoints.length) {
-        combinedPoints.push(...points.slice(1));
-      } else {
-        combinedPoints.push(...points);
-      }
-    }
-
-    planningCurrentState = { center: { ...waypoint.center }, rotation: waypoint.rotation };
-  }
-
-  return { success: true, frames: combinedFrames, points: combinedPoints };
 }
 
-function extractIssueFromFailure(bot, attempt, mode) {
-  if (!attempt) {
-    return {
-      type: "unreachable",
-      botId: bot.id,
-      botName: bot.name,
-      mode
-    };
-  }
-  const diagnostics = attempt.diagnostics ?? {};
-  if (diagnostics.collision) {
-    return {
-      type: "collision",
-      botId: bot.id,
-      botName: bot.name,
-      slotId: attempt.slotId,
-      slotLabel: attempt.slotLabel ?? null,
-      candidate: diagnostics.collision.candidate ?? null,
-      obstacle: diagnostics.collision.obstacle ?? null,
-      failedWaypoint: diagnostics.failedWaypoint ?? null,
-      mode
-    };
-  }
-  if (diagnostics.boundsViolation) {
-    return {
-      type: "bounds",
-      botId: bot.id,
-      botName: bot.name,
-      slotId: attempt.slotId,
-      slotLabel: attempt.slotLabel ?? null,
-      candidate: diagnostics.boundsViolation.candidate ?? null,
-      clampedCenter: diagnostics.boundsViolation.clampedCenter ?? null,
-      failedWaypoint: diagnostics.failedWaypoint ?? null,
-      mode
-    };
-  }
-  return {
-    type: "unreachable",
-    botId: bot.id,
-    botName: bot.name,
-    slotId: attempt.slotId,
-    slotLabel: attempt.slotLabel ?? null,
-    failedWaypoint: diagnostics.failedWaypoint ?? null,
-    mode
-  };
-}
-
-function computeExitPlan(slipbots, parkingSlots, trailer) {
-  const assignedSlots = parkingSlots.filter(slot => typeof slot.slotIndex === "number");
-  const candidateSlots = assignedSlots.length ? assignedSlots : parkingSlots;
-  if (!candidateSlots.length) {
-    return null;
-  }
-
-  const slotByIndex = new Map();
-  candidateSlots.forEach(slot => {
-    if (typeof slot.slotIndex === "number") {
-      slotByIndex.set(slot.slotIndex, slot);
-    }
-  });
-
-  const botsNeedingParking = slipbots.filter(bot => {
-    const assignedSlot = typeof bot.slotIndex === "number" ? slotByIndex.get(bot.slotIndex) : null;
-    if (!assignedSlot) {
-      return pointInRectangle(trailer, bot.center);
-    }
-    const distance = Math.hypot(bot.center.x - assignedSlot.center.x, bot.center.y - assignedSlot.center.y);
-    const rotationDelta = Math.abs(smallestAngleDelta(bot.rotation, assignedSlot.rotation));
-    if (!pointInRectangle(trailer, bot.center) && distance < 0.5 && rotationDelta < 10) {
-      return false;
-    }
-    return true;
-  });
-
-  if (!botsNeedingParking.length) {
-    return null;
-  }
-
-  const sortedBots = [...botsNeedingParking].sort((a, b) => {
-    const aInside = pointInRectangle(trailer, a.center) ? 1 : 0;
-    const bInside = pointInRectangle(trailer, b.center) ? 1 : 0;
-    if (aInside !== bInside) return bInside - aInside;
-    const aIndex = typeof a.slotIndex === "number" ? a.slotIndex : Number.MAX_SAFE_INTEGER;
-    const bIndex = typeof b.slotIndex === "number" ? b.slotIndex : Number.MAX_SAFE_INTEGER;
-    if (aInside && bInside) {
-      if (aIndex !== bIndex) return bIndex - aIndex;
-    } else if (aIndex !== bIndex) {
-      return aIndex - bIndex;
-    }
-    return a.id.localeCompare(b.id);
-  });
-
-  const insideSets = new Set(
-    sortedBots
-      .filter(bot => pointInRectangle(trailer, bot.center))
-      .map(bot => bot.setId)
-      .filter(Boolean)
+function TrailerShape({ entity, isSelected }) {
+  const { center, length, width, rotation, color } = entity;
+  return (
+    <g transform={`translate(${center.x}, ${center.y}) rotate(${rotation})`}>
+      <rect
+        x={-length / 2}
+        y={-width / 2}
+        width={length}
+        height={width}
+        fill={color}
+        stroke={isSelected ? "#22d3ee" : "#0f172a"}
+        strokeWidth={0.6}
+        opacity={0.75}
+      />
+      <rect x={-length / 2 + 2} y={-width / 2 + 2} width={length - 4} height={width - 4} fill="#0f172a" opacity={0.15} />
+      <line x1={length / 2 - 6} y1={-width / 2} x2={length / 2 - 6} y2={width / 2} stroke="#0f172a" strokeWidth={1} opacity={0.8} />
+    </g>
   );
-  const [activeSetId] = insideSets.size === 1 ? Array.from(insideSets) : [null];
-
-  let simulatedSlipbots = slipbots.map(item => ({ ...item }));
-  const plans = [];
-  const targets = {};
-  const usedSlots = new Set();
-  const failures = [];
-
-  sortedBots.forEach(bot => {
-    const assigned =
-      typeof bot.slotIndex === "number"
-        ? candidateSlots.find(item => item.slotIndex === bot.slotIndex)
-        : null;
-    const slotCandidates = [];
-    if (assigned) {
-      slotCandidates.push(assigned);
-    }
-    candidateSlots.forEach(slot => {
-      if (slotCandidates.some(item => item.id === slot.id)) return;
-      if (usedSlots.has(slot.id)) return;
-      slotCandidates.push(slot);
-    });
-
-    if (!slotCandidates.length) {
-      failures.push({ bot, attempts: [] });
-      return;
-    }
-
-    const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
-    let plannedMovement = null;
-    const attempts = [];
-
-    for (const slot of slotCandidates) {
-      const movement = planSlipbotMovement(
-        simulatedBot,
-        { center: { ...slot.center }, rotation: slot.rotation },
-        simulatedSlipbots,
-        parkingSlots,
-        {
-          allowedParkingId: slot.id,
-          includeTrailer: true,
-          trailer
-        }
-      );
-      if (movement?.success) {
-        plannedMovement = { slot, movement };
-        break;
-      }
-      attempts.push({
-        slotId: slot.id,
-        slotLabel: slot.label ?? null,
-        diagnostics: movement?.diagnostics ?? null
-      });
-    }
-
-    if (!plannedMovement) {
-      failures.push({ bot, attempts });
-      return;
-    }
-
-    const {
-      slot,
-      movement: { frames, points }
-    } = plannedMovement;
-
-    usedSlots.add(slot.id);
-    plans.push({ botId: bot.id, frames, points });
-    targets[bot.id] = { center: { ...slot.center }, rotation: slot.rotation };
-    simulatedSlipbots = simulatedSlipbots.map(item =>
-      item.id === bot.id
-        ? { ...item, center: { ...slot.center }, rotation: slot.rotation }
-        : item
-    );
-  });
-
-  if (failures.length || plans.length !== sortedBots.length) {
-    const issues = failures.map(failure => {
-      const attemptWithDetails = failure.attempts.find(
-        attempt => attempt.diagnostics?.collision || attempt.diagnostics?.boundsViolation
-      );
-      const bestAttempt = attemptWithDetails ?? failure.attempts[0] ?? null;
-      return extractIssueFromFailure(failure.bot, bestAttempt, "exit");
-    });
-    return { plans: [], targets: {}, routes: {}, activeSetId, issues };
-  }
-
-  const routes = plans.reduce((acc, plan) => {
-    const bot = slipbots.find(item => item.id === plan.botId);
-    acc[plan.botId] = { points: plan.points, color: bot?.color ?? null };
-    return acc;
-  }, {});
-
-  return { plans, targets, routes, activeSetId, issues: [] };
 }
 
-function computeEnterPlan(slipbots, parkingSlots, trailer, lastExitedSet) {
-  const trailerOccupants = slipbots.filter(bot => pointInRectangle(trailer, bot.center));
-  if (trailerOccupants.length > 0) {
-    return null;
-  }
-
-  const trailerSlots = computeTrailerSlots(trailer);
-  if (!trailerSlots.length) {
-    return null;
-  }
-
-  const targetSetId =
-    lastExitedSet === PRIMARY_SLIPBOT_SET_ID ? SECONDARY_SLIPBOT_SET_ID : PRIMARY_SLIPBOT_SET_ID;
-
-  let simulatedSlipbots = slipbots.map(item => ({ ...item }));
-  const relocationPlans = [];
-  const relocationTargets = {};
-  const relocationFailures = [];
-  const previousSetId = lastExitedSet;
-  const relocationCandidates =
-    previousSetId && previousSetId !== targetSetId
-      ? slipbots.filter(bot => {
-          if (bot.setId !== previousSetId) return false;
-          if (!bot.stagingCenter) return false;
-          if (pointInRectangle(trailer, bot.center)) return false;
-          const slot = parkingSlots.find(item => item.slotIndex === bot.slotIndex);
-          if (!slot) return false;
-          const dx = bot.center.x - slot.center.x;
-          const dy = bot.center.y - slot.center.y;
-          return Math.hypot(dx, dy) < SLIPBOT_LENGTH / 2;
-        })
-      : [];
-
-  relocationCandidates.forEach(bot => {
-    const stagingCenter = bot.stagingCenter;
-    if (!stagingCenter) return;
-    const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
-    const movement = planSlipbotMovement(
-      simulatedBot,
-      { center: { ...stagingCenter }, rotation: bot.stagingRotation ?? 0 },
-      simulatedSlipbots,
-      parkingSlots,
-      {
-        allowedParkingId: null,
-        includeTrailer: true,
-        trailer
-      }
-    );
-    if (movement?.success) {
-      relocationPlans.push({ botId: bot.id, frames: movement.frames, points: movement.points });
-      relocationTargets[bot.id] = { center: { ...stagingCenter }, rotation: bot.stagingRotation ?? 0 };
-      simulatedSlipbots = simulatedSlipbots.map(item =>
-        item.id === bot.id
-          ? { ...item, center: { ...stagingCenter }, rotation: bot.stagingRotation ?? 0 }
-          : item
-      );
-      return;
-    }
-    relocationFailures.push({
-      bot,
-      attempts: [
-        {
-          slotId: null,
-          slotLabel: null,
-          diagnostics: movement?.diagnostics ?? null
-        }
-      ]
-    });
-  });
-
-  if (relocationFailures.length) {
-    const issues = relocationFailures.map(failure =>
-      extractIssueFromFailure(failure.bot, failure.attempts[0] ?? null, "enter")
-    );
-    return { plans: [], targets: {}, routes: {}, issues };
-  }
-
-  const stagedBots = slipbots
-    .filter(bot => bot.setId === targetSetId && !pointInRectangle(trailer, bot.center))
-    .sort((a, b) => {
-      const aIndex = typeof a.slotIndex === "number" ? a.slotIndex : Number.MAX_SAFE_INTEGER;
-      const bIndex = typeof b.slotIndex === "number" ? b.slotIndex : Number.MAX_SAFE_INTEGER;
-      if (aIndex !== bIndex) return aIndex - bIndex;
-      return a.id.localeCompare(b.id);
-    })
-    .slice(0, trailerSlots.length);
-
-  if (stagedBots.length < trailerSlots.length) {
-    return null;
-  }
-
-  const entryPlans = [];
-  const entryTargets = {};
-  const usedSlots = new Set();
-  const entryFailures = [];
-
-  stagedBots.forEach(bot => {
-    const assigned =
-      typeof bot.slotIndex === "number"
-        ? trailerSlots.find(item => item.slotIndex === bot.slotIndex)
-        : null;
-    const slotCandidates = [];
-    if (assigned) {
-      slotCandidates.push(assigned);
-    }
-    trailerSlots.forEach(slot => {
-      if (slotCandidates.some(item => item.slotIndex === slot.slotIndex)) return;
-      if (usedSlots.has(slot.slotIndex)) return;
-      slotCandidates.push(slot);
-    });
-
-    if (!slotCandidates.length) {
-      entryFailures.push({ bot, attempts: [] });
-      return;
-    }
-
-    const simulatedBot = simulatedSlipbots.find(item => item.id === bot.id) ?? bot;
-    let plannedMovement = null;
-    const attempts = [];
-
-    for (const slot of slotCandidates) {
-      const movement = planSlipbotMovement(
-        simulatedBot,
-        { center: { ...slot.center }, rotation: slot.rotation },
-        simulatedSlipbots,
-        parkingSlots,
-        {
-          allowedParkingId: null,
-          includeTrailer: true,
-          trailer
-        }
-      );
-      if (movement?.success) {
-        plannedMovement = { slot, movement };
-        break;
-      }
-      attempts.push({
-        slotId: slot.slotIndex,
-        slotLabel: slot.label ?? null,
-        diagnostics: movement?.diagnostics ?? null
-      });
-    }
-
-    if (!plannedMovement) {
-      entryFailures.push({ bot, attempts });
-      return;
-    }
-
-    const {
-      slot,
-      movement: { frames, points }
-    } = plannedMovement;
-
-    usedSlots.add(slot.slotIndex);
-    entryPlans.push({ botId: bot.id, frames, points });
-    entryTargets[bot.id] = { center: { ...slot.center }, rotation: slot.rotation };
-    simulatedSlipbots = simulatedSlipbots.map(item =>
-      item.id === bot.id
-        ? { ...item, center: { ...slot.center }, rotation: slot.rotation }
-        : item
-    );
-  });
-
-  if (entryFailures.length || entryPlans.length !== stagedBots.length) {
-    const issues = entryFailures.map(failure => {
-      const attemptWithDetails = failure.attempts.find(
-        attempt => attempt.diagnostics?.collision || attempt.diagnostics?.boundsViolation
-      );
-      const bestAttempt = attemptWithDetails ?? failure.attempts[0] ?? null;
-      return extractIssueFromFailure(failure.bot, bestAttempt, "enter");
-    });
-    return { plans: [], targets: {}, routes: {}, issues };
-  }
-
-  const plans = [...relocationPlans, ...entryPlans];
-  const targets = { ...relocationTargets, ...entryTargets };
-  const routes = plans.reduce((acc, plan) => {
-    const bot = slipbots.find(item => item.id === plan.botId);
-    acc[plan.botId] = { points: plan.points, color: bot?.color ?? null };
-    return acc;
-  }, {});
-
-  return { plans, targets, routes, issues: [] };
-}
-
-function computeTrailerSlots(trailer) {
-  const radians = degToRad(trailer.rotation);
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  return Array.from({ length: 3 }, (_, index) => {
-    const offset = -trailer.height / 2 + TRAILER_SLOT_MARGIN + index * SLIPBOT_LENGTH + SLIPBOT_LENGTH / 2;
-    const local = { x: 0, y: offset };
-    const rawCenter = {
-      x: trailer.center.x + local.x * cos - local.y * sin,
-      y: trailer.center.y + local.x * sin + local.y * cos
-    };
-    const center = snapPointToRouteGrid(rawCenter);
-    return {
-      label: String.fromCharCode(65 + index),
-      slotIndex: index,
-      center,
-      rotation: trailer.rotation
-    };
-  });
-}
-
-function transformTrailerLocalPoint(trailer, local) {
-  const radians = degToRad(trailer.rotation);
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  return {
-    x: trailer.center.x + local.x * cos - local.y * sin,
-    y: trailer.center.y + local.x * sin + local.y * cos
-  };
-}
-
-function transformPointToTrailerLocal(trailer, point) {
-  const radians = degToRad(trailer.rotation);
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const dx = point.x - trailer.center.x;
-  const dy = point.y - trailer.center.y;
-  return {
-    x: cos * dx + sin * dy,
-    y: -sin * dx + cos * dy
-  };
-}
-
-function transformAttachedSlipbots(previousTrailer, nextTrailer, slipbots) {
-  if (!previousTrailer || !nextTrailer) {
-    return slipbots;
-  }
-  let changed = false;
-  const next = slipbots.map(bot => {
-    const isAttached =
-      (bot.attachedTrailerId && bot.attachedTrailerId === previousTrailer.id) ||
-      (!bot.attachedTrailerId && pointInRectangle(previousTrailer, bot.center));
-    if (!isAttached) {
-      return bot;
-    }
-    const localCenter = transformPointToTrailerLocal(previousTrailer, bot.center);
-    const nextCenter = transformTrailerLocalPoint(nextTrailer, localCenter);
-    const rotationDelta = smallestAngleDelta(bot.rotation, previousTrailer.rotation);
-    const nextRotation = normalizeAngle(nextTrailer.rotation + rotationDelta);
-    if (
-      Math.abs(nextCenter.x - bot.center.x) < 1e-6 &&
-      Math.abs(nextCenter.y - bot.center.y) < 1e-6 &&
-      Math.abs(smallestAngleDelta(nextRotation, bot.rotation)) < 1e-3
-    ) {
-      return bot;
-    }
-    changed = true;
-    return {
-      ...bot,
-      center: nextCenter,
-      rotation: nextRotation
-    };
-  });
-  return changed ? next : slipbots;
-}
-
-function attachSlipbotsToTrailerState(slipbots, trailer) {
-  if (!trailer) {
-    return slipbots;
-  }
-  let changed = false;
-  const next = slipbots.map(bot => {
-    const shouldAttach = pointInRectangle(trailer, bot.center);
-    const attachedTrailerId = shouldAttach ? trailer.id : null;
-    if (bot.attachedTrailerId === attachedTrailerId) {
-      return bot;
-    }
-    changed = true;
-    return {
-      ...bot,
-      attachedTrailerId
-    };
-  });
-  return changed ? next : slipbots;
-}
-
-function buildTrailerWallObstacles(trailer) {
-  const halfWidth = trailer.width / 2;
-  const halfHeight = trailer.height / 2;
-  const maxThicknessForSlipbot = Math.max(0, (trailer.width - SLIPBOT_WIDTH) / 2);
-  const wallThickness = Math.min(
-    TRAILER_WALL_THICKNESS,
-    halfWidth,
-    halfHeight,
-    maxThicknessForSlipbot
+function ForkliftShape({ entity, isSelected }) {
+  const { center, length, width, rotation, color } = entity;
+  return (
+    <g transform={`translate(${center.x}, ${center.y}) rotate(${rotation})`}>
+      <rect
+        x={-length / 2}
+        y={-width / 2}
+        width={length}
+        height={width}
+        rx={1.2}
+        fill={color}
+        stroke={isSelected ? "#22d3ee" : "#0f172a"}
+        strokeWidth={0.6}
+      />
+      <rect x={length / 2 - 4} y={-width / 2 - 1} width={3.5} height={width + 2} fill="#1f2937" opacity={0.9} />
+      <line x1={-length / 4} y1={-width / 2} x2={-length / 4} y2={width / 2} stroke="#f8fafc" strokeDasharray="1 1" strokeWidth={0.8} />
+    </g>
   );
-
-  return [
-    {
-      center: transformTrailerLocalPoint(trailer, { x: -(halfWidth - wallThickness / 2), y: 0 }),
-      width: wallThickness,
-      height: trailer.height,
-      rotation: trailer.rotation
-    },
-    {
-      center: transformTrailerLocalPoint(trailer, { x: halfWidth - wallThickness / 2, y: 0 }),
-      width: wallThickness,
-      height: trailer.height,
-      rotation: trailer.rotation
-    },
-    {
-      center: transformTrailerLocalPoint(trailer, { x: 0, y: -(halfHeight - wallThickness / 2) }),
-      width: trailer.width,
-      height: wallThickness,
-      rotation: trailer.rotation
-    }
-  ];
 }
 
-function computeTrailerExitWaypoints(trailer) {
-  if (!trailer) {
-    return { insideWaypoint: null, outsideWaypoint: null };
-  }
-
-  const halfHeight = trailer.height / 2;
-  const insideOffset = Math.max(0, halfHeight - SLIPBOT_LENGTH / 2 - 0.75);
-  const outsideOffset = halfHeight + SLIPBOT_LENGTH / 2 + 2;
-
-  const insideCenter = snapPointToRouteGrid(transformTrailerLocalPoint(trailer, { x: 0, y: insideOffset }));
-  const outsideRaw = transformTrailerLocalPoint(trailer, { x: 0, y: outsideOffset });
-  const outsideSnapped = snapPointToRouteGrid(outsideRaw);
-  const clampedOutside = clampCenterToBounds(
-    outsideSnapped,
-    SLIPBOT_WIDTH,
-    SLIPBOT_LENGTH,
-    trailer.rotation
+function CartShape({ entity, isSelected }) {
+  const { center, length, width, rotation, color } = entity;
+  return (
+    <g transform={`translate(${center.x}, ${center.y}) rotate(${rotation})`}>
+      <rect
+        x={-length / 2}
+        y={-width / 2}
+        width={length}
+        height={width}
+        rx={1.6}
+        fill={color}
+        stroke={isSelected ? "#22d3ee" : "#0f172a"}
+        strokeWidth={0.6}
+        opacity={0.9}
+      />
+      <rect x={-length / 3} y={-width / 2 + 1} width={length / 1.5} height={width - 2} fill="#0f172a" opacity={0.18} />
+    </g>
   );
-  const outsideCenter = snapPointToRouteGrid(clampedOutside);
-
-  return {
-    insideWaypoint: {
-      center: insideCenter,
-      rotation: trailer.rotation
-    },
-    outsideWaypoint: {
-      center: outsideCenter,
-      rotation: trailer.rotation
-    }
-  };
 }
 
-function buildInitialTrailer() {
-  const clearance = SLIPBOT_LENGTH / 2 + 4;
-  const targetCenter = {
-    x: 36,
-    y: GRID_HEIGHT - TRAILER_LENGTH / 2 - clearance
-  };
-  const center = clampCenterToBounds(targetCenter, TRAILER_WIDTH, TRAILER_LENGTH, 0);
-  return {
-    id: "trailer",
-    center,
-    rotation: 0,
-    width: TRAILER_WIDTH,
-    height: TRAILER_LENGTH
-  };
+function ObstacleShape({ obstacle }) {
+  const { x, y, length, width } = obstacle;
+  const areaCenter = { x: x + length / 2, y: y + width / 2 };
+  const dimensionLabel = `${length.toFixed(2)}ft × ${width.toFixed(2)}ft`;
+  return (
+    <g transform={`translate(${areaCenter.x}, ${areaCenter.y})`}>
+      <rect x={-length / 2} y={-width / 2} width={length} height={width} fill="rgba(244,63,94,0.18)" stroke="#f43f5e" strokeWidth={0.8} />
+      <text x={-length / 2 + 1.2} y={-width / 2 - 1.2} className="obstacle-label">
+        {dimensionLabel}
+      </text>
+    </g>
+  );
 }
 
-function computeParkingSlotCenter(trailer, index) {
-  const spacing = SLIPBOT_LENGTH + 6;
-  const baseX = Math.min(GRID_WIDTH - SLIPBOT_WIDTH, trailer.center.x + trailer.width + 36);
-  const startY = Math.max(SLIPBOT_LENGTH / 2 + 6, trailer.center.y - trailer.height / 2 + SLIPBOT_LENGTH / 2);
-  const rawCenter = {
-    x: baseX,
-    y: startY + spacing * index
-  };
-  return clampCenterToBounds(rawCenter, SLIPBOT_WIDTH, SLIPBOT_LENGTH, 0);
-}
-
-function buildInitialParkingSlots(trailer) {
-  return Array.from({ length: 3 }, (_, index) => {
-    const id = `slot-${index + 1}`;
-    const label = String.fromCharCode(65 + index);
-    const center = computeParkingSlotCenter(trailer, index);
-    return createParkingSlot(id, center, label, { slotIndex: index });
-  });
-}
-
-function buildInitialSlipbots(trailer, parkingSlots) {
-  const trailerSlots = computeTrailerSlots(trailer);
-  const trailerBots = trailerSlots.map((slot, index) => {
-    const color = SLIPBOT_COLORS[index % SLIPBOT_COLORS.length];
-    const parkingSlot = parkingSlots[index];
-    const fallbackStaging = clampCenterToBounds(
-      {
-        x: trailer.center.x + trailer.width + 12 + index * (SLIPBOT_WIDTH + 4),
-        y: trailer.center.y - trailer.height / 2 + 12 + index * (SLIPBOT_LENGTH + 6)
-      },
-      SLIPBOT_WIDTH,
-      SLIPBOT_LENGTH,
-      0
-    );
-    const stagingCenter = parkingSlot
-      ? clampCenterToBounds(
-          {
-            x: parkingSlot.center.x - SLIPBOT_WIDTH * 3,
-            y: parkingSlot.center.y
-          },
-          SLIPBOT_WIDTH,
-          SLIPBOT_LENGTH,
-          0
-        )
-      : fallbackStaging;
-    return createSlipbot(
-      `slipbot-${index + 1}`,
-      color,
-      { ...slot.center },
-      {
-        name: `SlipBot Alpha-${index + 1}`,
-        setId: PRIMARY_SLIPBOT_SET_ID,
-        slotIndex: slot.slotIndex,
-        stagingCenter,
-        stagingRotation: 0,
-        attachedTrailerId: trailer.id
-      }
-    );
-  });
-
-  const gridBots = Array.from({ length: 3 }, (_, index) => {
-    const color = SLIPBOT_COLORS[3 + index];
-    const parkingSlot = parkingSlots[index];
-    const fallbackStaging = clampCenterToBounds(
-      {
-        x: trailer.center.x + trailer.width + 48,
-        y: trailer.center.y - trailer.height / 2 + 12 + index * (SLIPBOT_LENGTH + 6)
-      },
-      SLIPBOT_WIDTH,
-      SLIPBOT_LENGTH,
-      0
-    );
-    const stagingCenter = parkingSlot
-      ? clampCenterToBounds(
-          {
-            x: parkingSlot.center.x + SLIPBOT_WIDTH * 3,
-            y: parkingSlot.center.y
-          },
-          SLIPBOT_WIDTH,
-          SLIPBOT_LENGTH,
-          0
-        )
-      : fallbackStaging;
-    return createSlipbot(
-      `slipbot-${index + 4}`,
-      color,
-      stagingCenter,
-      {
-        name: `SlipBot Beta-${index + 1}`,
-        setId: SECONDARY_SLIPBOT_SET_ID,
-        slotIndex: index,
-        stagingCenter,
-        stagingRotation: 0
-      }
-    );
-  });
-
-  return attachSlipbotsToTrailerState([...trailerBots, ...gridBots], trailer);
-}
-
-function createSlipbot(id, color, center, options = {}) {
-  return {
-    id,
-    name: options.name ?? `SlipBot ${id.split("-").pop()?.toUpperCase() ?? id}`,
-    color,
-    center,
-    rotation: options.rotation ?? 0,
-    width: SLIPBOT_WIDTH,
-    height: SLIPBOT_LENGTH,
-    setId: options.setId ?? null,
-    slotIndex: options.slotIndex ?? null,
-    stagingCenter: options.stagingCenter ?? null,
-    stagingRotation: options.stagingRotation ?? 0,
-    attachedTrailerId: options.attachedTrailerId ?? null
-  };
-}
-
-function createParkingSlot(id, center, label, options = {}) {
-  return {
-    id,
-    center,
-    rotation: options.rotation ?? 0,
-    width: SLIPBOT_WIDTH,
-    height: SLIPBOT_LENGTH,
-    label,
-    slotIndex: options.slotIndex ?? null,
-    setId: options.setId ?? null
-  };
-}
-
-function extractNumericSuffix(value, prefix) {
-  if (!value?.startsWith(prefix)) return null;
-  const suffix = value.slice(prefix.length);
-  const parsed = Number.parseInt(suffix, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getNextSlipbotId(slipbots) {
-  const maxIndex = slipbots.reduce((acc, bot) => {
-    const index = extractNumericSuffix(bot.id, "slipbot-");
-    return index && index > acc ? index : acc;
-  }, 0);
-  return `slipbot-${maxIndex + 1}`;
-}
-
-function getParkingLabelForIndex(index) {
-  const base = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  if (index < base.length) {
-    return base[index];
-  }
-  const first = Math.floor(index / base.length) - 1;
-  const second = index % base.length;
-  return `${base[first]}${base[second]}`;
-}
-
-function getPointerPosition(event, canvas) {
-  const rect = canvas?.getBoundingClientRect();
-  if (!rect) return null;
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const px = (event.clientX - rect.left) * scaleX;
-  const py = (event.clientY - rect.top) * scaleY;
-  return {
-    px,
-    py,
-    x: px / CELL_SIZE,
-    y: py / CELL_SIZE
-  };
-}
+const ENTITY_RENDERERS = {
+  slipbot: SlipbotShape,
+  trailer: TrailerShape,
+  forklift: ForkliftShape,
+  cart: CartShape
+};
 
 function SimulatorV2() {
   const navigate = useNavigate();
-  const canvasRef = useRef(null);
-  const interactionRef = useRef(null);
+  const [entities, setEntities] = useState(() => [createEntity("slipbot")]);
+  const [obstacles, setObstacles] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [drawMode, setDrawMode] = useState(false);
+  const [draftObstacle, setDraftObstacle] = useState(null);
+  const [scale, setScale] = useState(DEFAULT_SCALE);
+  const [background, setBackground] = useState(null);
+  const svgRef = useRef(null);
+  const dragRef = useRef(null);
+  const lastFrameRef = useRef(null);
 
-  const initialTrailer = useMemo(() => buildInitialTrailer(), []);
-  const initialParkingSlots = useMemo(
-    () => buildInitialParkingSlots(initialTrailer),
-    [initialTrailer]
-  );
+  const selectedEntity = useMemo(() => entities.find(e => e.id === selectedId) || null, [entities, selectedId]);
 
-  const [trailer, setTrailer] = useState(() => ({ ...initialTrailer }));
-  const [parkingSlots, setParkingSlots] = useState(() => initialParkingSlots.map(slot => ({ ...slot })));
-  const [slipbots, setSlipbots] = useState(() => buildInitialSlipbots(initialTrailer, initialParkingSlots));
-  const [selectedEntity, setSelectedEntity] = useState(null);
-  const [plannedRoutes, setPlannedRoutes] = useState({});
-  const [isAnimatingState, setIsAnimatingState] = useState(false);
-  const [planningIssues, setPlanningIssues] = useState(null);
-  const defaultSpeedPreset = useMemo(
-    () => SPEED_PRESETS.find(preset => preset.id === "fast") ?? SPEED_PRESETS[0],
-    []
-  );
-  const [speedPresetId, setSpeedPresetId] = useState(defaultSpeedPreset.id);
-  const speedPreset = useMemo(
-    () => SPEED_PRESETS.find(preset => preset.id === speedPresetId) ?? defaultSpeedPreset,
-    [defaultSpeedPreset, speedPresetId]
-  );
-  const animationHandlesRef = useRef([]);
-  const isAnimatingRef = useRef(false);
-  const slipbotsRef = useRef(slipbots);
-  const trailerRef = useRef(trailer);
-  const playbackSpeedRef = useRef(speedPreset);
-
-  useEffect(() => {
-    slipbotsRef.current = slipbots;
-  }, [slipbots]);
-  useEffect(() => {
-    trailerRef.current = trailer;
-  }, [trailer]);
-
-  useEffect(() => {
-    playbackSpeedRef.current = speedPreset;
-  }, [speedPreset]);
-
-  useEffect(() => {
-    setPlanningIssues(null);
-  }, [parkingSlots, slipbots, trailer]);
-
-  const updateSlipbotsState = useCallback(
-    (updater, trailerOverride) => {
-      setSlipbots(prev => {
-        const base = typeof updater === "function" ? updater(prev) : updater;
-        if (!base) {
-          return prev;
-        }
-        const trailerState = trailerOverride ?? trailerRef.current;
-        if (!trailerState) {
-          return base;
-        }
-        return attachSlipbotsToTrailerState(base, trailerState);
-      });
-    },
-    []
-  );
-  const [lastExitedSet, setLastExitedSet] = useState(PRIMARY_SLIPBOT_SET_ID);
-
-  const clearAnimations = useCallback(() => {
-    animationHandlesRef.current.forEach(handle => {
-      if (handle?.type === "frame") {
-        window.cancelAnimationFrame(handle.id);
-      } else if (handle?.type === "timeout") {
-        window.clearTimeout(handle.id);
-      } else if (typeof handle === "number") {
-        window.clearTimeout(handle);
-      }
-    });
-    animationHandlesRef.current = [];
-    isAnimatingRef.current = false;
-    setIsAnimatingState(false);
+  const addEntity = useCallback(type => {
+    const newEntity = createEntity(type);
+    setEntities(prev => [...prev, newEntity]);
+    setSelectedId(newEntity.id);
   }, []);
 
-  const canvasDimensions = useMemo(
-    () => ({ width: GRID_WIDTH * CELL_SIZE, height: GRID_HEIGHT * CELL_SIZE }),
-    []
-  );
+  const removeEntity = useCallback(id => {
+    setEntities(prev => prev.filter(entity => entity.id !== id));
+    setSelectedId(current => (current === id ? null : current));
+  }, []);
 
-  const exitPlan = useMemo(
-    () => computeExitPlan(slipbots, parkingSlots, trailer),
-    [parkingSlots, slipbots, trailer, updateSlipbotsState]
-  );
-
-  const enterPlan = useMemo(
-    () => computeEnterPlan(slipbots, parkingSlots, trailer, lastExitedSet),
-    [lastExitedSet, parkingSlots, slipbots, trailer]
-  );
-
-  const primaryPlanningIssue = useMemo(
-    () => planningIssues?.issues?.[0] ?? null,
-    [planningIssues]
-  );
-
-  const planningIssueMessage = useMemo(() => {
-    if (!primaryPlanningIssue) {
-      return null;
-    }
-    const botLabel = primaryPlanningIssue.botName ?? primaryPlanningIssue.botId;
-    const locationPoint =
-      primaryPlanningIssue.candidate?.center ??
-      primaryPlanningIssue.clampedCenter ??
-      primaryPlanningIssue.failedWaypoint?.center ??
-      null;
-    const locationText = locationPoint
-      ? ` near (${locationPoint.x.toFixed(1)}, ${locationPoint.y.toFixed(1)})`
-      : "";
-
-    if (primaryPlanningIssue.type === "collision") {
-      const slotText = primaryPlanningIssue.slotLabel
-        ? `slot ${primaryPlanningIssue.slotLabel}`
-        : "its target";
-      return `${botLabel} cannot reach ${slotText} because another object blocks the path${locationText}.`;
-    }
-    if (primaryPlanningIssue.type === "bounds") {
-      return `${botLabel} needs more clearance${locationText}.`;
-    }
-    return `${botLabel} cannot find a valid route${locationText}.`;
-  }, [primaryPlanningIssue]);
-
-  const selectionDetails = useMemo(() => {
-    if (!selectedEntity) return null;
-    if (selectedEntity.type === "trailer") {
-      return {
-        title: "Trailer",
-        position: `(${trailer.center.x.toFixed(1)}, ${trailer.center.y.toFixed(1)})`,
-        rotation: `${normalizeAngle(trailer.rotation).toFixed(1)}°`
-      };
-    }
-    if (selectedEntity.type === "slipbot") {
-      const bot = slipbots.find(item => item.id === selectedEntity.id);
-      if (!bot) return null;
-      return {
-        title: bot.name,
-        position: `(${bot.center.x.toFixed(1)}, ${bot.center.y.toFixed(1)})`,
-        rotation: `${normalizeAngle(bot.rotation).toFixed(1)}°`
-      };
-    }
-    const slot = parkingSlots.find(item => item.id === selectedEntity.id);
-    if (!slot) return null;
+  const onMousePosition = useCallback(event => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const scaleX = WORLD_WIDTH / rect.width;
+    const scaleY = WORLD_HEIGHT / rect.height;
     return {
-      title: "Parking slot",
-      position: `(${slot.center.x.toFixed(1)}, ${slot.center.y.toFixed(1)})`,
-      rotation: `${normalizeAngle(slot.rotation).toFixed(1)}°`
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY
     };
-  }, [parkingSlots, selectedEntity, slipbots, trailer]);
-
-  const drawScene = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#020617";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.save();
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.15)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= GRID_WIDTH; x += 5) {
-      const px = x * CELL_SIZE;
-      ctx.beginPath();
-      ctx.moveTo(px, 0);
-      ctx.lineTo(px, canvas.height);
-      ctx.stroke();
-    }
-    for (let y = 0; y <= GRID_HEIGHT; y += 5) {
-      const py = y * CELL_SIZE;
-      ctx.beginPath();
-      ctx.moveTo(0, py);
-      ctx.lineTo(canvas.width, py);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    parkingSlots.forEach(slot => {
-      ctx.save();
-      ctx.translate(slot.center.x * CELL_SIZE, slot.center.y * CELL_SIZE);
-      ctx.rotate(degToRad(slot.rotation));
-      const width = slot.width * CELL_SIZE;
-      const height = slot.height * CELL_SIZE;
-      drawRoundedRectPath(ctx, -width / 2, -height / 2, width, height, Math.min(width, height) * 0.12);
-      ctx.fillStyle = "rgba(56, 189, 248, 0.12)";
-      ctx.fill();
-      ctx.lineWidth = selectedEntity?.type === "parking" && selectedEntity.id === slot.id ? 3 : 1.6;
-      ctx.strokeStyle = "rgba(94, 234, 212, 0.7)";
-      ctx.setLineDash([10, 6]);
-      ctx.stroke();
-      if (slot.label) {
-        ctx.fillStyle = "rgba(226, 232, 240, 0.9)";
-        ctx.font = `bold ${Math.max(12, CELL_SIZE * 2.4)}px 'Inter', 'Segoe UI', sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(slot.label, 0, 0);
-      }
-      ctx.restore();
-      ctx.setLineDash([]);
-    });
-
-    ctx.save();
-    ctx.translate(trailer.center.x * CELL_SIZE, trailer.center.y * CELL_SIZE);
-    ctx.rotate(degToRad(trailer.rotation));
-    const trailerWidth = trailer.width * CELL_SIZE;
-    const trailerHeight = trailer.height * CELL_SIZE;
-    const halfTrailerWidth = trailer.width / 2;
-    const halfTrailerHeight = trailer.height / 2;
-    const maxThicknessForSlipbot = Math.max(0, (trailer.width - SLIPBOT_WIDTH) / 2);
-    const wallThickness = Math.min(
-      TRAILER_WALL_THICKNESS,
-      halfTrailerWidth,
-      halfTrailerHeight,
-      maxThicknessForSlipbot
-    );
-    const wallThicknessPx = Math.max(wallThickness * CELL_SIZE, 2);
-    const left = -trailerWidth / 2;
-    const top = -trailerHeight / 2;
-    const right = trailerWidth / 2;
-    const bottom = trailerHeight / 2;
-
-    const interiorLeft = left + wallThicknessPx;
-    const interiorTop = top + wallThicknessPx;
-    const interiorWidth = Math.max(0, trailerWidth - wallThicknessPx * 2);
-    const interiorHeight = Math.max(0, trailerHeight - wallThicknessPx * 1.25);
-
-    if (interiorWidth > 0 && interiorHeight > 0) {
-      ctx.fillStyle = "rgba(15, 118, 110, 0.2)";
-      ctx.fillRect(interiorLeft, interiorTop, interiorWidth, interiorHeight);
-    }
-
-    ctx.fillStyle = "rgba(15, 118, 110, 0.42)";
-    ctx.fillRect(left, top, wallThicknessPx, trailerHeight);
-    ctx.fillRect(right - wallThicknessPx, top, wallThicknessPx, trailerHeight);
-    ctx.fillRect(left + wallThicknessPx, top, trailerWidth - wallThicknessPx * 2, wallThicknessPx);
-
-    ctx.lineWidth = selectedEntity?.type === "trailer" ? 3 : 2;
-    ctx.strokeStyle = "rgba(45, 212, 191, 0.9)";
-    ctx.beginPath();
-    ctx.moveTo(left, bottom);
-    ctx.lineTo(left, top);
-    ctx.lineTo(right, top);
-    ctx.lineTo(right, bottom);
-    ctx.stroke();
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = "rgba(94, 234, 212, 0.55)";
-    ctx.beginPath();
-    ctx.moveTo(left + wallThicknessPx * 0.5, bottom - wallThicknessPx * 0.35);
-    ctx.lineTo(left + wallThicknessPx * 0.5, top + wallThicknessPx * 0.6);
-    ctx.lineTo(right - wallThicknessPx * 0.5, top + wallThicknessPx * 0.6);
-    ctx.lineTo(right - wallThicknessPx * 0.5, bottom - wallThicknessPx * 0.35);
-    ctx.stroke();
-    ctx.restore();
-
-    slipbots.forEach(bot => {
-      const isSelected = selectedEntity?.type === "slipbot" && selectedEntity.id === bot.id;
-      ctx.save();
-      ctx.translate(bot.center.x * CELL_SIZE, bot.center.y * CELL_SIZE);
-      ctx.rotate(degToRad(bot.rotation));
-      const width = bot.width * CELL_SIZE;
-      const height = bot.height * CELL_SIZE;
-      ctx.beginPath();
-      ctx.rect(-width / 2, -height / 2, width, height);
-      ctx.fillStyle = bot.color;
-      ctx.fill();
-      ctx.lineWidth = isSelected ? 3 : 1.4;
-      ctx.strokeStyle = "rgba(15, 23, 42, 0.8)";
-      ctx.stroke();
-      ctx.beginPath();
-      const markerOffset = Math.min(height / 2, Math.max(6, height * 0.12));
-      ctx.moveTo(0, -height / 2 + markerOffset);
-      ctx.lineTo(0, -height / 2);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "rgba(15, 23, 42, 0.85)";
-      ctx.stroke();
-      ctx.restore();
-    });
-
-    Object.entries(plannedRoutes).forEach(([botId, route]) => {
-      if (!route?.points?.length) return;
-      const bot = slipbots.find(item => item.id === botId);
-      ctx.save();
-      ctx.strokeStyle = bot?.color ? `${bot.color}AA` : "rgba(248, 250, 252, 0.55)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([8, 6]);
-      ctx.beginPath();
-      route.points.forEach((point, index) => {
-        const px = point.x * CELL_SIZE;
-        const py = point.y * CELL_SIZE;
-        if (index === 0) {
-          ctx.moveTo(px, py);
-        } else {
-          ctx.lineTo(px, py);
-        }
-      });
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-    });
-
-    if (planningIssues?.issues?.length) {
-      const drawRectHighlight = (rect, strokeStyle, fillStyle) => {
-        if (!rect?.center) return;
-        const width = (rect.width ?? SLIPBOT_WIDTH) * CELL_SIZE;
-        const height = (rect.height ?? SLIPBOT_LENGTH) * CELL_SIZE;
-        ctx.save();
-        ctx.translate(rect.center.x * CELL_SIZE, rect.center.y * CELL_SIZE);
-        ctx.rotate(degToRad(rect.rotation ?? 0));
-        ctx.beginPath();
-        ctx.rect(-width / 2, -height / 2, width, height);
-        if (fillStyle) {
-          ctx.fillStyle = fillStyle;
-          ctx.fill();
-        }
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = strokeStyle;
-        ctx.stroke();
-        ctx.restore();
-      };
-
-      const drawLocationMarker = (point, strokeStyle, fillStyle) => {
-        if (!point) return;
-        const px = point.x * CELL_SIZE;
-        const py = point.y * CELL_SIZE;
-        const radius = Math.max(CELL_SIZE * 1.8, 10);
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(px, py, radius, 0, Math.PI * 2);
-        ctx.fillStyle = fillStyle;
-        ctx.fill();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = strokeStyle;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(px - radius / 1.5, py);
-        ctx.lineTo(px + radius / 1.5, py);
-        ctx.moveTo(px, py - radius / 1.5);
-        ctx.lineTo(px, py + radius / 1.5);
-        ctx.stroke();
-        ctx.restore();
-      };
-
-      planningIssues.issues.forEach(issue => {
-        if (issue.obstacle) {
-          drawRectHighlight(issue.obstacle, "#f97316", "rgba(249, 115, 22, 0.18)");
-        }
-        if (issue.candidate) {
-          drawRectHighlight(issue.candidate, "#f43f5e", "rgba(244, 63, 94, 0.2)");
-        }
-        if (issue.clampedCenter) {
-          drawLocationMarker(issue.clampedCenter, "#facc15", "rgba(250, 204, 21, 0.2)");
-        } else if (!issue.candidate && issue.failedWaypoint?.center) {
-          drawLocationMarker(issue.failedWaypoint.center, "#f43f5e", "rgba(244, 63, 94, 0.2)");
-        }
-      });
-    }
-  }, [parkingSlots, plannedRoutes, planningIssues, selectedEntity, slipbots, trailer]);
-
-  useEffect(() => {
-    drawScene();
-  }, [drawScene]);
-
-  useEffect(() => {
-    return () => {
-      clearAnimations();
-    };
-  }, [clearAnimations]);
-
-  const hitTest = useCallback(
-    pointer => {
-      if (!pointer) return null;
-      const gridPoint = { x: pointer.x, y: pointer.y };
-
-      for (let i = slipbots.length - 1; i >= 0; i -= 1) {
-        const bot = slipbots[i];
-        if (pointInRectangle(bot, gridPoint)) {
-          return { type: "slipbot", id: bot.id };
-        }
-      }
-
-      for (let i = parkingSlots.length - 1; i >= 0; i -= 1) {
-        const slot = parkingSlots[i];
-        if (pointInRectangle(slot, gridPoint)) {
-          return { type: "parking", id: slot.id };
-        }
-      }
-
-      if (pointInRectangle(trailer, gridPoint)) {
-        return { type: "trailer", id: trailer.id };
-      }
-      return null;
-    },
-    [parkingSlots, slipbots, trailer]
-  );
-
-  const handlePointerDown = useCallback(
-    event => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const pointer = getPointerPosition(event, canvas);
-      const hit = hitTest(pointer);
-      if (!hit) {
-        setSelectedEntity(null);
-        return;
-      }
-
-      event.preventDefault();
-      setSelectedEntity({ type: hit.type, id: hit.id });
-
-      const entity =
-        hit.type === "trailer"
-          ? trailer
-          : hit.type === "slipbot"
-          ? slipbots.find(item => item.id === hit.id) ?? null
-          : parkingSlots.find(item => item.id === hit.id) ?? null;
-      if (!entity) return;
-
-      if (canvas.setPointerCapture) {
-        canvas.setPointerCapture(event.pointerId);
-      }
-
-      const rotateGesture = event.shiftKey || event.button === 2 || event.buttons === 2;
-      if (rotateGesture) {
-        const centerPx = {
-          x: entity.center.x * CELL_SIZE,
-          y: entity.center.y * CELL_SIZE
-        };
-        const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
-        interactionRef.current = {
-          pointerId: event.pointerId,
-          mode: "rotate",
-          entityType: hit.type,
-          id: hit.id,
-          startAngle: angle,
-          startRotation: entity.rotation
-        };
-      } else {
-        const radians = degToRad(entity.rotation);
-        const cos = Math.cos(radians);
-        const sin = Math.sin(radians);
-        const dx = pointer.x - entity.center.x;
-        const dy = pointer.y - entity.center.y;
-        const offsetLocal = {
-          x: cos * dx + sin * dy,
-          y: -sin * dx + cos * dy
-        };
-        interactionRef.current = {
-          pointerId: event.pointerId,
-          mode: "drag",
-          entityType: hit.type,
-          id: hit.id,
-          offsetLocal
-        };
-      }
-    },
-    [hitTest, parkingSlots, slipbots, trailer]
-  );
-
-  const handlePointerMove = useCallback(
-    event => {
-      const interaction = interactionRef.current;
-      if (!interaction) return;
-      if (interaction.pointerId !== event.pointerId) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const pointer = getPointerPosition(event, canvas);
-      if (!pointer) return;
-      event.preventDefault();
-
-      if (interaction.mode === "drag") {
-        if (interaction.entityType === "trailer") {
-          const previousTrailer = trailer;
-          const radians = degToRad(previousTrailer.rotation);
-          const cos = Math.cos(radians);
-          const sin = Math.sin(radians);
-          const offsetLocal = interaction.offsetLocal ?? { x: 0, y: 0 };
-          const worldOffset = {
-            x: cos * offsetLocal.x - sin * offsetLocal.y,
-            y: sin * offsetLocal.x + cos * offsetLocal.y
-          };
-          let candidateCenter = {
-            x: pointer.x - worldOffset.x,
-            y: pointer.y - worldOffset.y
-          };
-          candidateCenter = clampCenterToBounds(
-            candidateCenter,
-            previousTrailer.width,
-            previousTrailer.height,
-            previousTrailer.rotation
-          );
-          const translation = {
-            x: candidateCenter.x - previousTrailer.center.x,
-            y: candidateCenter.y - previousTrailer.center.y
-          };
-          if (Math.abs(translation.x) < 1e-6 && Math.abs(translation.y) < 1e-6) {
-            return;
-          }
-          const nextTrailer = { ...previousTrailer, center: candidateCenter };
-          trailerRef.current = nextTrailer;
-          setTrailer(nextTrailer);
-          updateSlipbotsState(prev => transformAttachedSlipbots(previousTrailer, nextTrailer, prev), nextTrailer);
-          return;
-        }
-        if (interaction.entityType === "slipbot") {
-          updateSlipbotsState(prev => {
-            const index = prev.findIndex(item => item.id === interaction.id);
-            if (index === -1) return prev;
-            const bot = prev[index];
-            const radians = degToRad(bot.rotation);
-            const cos = Math.cos(radians);
-            const sin = Math.sin(radians);
-            const offsetLocal = interaction.offsetLocal ?? { x: 0, y: 0 };
-            const worldOffset = {
-              x: cos * offsetLocal.x - sin * offsetLocal.y,
-              y: sin * offsetLocal.x + cos * offsetLocal.y
-            };
-            let candidateCenter = {
-              x: pointer.x - worldOffset.x,
-              y: pointer.y - worldOffset.y
-            };
-            candidateCenter = clampCenterToBounds(candidateCenter, bot.width, bot.height, bot.rotation);
-            const candidate = { ...bot, center: candidateCenter };
-            if (!isSlipbotPlacementValid(candidate, prev, bot.id)) {
-              return prev;
-            }
-            const next = [...prev];
-            next[index] = candidate;
-            return next;
-          });
-          return;
-        }
-        if (interaction.entityType === "parking") {
-          setParkingSlots(prev => {
-            const index = prev.findIndex(item => item.id === interaction.id);
-            if (index === -1) return prev;
-            const slot = prev[index];
-            const radians = degToRad(slot.rotation);
-            const cos = Math.cos(radians);
-            const sin = Math.sin(radians);
-            const offsetLocal = interaction.offsetLocal ?? { x: 0, y: 0 };
-            const worldOffset = {
-              x: cos * offsetLocal.x - sin * offsetLocal.y,
-              y: sin * offsetLocal.x + cos * offsetLocal.y
-            };
-            let candidateCenter = {
-              x: pointer.x - worldOffset.x,
-              y: pointer.y - worldOffset.y
-            };
-            candidateCenter = clampCenterToBounds(candidateCenter, slot.width, slot.height, slot.rotation);
-            const next = [...prev];
-            next[index] = { ...slot, center: candidateCenter };
-            return next;
-          });
-        }
-        return;
-      }
-
-      if (interaction.mode === "rotate") {
-        if (interaction.entityType === "trailer") {
-          const previousTrailer = trailer;
-          const centerPx = {
-            x: previousTrailer.center.x * CELL_SIZE,
-            y: previousTrailer.center.y * CELL_SIZE
-          };
-          const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
-          const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
-          const rotation = normalizeAngle((interaction.startRotation ?? previousTrailer.rotation) + delta);
-          if (Math.abs(smallestAngleDelta(rotation, previousTrailer.rotation)) < 1e-3) {
-            return;
-          }
-          const nextTrailer = { ...previousTrailer, rotation };
-          trailerRef.current = nextTrailer;
-          setTrailer(nextTrailer);
-          updateSlipbotsState(prev => transformAttachedSlipbots(previousTrailer, nextTrailer, prev), nextTrailer);
-          return;
-        }
-        if (interaction.entityType === "slipbot") {
-          const bot = slipbots.find(item => item.id === interaction.id);
-          if (!bot) return;
-          const centerPx = {
-            x: bot.center.x * CELL_SIZE,
-            y: bot.center.y * CELL_SIZE
-          };
-          const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
-          const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
-          const rotation = normalizeAngle((interaction.startRotation ?? bot.rotation) + delta);
-          updateSlipbotsState(prev => {
-            const index = prev.findIndex(item => item.id === interaction.id);
-            if (index === -1) return prev;
-            const candidate = { ...prev[index], rotation };
-            if (!isSlipbotPlacementValid(candidate, prev, candidate.id)) {
-              return prev;
-            }
-            const next = [...prev];
-            next[index] = candidate;
-            return next;
-          });
-          return;
-        }
-        if (interaction.entityType === "parking") {
-          const slot = parkingSlots.find(item => item.id === interaction.id);
-          if (!slot) return;
-          const centerPx = {
-            x: slot.center.x * CELL_SIZE,
-            y: slot.center.y * CELL_SIZE
-          };
-          const angle = radToDeg(Math.atan2(pointer.py - centerPx.y, pointer.px - centerPx.x));
-          const delta = smallestAngleDelta(angle, interaction.startAngle ?? angle);
-          const rotation = normalizeAngle((interaction.startRotation ?? slot.rotation) + delta);
-          setParkingSlots(prev => {
-            const index = prev.findIndex(item => item.id === interaction.id);
-            if (index === -1) return prev;
-            const next = [...prev];
-            next[index] = { ...prev[index], rotation };
-            return next;
-          });
-        }
-      }
-    },
-    [parkingSlots, slipbots, trailer]
-  );
-
-  const handlePointerUp = useCallback(event => {
-    const canvas = canvasRef.current;
-    if (canvas && canvas.releasePointerCapture && canvas.hasPointerCapture(event.pointerId)) {
-      canvas.releasePointerCapture(event.pointerId);
-    }
-    interactionRef.current = null;
   }, []);
 
-  const animatePlans = useCallback(
-    (plans, onComplete) => {
-      clearAnimations();
-      if (!plans.length) {
-        isAnimatingRef.current = false;
-        setIsAnimatingState(false);
-        if (onComplete) onComplete();
-        return;
+  const handleObstacleStart = event => {
+    const point = onMousePosition(event);
+    if (!point) return;
+    setDraftObstacle({ start: point, end: point });
+  };
+
+  const handleObstacleMove = event => {
+    if (!draftObstacle) return;
+    const point = onMousePosition(event);
+    if (!point) return;
+    setDraftObstacle(current => (current ? { ...current, end: point } : null));
+  };
+
+  const handleObstacleFinish = () => {
+    if (!draftObstacle) return;
+    const { start, end } = draftObstacle;
+    const length = Math.abs(end.x - start.x);
+    const width = Math.abs(end.y - start.y);
+    if (length < 1 || width < 1) {
+      setDraftObstacle(null);
+      return;
+    }
+    const obstacle = {
+      id: createId("obstacle"),
+      x: Math.min(start.x, end.x),
+      y: Math.min(start.y, end.y),
+      length,
+      width
+    };
+    setObstacles(prev => [...prev, obstacle]);
+    setDraftObstacle(null);
+  };
+
+  const updateEntity = useCallback((id, updater) => {
+    setEntities(prev => prev.map(entity => (entity.id === id ? { ...entity, ...updater(entity) } : entity)));
+  }, []);
+
+  const handleEntityMouseDown = (event, entity) => {
+    if (drawMode) return;
+    event.stopPropagation();
+    setSelectedId(entity.id);
+    const point = onMousePosition(event);
+    if (!point) return;
+    dragRef.current = {
+      id: entity.id,
+      offset: { x: point.x - entity.center.x, y: point.y - entity.center.y }
+    };
+  };
+
+  const handleMouseMove = event => {
+    if (drawMode) {
+      handleObstacleMove(event);
+      return;
+    }
+    const dragState = dragRef.current;
+    if (!dragState) return;
+    const point = onMousePosition(event);
+    if (!point) return;
+    setEntities(prev => {
+      return prev.map(entity => {
+        if (entity.id !== dragState.id) return entity;
+        const clampedCenter = clampToWorld(
+          { x: point.x - dragState.offset.x, y: point.y - dragState.offset.y },
+          entity.length,
+          entity.width,
+          entity.rotation
+        );
+        const candidate = { ...entity, center: clampedCenter };
+        if (entityCollides(candidate, prev, obstacles, entity.id)) {
+          return entity;
+        }
+        return candidate;
+      });
+    });
+  };
+
+  const handleMouseUp = () => {
+    if (drawMode) {
+      handleObstacleFinish();
+    }
+    dragRef.current = null;
+  };
+
+  const handleBackgroundUpload = event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => setBackground(e.target?.result || null);
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddWaypoint = event => {
+    if (!selectedEntity) return;
+    if (!(event.metaKey || event.ctrlKey)) return;
+    const point = onMousePosition(event);
+    if (!point) return;
+    setEntities(prev =>
+      prev.map(entity =>
+        entity.id === selectedEntity.id
+          ? { ...entity, route: [...entity.route, { x: point.x, y: point.y }] }
+          : entity
+      )
+    );
+  };
+
+  const tick = useCallback(
+    timestamp => {
+      if (lastFrameRef.current == null) {
+        lastFrameRef.current = timestamp;
       }
-
-      const runPlan = index => {
-        if (index >= plans.length) {
-          isAnimatingRef.current = false;
-          setIsAnimatingState(false);
-          if (onComplete) onComplete();
-          return;
-        }
-        const currentPlan = plans[index];
-        const frames = currentPlan.frames ?? [];
-        if (frames.length === 0) {
-          runPlan(index + 1);
-          return;
-        }
-
-        const bot = slipbotsRef.current.find(item => item.id === currentPlan.botId);
-        if (!bot) {
-          runPlan(index + 1);
-          return;
-        }
-
-        const startState = {
-          center: { ...bot.center },
-          rotation: bot.rotation
-        };
-
-        const maxCornerRadius = Math.hypot(bot.width, bot.height) / 2;
-        const segments = frames.reduce((acc, frame) => {
-          const previous = acc.length ? acc[acc.length - 1].to : startState;
-          const distanceX = frame.center.x - previous.center.x;
-          const distanceY = frame.center.y - previous.center.y;
-          const rotationDelta = smallestAngleDelta(frame.rotation, previous.rotation);
-          if (Math.abs(distanceX) < 1e-4 && Math.abs(distanceY) < 1e-4 && Math.abs(rotationDelta) < 1e-2) {
-            return acc;
-          }
-
-          const linearDistance = Math.hypot(distanceX, distanceY);
-          const rotationDistance = Math.abs(degToRad(rotationDelta)) * maxCornerRadius;
-          const travelDistance = Math.max(linearDistance, rotationDistance);
-          const baseDurationMs =
-            travelDistance > 0
-              ? Math.max((travelDistance / BASE_MOVEMENT_SPEED) * 1000, FRAME_DURATION_MS)
-              : FRAME_DURATION_MS;
-
-          acc.push({
-            from: previous,
-            to: {
-              center: { ...frame.center },
-              rotation: frame.rotation
-            },
-            baseDuration: baseDurationMs
-          });
-          return acc;
-        }, []);
-
-        const animateSegment = segmentIndex => {
-          if (segmentIndex >= segments.length) {
-            runPlan(index + 1);
-            return;
-          }
-
-          const segment = segments[segmentIndex];
-          const speedMultiplier = Math.max(playbackSpeedRef.current?.multiplier ?? 1, 0.1);
-          const segmentDuration = Math.max(
-            (segment.baseDuration ?? FRAME_DURATION_MS) / speedMultiplier,
-            FRAME_DURATION_MS
-          );
-          let startTimestamp = null;
-
-          const step = timestamp => {
-            if (startTimestamp === null) {
-              startTimestamp = timestamp;
-            }
-            const elapsed = timestamp - startTimestamp;
-            const progress = segmentDuration > 0 ? Math.min(1, elapsed / segmentDuration) : 1;
-            const nextCenter = {
-              x: segment.from.center.x + (segment.to.center.x - segment.from.center.x) * progress,
-              y: segment.from.center.y + (segment.to.center.y - segment.from.center.y) * progress
-            };
-            const nextRotation = interpolateAngle(segment.from.rotation, segment.to.rotation, progress);
-
-            updateSlipbotsState(prev => {
-              const next = [...prev];
-              const botIndex = next.findIndex(item => item.id === currentPlan.botId);
-              if (botIndex === -1) return prev;
-              next[botIndex] = {
-                ...next[botIndex],
-                center: nextCenter,
-                rotation: nextRotation
-              };
-              return next;
-            });
-
-            if (progress < 1) {
-              const handle = window.requestAnimationFrame(step);
-              animationHandlesRef.current.push({ type: "frame", id: handle });
-            } else {
-              animateSegment(segmentIndex + 1);
-            }
+      const delta = (timestamp - lastFrameRef.current) / 1000;
+      lastFrameRef.current = timestamp;
+      setEntities(prev =>
+        prev.map(entity => {
+          if (!entity.route.length) return entity;
+          const target = entity.route[0];
+          const step = entity.speed * delta;
+          const heading = Math.atan2(target.y - entity.center.y, target.x - entity.center.x);
+          const nextCenter = {
+            x: entity.center.x + Math.cos(heading) * step,
+            y: entity.center.y + Math.sin(heading) * step
           };
-
-          const initialTimestamp = performance.now();
-          step(initialTimestamp);
-          const handle = window.requestAnimationFrame(step);
-          animationHandlesRef.current.push({ type: "frame", id: handle });
-        };
-
-        if (!segments.length) {
-          runPlan(index + 1);
-          return;
-        }
-
-        animateSegment(0);
-      };
-
-      isAnimatingRef.current = true;
-      setIsAnimatingState(true);
-      runPlan(0);
+          const remaining = distance(entity.center, target);
+          const newCenter = remaining <= step ? target : nextCenter;
+          const desiredRotation = (heading * 180) / Math.PI;
+          const candidate = {
+            ...entity,
+            center: clampToWorld(newCenter, entity.length, entity.width, desiredRotation),
+            rotation: desiredRotation
+          };
+          if (entityCollides(candidate, prev, obstacles, entity.id)) {
+            return { ...entity, route: [] };
+          }
+          const route = remaining <= WAYPOINT_THRESHOLD ? entity.route.slice(1) : entity.route;
+          return { ...candidate, route };
+        })
+      );
     },
-    [clearAnimations, updateSlipbotsState]
+    [obstacles]
   );
 
-  const handleExitToParking = useCallback(() => {
-    if (!exitPlan || !exitPlan.plans?.length) {
-      setPlannedRoutes({});
-      if (exitPlan?.issues?.length) {
-        setPlanningIssues({ mode: "exit", issues: exitPlan.issues });
-      } else {
-        setPlanningIssues(null);
-      }
-      return;
-    }
-
-    setPlanningIssues(null);
-    setPlannedRoutes(exitPlan.routes);
-
-    animatePlans(exitPlan.plans, () => {
-      updateSlipbotsState(prev =>
-        prev.map(bot => {
-          const target = exitPlan.targets[bot.id];
-          return target ? { ...bot, center: target.center, rotation: target.rotation } : bot;
-        })
-      );
-      if (exitPlan.activeSetId) {
-        setLastExitedSet(exitPlan.activeSetId);
-      }
-    });
-  }, [animatePlans, exitPlan, updateSlipbotsState]);
-
-  const handleEnterTrailer = useCallback(() => {
-    if (!enterPlan || !enterPlan.plans?.length) {
-      setPlannedRoutes({});
-      if (enterPlan?.issues?.length) {
-        setPlanningIssues({ mode: "enter", issues: enterPlan.issues });
-      } else {
-        setPlanningIssues(null);
-      }
-      return;
-    }
-
-    setPlanningIssues(null);
-    setPlannedRoutes(enterPlan.routes);
-
-    animatePlans(enterPlan.plans, () => {
-      updateSlipbotsState(prev =>
-        prev.map(bot => {
-          const target = enterPlan.targets[bot.id];
-          return target ? { ...bot, center: target.center, rotation: target.rotation } : bot;
-        })
-      );
-    });
-  }, [animatePlans, enterPlan, updateSlipbotsState]);
-
-  const handleAddSlipbot = useCallback(() => {
-    const trailerState = trailerRef.current;
-    if (!trailerState) {
-      return;
-    }
-
-    let createdSlot = null;
-    setParkingSlots(prev => {
-      const slotIndex = prev.length;
-      const slotId = `slot-${slotIndex + 1}`;
-      const label = getParkingLabelForIndex(slotIndex);
-      const center = computeParkingSlotCenter(trailerState, slotIndex);
-      createdSlot = createParkingSlot(slotId, center, label, { slotIndex });
-      return [...prev, createdSlot];
-    });
-
-    if (!createdSlot) {
-      return;
-    }
-
-    const currentSlipbots = slipbotsRef.current ?? [];
-    const slipbotId = getNextSlipbotId(currentSlipbots);
-    const color = SLIPBOT_COLORS[currentSlipbots.length % SLIPBOT_COLORS.length];
-    const stagingCenter = clampCenterToBounds(
-      {
-        x: createdSlot.center.x + SLIPBOT_WIDTH * 3,
-        y: createdSlot.center.y
-      },
-      SLIPBOT_WIDTH,
-      SLIPBOT_LENGTH,
-      0
-    );
-
-    const newSlipbot = createSlipbot(slipbotId, color, stagingCenter, {
-      name: `SlipBot ${createdSlot.label}`,
-      setId: SECONDARY_SLIPBOT_SET_ID,
-      slotIndex: createdSlot.slotIndex,
-      stagingCenter,
-      stagingRotation: 0
-    });
-
-    updateSlipbotsState(prev => [...prev, newSlipbot], trailerState);
-    setPlannedRoutes({});
-    setSelectedEntity({ type: "slipbot", id: newSlipbot.id });
-    setPlanningIssues(null);
-  }, [setParkingSlots, setPlanningIssues, setPlannedRoutes, updateSlipbotsState]);
-
-  const handleAddTrailer = useCallback(() => {
-    const previousTrailer = trailerRef.current;
-    const baseTrailer = buildInitialTrailer();
-    const nextTrailer = {
-      ...baseTrailer,
-      id: previousTrailer?.id ?? baseTrailer.id
+  useEffect(() => {
+    let frameId;
+    const frame = timestamp => {
+      tick(timestamp);
+      frameId = requestAnimationFrame(frame);
     };
+    frameId = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(frameId);
+  }, [tick]);
 
-    setTrailer(nextTrailer);
+  const renderEntities = entities.map(entity => {
+    const Renderer = ENTITY_RENDERERS[entity.type];
+    if (!Renderer) return null;
+    return (
+      <g
+        key={entity.id}
+        className="draggable"
+        onMouseDown={event => handleEntityMouseDown(event, entity)}
+        onDoubleClick={() => removeEntity(entity.id)}
+      >
+        <Renderer entity={entity} isSelected={selectedId === entity.id} />
+      </g>
+    );
+  });
 
-    setParkingSlots(prev => {
-      const updated = prev.map((slot, index) => {
-        const center = computeParkingSlotCenter(nextTrailer, index);
-        const label = slot.label ?? getParkingLabelForIndex(index);
-        return {
-          ...slot,
-          center,
-          rotation: 0,
-          width: SLIPBOT_WIDTH,
-          height: SLIPBOT_LENGTH,
-          label,
-          slotIndex: typeof slot.slotIndex === "number" ? slot.slotIndex : index
-        };
-      });
+  const renderRoutes = entities
+    .filter(entity => entity.route.length)
+    .map(entity => (
+      <polyline
+        key={`route-${entity.id}`}
+        points={[entity.center, ...entity.route].map(p => `${p.x},${p.y}`).join(" ")}
+        fill="none"
+        stroke={entity.color}
+        strokeDasharray="3 3"
+        strokeWidth={0.8}
+        opacity={0.8}
+      />
+    ));
 
-      for (let index = updated.length; index < 3; index += 1) {
-        const id = `slot-${index + 1}`;
-        const center = computeParkingSlotCenter(nextTrailer, index);
-        updated.push(createParkingSlot(id, center, getParkingLabelForIndex(index), { slotIndex: index }));
-      }
-
-      return updated;
-    });
-
-    updateSlipbotsState(prev => {
-      const transformed = transformAttachedSlipbots(previousTrailer, nextTrailer, prev);
-      return transformed.map(bot => {
-        if (typeof bot.slotIndex !== "number") {
-          return bot;
-        }
-        const slotCenter = computeParkingSlotCenter(nextTrailer, bot.slotIndex);
-        const direction = bot.setId === PRIMARY_SLIPBOT_SET_ID ? -1 : 1;
-        const stagingCenter = clampCenterToBounds(
-          {
-            x: slotCenter.x + direction * SLIPBOT_WIDTH * 3,
-            y: slotCenter.y
-          },
-          SLIPBOT_WIDTH,
-          SLIPBOT_LENGTH,
-          0
-        );
-        return {
-          ...bot,
-          stagingCenter
-        };
-      });
-    }, nextTrailer);
-
-    setPlannedRoutes({});
-    setSelectedEntity({ type: "trailer", id: nextTrailer.id });
-    setPlanningIssues(null);
-  }, [setParkingSlots, setPlanningIssues, setPlannedRoutes, updateSlipbotsState]);
-
-  const exitHasPlan = Boolean(exitPlan?.plans?.length);
-  const enterHasPlan = Boolean(enterPlan?.plans?.length);
-  const exitDisabled = isAnimatingState || !exitHasPlan;
-  const enterDisabled = isAnimatingState || !enterHasPlan;
-  const exitReady = !exitDisabled;
-  const enterReady = !enterDisabled;
+  const draftRect = draftObstacle
+    ? (() => {
+        const { start, end } = draftObstacle;
+        const x = Math.min(start.x, end.x);
+        const y = Math.min(start.y, end.y);
+        const length = Math.abs(end.x - start.x);
+        const width = Math.abs(end.y - start.y);
+        return { x, y, length, width };
+      })()
+    : null;
 
   return (
-    <div className="simulator-app">
-      <header className="simulator-header">
-        <div className="simulator-nav">
-          <button type="button" className="simulator-back" onClick={() => navigate("/")}>
-            ← Back to home
+    <div className="sim-wrapper">
+      <header className="sim-header">
+        <button className="link" onClick={() => navigate(-1)}>
+          ← Back
+        </button>
+        <div className="title">SlipBot Simulator V2</div>
+        <div className="header-actions">
+          <button className="link" onClick={() => navigate("/example-wms")}>WMS View</button>
+          <button className="link" onClick={() => navigate("/dashboard")}>Dashboard</button>
+        </div>
+      </header>
+
+      <section className="toolbar">
+        <div className="button-group">
+          <button onClick={() => addEntity("slipbot")}>Add SlipBot</button>
+          <button onClick={() => addEntity("trailer")}>Add Trailer</button>
+          <button onClick={() => addEntity("forklift")}>Add Forklift</button>
+          <button onClick={() => addEntity("cart")}>Add Cart</button>
+          <button className={drawMode ? "active" : ""} onClick={() => setDrawMode(v => !v)}>
+            {drawMode ? "Drawing…" : "Draw"}
           </button>
         </div>
-        <h1>SlipBot Layout Sandbox</h1>
-        <p>
-          Drag any asset to move it. Hold <strong>Shift</strong> (or use the right mouse button) while
-          dragging to rotate with precise 360° control. Everything stays locked to your cursor so
-          adjustments feel seamless.
-        </p>
-      </header>
-      <div className="simulator-layout">
-        <div className="canvas-wrapper">
-          <canvas
-            ref={canvasRef}
-            className="simulator-canvas"
-            width={canvasDimensions.width}
-            height={canvasDimensions.height}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            onContextMenu={event => event.preventDefault()}
-          />
+        <div className="controls">
+          <label>
+            Scale
+            <input
+              type="range"
+              min={MIN_SCALE}
+              max={MAX_SCALE}
+              step={0.5}
+              value={scale}
+              onChange={e => setScale(Number(e.target.value))}
+            />
+            <span className="chip">{scale.toFixed(1)} px/ft</span>
+          </label>
+          <label className="file-input">
+            Upload Background
+            <input type="file" accept="image/*" onChange={handleBackgroundUpload} />
+          </label>
         </div>
-        <aside className="simulator-panel">
-          <div className="panel-section">
-            <h2>Controls</h2>
-            <p>
-              Every asset behaves like an obstacle. Drag to move, or hold Shift/right click while
-              dragging to rotate smoothly. Use the Exit/Enter trailer actions to generate collision-free
-              routes for the staged SlipBots.
-            </p>
-          </div>
-          <div className="panel-section buttons">
-            <button
-              type="button"
-              className={`panel-button${exitReady ? " ready" : ""}`}
-              onClick={handleExitToParking}
-              disabled={exitDisabled}
-              data-ready={exitReady ? "true" : "false"}
-            >
-              Exit trailer
-            </button>
-            <button
-              type="button"
-              className={`panel-button${enterReady ? " ready" : ""}`}
-              onClick={handleEnterTrailer}
-              disabled={enterDisabled}
-              data-ready={enterReady ? "true" : "false"}
-            >
-              Enter trailer
-            </button>
-          </div>
-          <div className="panel-section buttons secondary-controls">
-            <button type="button" className="panel-button secondary" onClick={handleAddSlipbot}>
-              Add SlipBot
-            </button>
-            <button type="button" className="panel-button secondary" onClick={handleAddTrailer}>
-              Add trailer
-            </button>
-          </div>
-          <div className="panel-section speed-controls">
-            <h3>Playback speed</h3>
-            <div className="speed-buttons">
-              {SPEED_PRESETS.map(preset => {
-                const isActive = preset.id === speedPreset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={`speed-chip${isActive ? " active" : ""}`}
-                    onClick={() => {
-                      if (!isActive) {
-                        setSpeedPresetId(preset.id);
-                      }
-                    }}
-                    aria-pressed={isActive}
-                    data-active={isActive ? "true" : "false"}
-                  >
-                    {preset.label}
+      </section>
+
+      <section className="workspace">
+        <div className="workspace-inner">
+          <div className="background" style={{ backgroundImage: background ? `url(${background})` : "none" }} />
+          <svg
+            ref={svgRef}
+            className="world"
+            viewBox={`0 0 ${WORLD_WIDTH} ${WORLD_HEIGHT}`}
+            style={{ width: WORLD_WIDTH * scale, height: WORLD_HEIGHT * scale }}
+            onMouseDown={event => {
+              if (drawMode) {
+                handleObstacleStart(event);
+              } else {
+                setSelectedId(null);
+              }
+            }}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onClick={handleAddWaypoint}
+          >
+            <defs>
+              <pattern id="grid" width={GRID_GAP} height={GRID_GAP} patternUnits="userSpaceOnUse">
+                <path d={`M ${GRID_GAP} 0 L 0 0 0 ${GRID_GAP}`} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="0.4" />
+              </pattern>
+            </defs>
+            <rect x="0" y="0" width={WORLD_WIDTH} height={WORLD_HEIGHT} fill="url(#grid)" />
+
+            {renderRoutes}
+            {obstacles.map(obstacle => (
+              <ObstacleShape key={obstacle.id} obstacle={obstacle} />
+            ))}
+            {draftRect ? (
+              <rect
+                x={draftRect.x}
+                y={draftRect.y}
+                width={draftRect.length}
+                height={draftRect.width}
+                fill="rgba(248,113,113,0.25)"
+                stroke="#f87171"
+                strokeWidth={0.7}
+                strokeDasharray="2 2"
+              />
+            ) : null}
+            {renderEntities}
+          </svg>
+        </div>
+      </section>
+
+      <section className="sidebar">
+        <div className="panel">
+          <h3>Selection</h3>
+          {selectedEntity ? (
+            <div className="panel-body">
+              <div className="row">
+                <span className="label">Type</span>
+                <span>{selectedEntity.label}</span>
+              </div>
+              <div className="row">
+                <span className="label">Position</span>
+                <span>
+                  {selectedEntity.center.x.toFixed(2)} ft, {selectedEntity.center.y.toFixed(2)} ft
+                </span>
+              </div>
+              <div className="row">
+                <span className="label">Rotation</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  value={selectedEntity.rotation}
+                  onChange={e =>
+                    updateEntity(selectedEntity.id, () => ({ rotation: Number(e.target.value) % 360 }))
+                  }
+                />
+              </div>
+              <div className="row inline">
+                <button onClick={() => removeEntity(selectedEntity.id)}>Remove</button>
+                <button
+                  onClick={() =>
+                    setEntities(prev =>
+                      prev.map(entity =>
+                        entity.id === selectedEntity.id ? { ...entity, route: [] } : entity
+                      )
+                    )
+                  }
+                >
+                  Clear Route
+                </button>
+              </div>
+              <p className="hint">Ctrl/Cmd + click anywhere to add waypoints for automated movement.</p>
+            </div>
+          ) : (
+            <p className="panel-body muted">Click an object to manage it.</p>
+          )}
+        </div>
+        <div className="panel">
+          <h3>Obstacles</h3>
+          {obstacles.length === 0 ? (
+            <p className="panel-body muted">Enable Draw to mark restricted areas.</p>
+          ) : (
+            <ul className="obstacle-list">
+              {obstacles.map(obstacle => (
+                <li key={obstacle.id}>
+                  <span>
+                    {obstacle.length.toFixed(1)} × {obstacle.width.toFixed(1)} ft
+                  </span>
+                  <button onClick={() => setObstacles(list => list.filter(item => item.id !== obstacle.id))}>
+                    Remove
                   </button>
-                );
-              })}
-            </div>
-          </div>
-          {planningIssues?.issues?.length && planningIssueMessage && (
-            <div className={`panel-section planning-issue ${planningIssues.mode}`}>
-              <h3>{planningIssues.mode === "enter" ? "Enter route blocked" : "Exit route blocked"}</h3>
-              <p>{planningIssueMessage}</p>
-              <p className="planning-issue-hint">Move the highlighted obstacle and press the button again.</p>
-            </div>
-          )}
-          <div className="panel-section">
-            <h3>Summary</h3>
-            <ul className="summary-list">
-              <li>
-                <span>SlipBots</span>
-                <span>{slipbots.length}</span>
-              </li>
-              <li>
-                <span>Parking slots</span>
-                <span>{parkingSlots.length}</span>
-              </li>
+                </li>
+              ))}
             </ul>
-          </div>
-          {selectionDetails && (
-            <div className="panel-section">
-              <h3>Selected</h3>
-              <p className="selection-title">{selectionDetails.title}</p>
-              <p className="selection-detail">Position: {selectionDetails.position}</p>
-              <p className="selection-detail">Rotation: {selectionDetails.rotation}</p>
-            </div>
           )}
-        </aside>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }
