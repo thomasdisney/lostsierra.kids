@@ -343,17 +343,24 @@
       gap: 0.3rem;
     }
 
-    .leader-card--mahala > div {
-      margin-top: -0.8rem;
-    }
-
-    .leader-card img {
+    .leader-card__photo {
+      position: relative;
       width: 100%;
       border-radius: 18px;
-      height: clamp(280px, 34vw, 340px);
+      overflow: hidden;
+      padding-top: 125%;
+      background: #f7f2e8;
+    }
+
+    .leader-card__photo img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
       object-fit: cover;
       object-position: center top;
       filter: saturate(1.05);
+      display: block;
     }
 
     .leader-card h3 {
@@ -872,7 +879,9 @@
       <h2 class="section-title">Leadership & Staffing</h2>
       <div class="leaders">
         <article class="leader-card">
-          <img src="Stephanie.jpg" alt="Photograph of Stephanie McCoy, Administrator and Director" loading="lazy" decoding="async" />
+          <div class="leader-card__photo">
+            <img src="Stephanie.jpg" alt="Photograph of Stephanie McCoy, Administrator and Director" loading="lazy" decoding="async" />
+          </div>
           <div>
             <h3>Stephanie McCoy</h3>
             <h4>Center Administrator</h4>
@@ -880,7 +889,9 @@
           </div>
         </article>
         <article class="leader-card leader-card--mahala">
-          <img src="mahala.JPG" alt="Photograph of Mahala Disney, Center Director" loading="lazy" decoding="async" />
+          <div class="leader-card__photo">
+            <img src="mahala.JPG" alt="Photograph of Mahala Disney, Center Director" loading="lazy" decoding="async" />
+          </div>
           <div>
             <h3>Mahala Disney</h3>
             <h4>Center Director</h4>
