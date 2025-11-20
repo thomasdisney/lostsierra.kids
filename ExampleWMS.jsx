@@ -28,6 +28,11 @@ function ExampleWMS() {
     [inventory]
   );
 
+  const openOrders = useMemo(
+    () => orderQueue.filter((order) => order.status === "open"),
+    [orderQueue]
+  );
+
   useEffect(() => {
     fetchInventory();
   }, []);
@@ -146,14 +151,24 @@ function ExampleWMS() {
           const note =
             inputs.note ||
             `Hit minimum after consuming ${qty} (Ticket #${inputs.tfiTicket}).`;
-          setOrderQueue((queue) => [
-            ...queue,
-            {
-              part_number: invItem.part_number,
-              description: invItem.description,
-              note,
-            },
-          ]);
+          setOrderQueue((queue) => {
+            const hasPendingOrder = queue.some(
+              (order) =>
+                order.part_number === invItem.part_number && order.status !== "completed"
+            );
+
+            if (hasPendingOrder) return queue;
+
+            return [
+              ...queue,
+              {
+                part_number: invItem.part_number,
+                description: invItem.description,
+                note,
+                status: "open",
+              },
+            ];
+          });
         }
 
         return updated;
@@ -175,8 +190,17 @@ function ExampleWMS() {
     const inputs = actionInputs[item.part_number] || {};
     const qty = Number(inputs.receiveQty);
 
+    const hasSentOrder = orderQueue.some(
+      (order) => order.part_number === item.part_number && order.status === "sent"
+    );
+
     if (!qty || qty <= 0) {
       setError("Enter a valid quantity to receive.");
+      return;
+    }
+
+    if (!hasSentOrder) {
+      setError("Shipping clerk must send an order before receiving this item.");
       return;
     }
 
@@ -188,6 +212,16 @@ function ExampleWMS() {
           ? { ...invItem, current_qty: Number(invItem.current_qty) + qty }
           : invItem
       )
+    );
+
+    setOrderQueue((queue) =>
+      queue
+        .map((order) =>
+          order.part_number === item.part_number && order.status === "sent"
+            ? { ...order, status: "completed" }
+            : order
+        )
+        .filter((order) => order.status !== "completed")
     );
 
     setActionInputs((prev) => ({
@@ -262,6 +296,16 @@ function ExampleWMS() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSendOrder = (partNumber) => {
+    setOrderQueue((queue) =>
+      queue.map((order) =>
+        order.part_number === partNumber && order.status === "open"
+          ? { ...order, status: "sent" }
+          : order
+      )
+    );
   };
 
   return (
@@ -406,137 +450,148 @@ function ExampleWMS() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {inventory.map((item) => (
-                  <tr
-                    key={item.part_number}
-                    className="bg-white hover:bg-slate-50/60 transition"
-                  >
-                    <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
-                    <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
-                    <td className="p-4 text-slate-900">{item.current_qty}</td>
-                    <td className="p-4 text-slate-900">{item.min_qty}</td>
-                    <td className="p-4 text-slate-900">{item.max_qty}</td>
-                    <td className="p-4">
-                      {viewMode === "user" ? (
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
-                            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                              Consume
-                            </p>
-                            <div className="flex flex-col gap-2">
-                              <input
-                                type="number"
-                                min="1"
-                                value={actionInputs[item.part_number]?.consumeQty || ""}
-                                onChange={(e) =>
-                                  updateActionInputs(item.part_number, "consumeQty", e.target.value)
-                                }
-                                placeholder="Qty"
-                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                              />
-                              <input
-                                type="text"
-                                value={actionInputs[item.part_number]?.tfiTicket || ""}
-                                onChange={(e) =>
-                                  updateActionInputs(item.part_number, "tfiTicket", e.target.value)
-                                }
-                                placeholder="TFI Ticket #"
-                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                              />
-                              <input
-                                type="text"
-                                value={actionInputs[item.part_number]?.note || ""}
-                                onChange={(e) =>
-                                  updateActionInputs(item.part_number, "note", e.target.value)
-                                }
-                                placeholder="Note for clerk"
-                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                              />
-                              <button
-                                onClick={() => handleConsume(item)}
-                                className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-600 disabled:opacity-70"
-                                disabled={loading}
-                                type="button"
-                              >
+                {inventory.map((item) => {
+                  const hasSentOrder = orderQueue.some(
+                    (order) => order.part_number === item.part_number && order.status === "sent"
+                  );
+
+                  return (
+                    <tr
+                      key={item.part_number}
+                      className="bg-white hover:bg-slate-50/60 transition"
+                    >
+                      <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
+                      <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
+                      <td className="p-4 text-slate-900">{item.current_qty}</td>
+                      <td className="p-4 text-slate-900">{item.min_qty}</td>
+                      <td className="p-4 text-slate-900">{item.max_qty}</td>
+                      <td className="p-4">
+                        {viewMode === "user" ? (
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
                                 Consume
-                              </button>
+                              </p>
+                              <div className="flex flex-col gap-2">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={actionInputs[item.part_number]?.consumeQty || ""}
+                                  onChange={(e) =>
+                                    updateActionInputs(item.part_number, "consumeQty", e.target.value)
+                                  }
+                                  placeholder="Qty"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={actionInputs[item.part_number]?.tfiTicket || ""}
+                                  onChange={(e) =>
+                                    updateActionInputs(item.part_number, "tfiTicket", e.target.value)
+                                  }
+                                  placeholder="TFI Ticket #"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={actionInputs[item.part_number]?.note || ""}
+                                  onChange={(e) =>
+                                    updateActionInputs(item.part_number, "note", e.target.value)
+                                  }
+                                  placeholder="Note for clerk"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                />
+                                <button
+                                  onClick={() => handleConsume(item)}
+                                  className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-600 disabled:opacity-70"
+                                  disabled={loading}
+                                  type="button"
+                                >
+                                  Consume
+                                </button>
+                              </div>
+                            </div>
+                            <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
+                              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                                Receive
+                              </p>
+                              <div className="flex flex-col gap-2">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={actionInputs[item.part_number]?.receiveQty || ""}
+                                  onChange={(e) =>
+                                    updateActionInputs(item.part_number, "receiveQty", e.target.value)
+                                  }
+                                  placeholder="Qty"
+                                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                />
+                                <button
+                                  onClick={() => handleReceive(item)}
+                                  className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:opacity-70"
+                                  disabled={loading || !hasSentOrder}
+                                  type="button"
+                                >
+                                  Receive
+                                </button>
+                                {!hasSentOrder && (
+                                  <p className="text-xs text-slate-500">
+                                    Waiting for shipping clerk to send this order.
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          <div className="space-y-2 bg-slate-50 border border-slate-200 rounded-xl p-3">
-                            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                              Receive
-                            </p>
-                            <div className="flex flex-col gap-2">
+                        ) : (
+                          <div className="grid gap-4 lg:grid-cols-3">
+                            <div className="space-y-2">
+                              <label className="text-xs text-slate-500">Min Qty</label>
                               <input
                                 type="number"
-                                min="1"
-                                value={actionInputs[item.part_number]?.receiveQty || ""}
+                                value={actionInputs[item.part_number]?.minEdit ?? ""}
                                 onChange={(e) =>
-                                  updateActionInputs(item.part_number, "receiveQty", e.target.value)
+                                  updateActionInputs(item.part_number, "minEdit", e.target.value)
                                 }
-                                placeholder="Qty"
+                                placeholder={item.min_qty}
                                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                               />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs text-slate-500">Max Qty</label>
+                              <input
+                                type="number"
+                                value={actionInputs[item.part_number]?.maxEdit ?? ""}
+                                onChange={(e) =>
+                                  updateActionInputs(item.part_number, "maxEdit", e.target.value)
+                                }
+                                placeholder={item.max_qty}
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-2">
                               <button
-                                onClick={() => handleReceive(item)}
-                                className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:opacity-70"
+                                onClick={() => handleThresholdUpdate(item)}
+                                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-70"
                                 disabled={loading}
                                 type="button"
                               >
-                                Receive
+                                Save Min/Max
+                              </button>
+                              <button
+                                className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-600 disabled:opacity-70"
+                                onClick={() => reorderToMax(item)}
+                                disabled={loading}
+                                type="button"
+                              >
+                                Reorder to Max
                               </button>
                             </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="grid gap-4 lg:grid-cols-3">
-                          <div className="space-y-2">
-                            <label className="text-xs text-slate-500">Min Qty</label>
-                            <input
-                              type="number"
-                              value={actionInputs[item.part_number]?.minEdit ?? ""}
-                              onChange={(e) =>
-                                updateActionInputs(item.part_number, "minEdit", e.target.value)
-                              }
-                              placeholder={item.min_qty}
-                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs text-slate-500">Max Qty</label>
-                            <input
-                              type="number"
-                              value={actionInputs[item.part_number]?.maxEdit ?? ""}
-                              onChange={(e) =>
-                                updateActionInputs(item.part_number, "maxEdit", e.target.value)
-                              }
-                              placeholder={item.max_qty}
-                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
-                            />
-                          </div>
-                          <div className="flex flex-col gap-2">
-                            <button
-                              onClick={() => handleThresholdUpdate(item)}
-                              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-70"
-                              disabled={loading}
-                              type="button"
-                            >
-                              Save Min/Max
-                            </button>
-                            <button
-                              className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-600 disabled:opacity-70"
-                              onClick={() => reorderToMax(item)}
-                              disabled={loading}
-                              type="button"
-                            >
-                              Reorder to Max
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -548,11 +603,11 @@ function ExampleWMS() {
               <h2 className="text-lg font-semibold text-slate-900">Order request queue</h2>
               <span className="text-xs text-slate-500">(auto-filled when users reach minimum)</span>
             </div>
-            {orderQueue.length === 0 ? (
+            {openOrders.length === 0 ? (
               <p className="text-sm text-slate-600">No pending requests yet.</p>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {orderQueue.map((request, idx) => (
+                {openOrders.map((request, idx) => (
                   <li key={`${request.part_number}-${idx}`} className="py-3 flex flex-col gap-1">
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                       <span>{request.part_number}</span>
@@ -560,6 +615,15 @@ function ExampleWMS() {
                       <span className="font-normal text-slate-700">{request.description}</span>
                     </div>
                     <p className="text-sm text-slate-700">{request.note}</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSendOrder(request.part_number)}
+                        className="text-sm text-white bg-indigo-500 hover:bg-indigo-600 px-3 py-1.5 rounded-lg shadow-sm transition"
+                      >
+                        Send order
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
