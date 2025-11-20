@@ -1,6 +1,15 @@
 import { sql } from "@vercel/postgres";
 
+function ensureDatabaseConfigured() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      "DATABASE_URL is not configured. Please set it to your Postgres connection string."
+    );
+  }
+}
+
 const setupPromise = (async () => {
+  ensureDatabaseConfigured();
   await sql`
     CREATE TABLE IF NOT EXISTS inventory (
       part_number text PRIMARY KEY,
