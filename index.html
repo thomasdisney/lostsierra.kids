@@ -530,11 +530,25 @@
       margin-top: 1rem;
     }
 
+    .carousel-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      flex: 1;
+    }
+
     .carousel-controls p {
       margin: 0;
-      flex: 1;
       font-weight: 600;
       color: var(--forest);
+    }
+
+    .carousel-status {
+      margin: 0;
+      flex: 1;
+      color: #55645c;
+      font-weight: 600;
+      font-size: 0.95rem;
     }
 
     .carousel-buttons {
@@ -928,20 +942,13 @@
       <h2 class="section-title">Photo Carousel</h2>
       <div class="photo-carousel">
         <div class="carousel-track" aria-live="polite">
-          <div class="carousel-slides">
-            <div class="carousel-slide">
-              <img src="pic1.jpg" alt="Children playing together outdoors in the Lost Sierra" loading="lazy" decoding="async" />
-            </div>
-            <div class="carousel-slide">
-              <img src="Stephanie.jpg" alt="Portrait of Stephanie McCoy, Lost Sierra Kids administrator" loading="lazy" decoding="async" />
-            </div>
-            <div class="carousel-slide">
-              <img src="mahala.JPG" alt="Portrait of Mahala Disney, Lost Sierra Kids director" loading="lazy" decoding="async" />
-            </div>
-          </div>
+          <div class="carousel-slides"></div>
         </div>
         <div class="carousel-controls">
-          <p>Snapshots from our community playgroups and team leading the daycare remodel.</p>
+          <div class="carousel-text">
+            <p>Snapshots from our community playgroups and team leading the daycare remodel.</p>
+            <p class="carousel-status" aria-live="polite">Loading photos…</p>
+          </div>
           <div class="carousel-buttons">
             <button class="carousel-button" type="button" data-direction="prev" aria-label="Show previous photo">&#8592;</button>
             <button class="carousel-button" type="button" data-direction="next" aria-label="Show next photo">&#8594;</button>
@@ -1075,13 +1082,150 @@
 
     if (carousel) {
       const slidesContainer = carousel.querySelector('.carousel-slides');
-      const slides = Array.from(carousel.querySelectorAll('.carousel-slide'));
       const buttons = carousel.querySelectorAll('.carousel-button');
+      const status = carousel.querySelector('.carousel-status');
+      const photoExtensions = /(jpe?g|png|gif|webp|avif)$/i;
+      let slides = [];
       let currentIndex = 0;
+
+      const prettifyFilename = (filePath) => {
+        const base = (filePath.split('/').pop() || '').replace(/\.[^.]+$/, '');
+        const normalized = base
+          .replace(/[_-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : 'Lost Sierra Kids photo';
+      };
 
       const updateSlide = () => {
         if (!slidesContainer) return;
+
+        if (!slides.length) {
+          slidesContainer.style.transform = 'translateX(0)';
+          buttons.forEach((button) => button.setAttribute('disabled', 'disabled'));
+
+          if (status) {
+            status.textContent = 'No photos available right now.';
+          }
+
+          return;
+        }
+
+        buttons.forEach((button) => button.removeAttribute('disabled'));
         slidesContainer.style.transform = `translateX(-${currentIndex * 100}%)`;
+
+        if (status) {
+          status.textContent = `Photo ${currentIndex + 1} of ${slides.length}`;
+        }
+      };
+
+      const renderSlides = (photoSources) => {
+        if (!slidesContainer) return;
+
+        slidesContainer.innerHTML = '';
+        slides = photoSources.map((src) => {
+          const slide = document.createElement('div');
+          slide.className = 'carousel-slide';
+
+          const img = document.createElement('img');
+          img.src = src;
+          img.loading = 'lazy';
+          img.decoding = 'async';
+          img.alt = `Lost Sierra Kids photo: ${prettifyFilename(src)}`;
+
+          slide.appendChild(img);
+          slidesContainer.appendChild(slide);
+          return slide;
+        });
+
+        currentIndex = 0;
+        updateSlide();
+      };
+
+      const fetchPhotoManifest = async () => {
+        try {
+          const response = await fetch('photos/photos.json', { cache: 'no-store' });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data)) {
+              return data;
+            }
+          }
+        } catch (error) {
+          console.warn('Could not load photos manifest', error);
+        }
+
+        return null;
+      };
+
+      const normalizeSources = (...lists) => {
+        const deduped = [];
+        const seen = new Set();
+
+        lists.forEach((list) => {
+          if (!Array.isArray(list)) return;
+
+          list.forEach((src) => {
+            if (!src) return;
+            const cleaned = src.toString().trim();
+
+            if (!cleaned) return;
+
+            const prefixed = cleaned.startsWith('photos/') ? cleaned : `photos/${cleaned.replace(/^\/?/, '')}`;
+            const extension = prefixed.split('.').pop() || '';
+
+            if (!photoExtensions.test(extension) || seen.has(prefixed)) return;
+
+            seen.add(prefixed);
+            deduped.push(prefixed);
+          });
+        });
+
+        return deduped;
+      };
+
+      const fetchDirectoryListing = async () => {
+        try {
+          const response = await fetch('photos/');
+
+          if (response.ok) {
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const anchors = Array.from(doc.querySelectorAll('a'));
+
+            const files = anchors
+              .map((anchor) => decodeURIComponent(anchor.getAttribute('href') || ''))
+              .filter((href) => photoExtensions.test(href))
+              .map((href) => `photos/${href.replace(/^\/?/, '')}`);
+
+            if (files.length) {
+              return files;
+            }
+          }
+        } catch (error) {
+          console.warn('Could not read photos directory', error);
+        }
+
+        return null;
+      };
+
+      const loadPhotos = async () => {
+        if (status) {
+          status.textContent = 'Loading photos…';
+        }
+
+        const fromListing = await fetchDirectoryListing();
+        const fromManifest = await fetchPhotoManifest();
+        const normalized = normalizeSources(fromListing, fromManifest);
+
+        renderSlides(normalized);
+
+        if (status && normalized.length) {
+          status.textContent = `Photo 1 of ${normalized.length}`;
+        }
       };
 
       buttons.forEach((button) => {
@@ -1099,7 +1243,7 @@
         });
       });
 
-      updateSlide();
+      loadPhotos();
     }
 
     if (menuToggle && primaryNav) {
