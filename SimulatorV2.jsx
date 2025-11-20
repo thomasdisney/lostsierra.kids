@@ -11,13 +11,13 @@ const ENTITY_TEMPLATES = {
     label: "SlipBot",
     length: 17,
     width: 8,
-    color: "#6dcff6"
+    color: "#1d4ed8"
   },
   trailer: {
     label: "Trailer",
     length: 53,
     width: 8.5,
-    color: "#94a3b8"
+    color: "#475569"
   }
 };
 
@@ -176,7 +176,17 @@ function localPointFromWorld(worldPoint, reference) {
   return rotateOffset(translated, -reference.rotation);
 }
 
+function isFiniteRect(rect) {
+  return [rect.x, rect.y, rect.length, rect.width].every(Number.isFinite);
+}
+
 function lineIntersectsRect(a, b, rect, padding = 0) {
+  if (
+    !isFiniteRect(rect) ||
+    ![a.x, a.y, b.x, b.y].every(Number.isFinite)
+  ) {
+    return false;
+  }
   const expanded = {
     x: rect.x - padding,
     y: rect.y - padding,
@@ -215,8 +225,7 @@ function lineIntersectsRect(a, b, rect, padding = 0) {
 
 function SlipbotShape({ entity, isSelected }) {
   const { center, length, width, rotation, color } = entity;
-  const bodyRadius = Math.min(2, width / 3);
-  const stroke = isSelected ? "#22d3ee" : "#0f172a";
+  const stroke = isSelected ? "#0f172a" : "#1e293b";
   return (
     <g transform={`translate(${center.x}, ${center.y}) rotate(${rotation})`}>
       <rect
@@ -224,26 +233,9 @@ function SlipbotShape({ entity, isSelected }) {
         y={-width / 2}
         width={length}
         height={width}
-        rx={bodyRadius}
-        ry={bodyRadius}
         fill={color}
         stroke={stroke}
-        strokeWidth={0.6}
-        opacity={0.95}
-      />
-      <rect
-        x={-length / 2 + 1}
-        y={-width / 2 + 1}
-        width={length / 3}
-        height={width - 2}
-        rx={bodyRadius}
-        fill="#0ea5e9"
-        opacity={0.35}
-      />
-      <line x1={0} y1={-width / 2} x2={0} y2={width / 2} stroke="#0f172a" strokeDasharray="2 2" strokeWidth={0.8} />
-      <polygon
-        points={`${-length / 2 + 2},0 ${-length / 2 + 6},-2 ${-length / 2 + 6},2`}
-        fill="#0f172a"
+        strokeWidth={0.8}
       />
     </g>
   );
@@ -259,12 +251,9 @@ function TrailerShape({ entity, isSelected }) {
         width={length}
         height={width}
         fill={color}
-        stroke={isSelected ? "#22d3ee" : "#0f172a"}
-        strokeWidth={0.6}
-        opacity={0.75}
+        stroke={isSelected ? "#0f172a" : "#1e293b"}
+        strokeWidth={0.8}
       />
-      <rect x={-length / 2 + 2} y={-width / 2 + 2} width={length - 4} height={width - 4} fill="#0f172a" opacity={0.15} />
-      <line x1={length / 2 - 6} y1={-width / 2} x2={length / 2 - 6} y2={width / 2} stroke="#0f172a" strokeWidth={1} opacity={0.8} />
     </g>
   );
 }
@@ -272,13 +261,9 @@ function TrailerShape({ entity, isSelected }) {
 function ObstacleShape({ obstacle }) {
   const { x, y, length, width } = obstacle;
   const areaCenter = { x: x + length / 2, y: y + width / 2 };
-  const dimensionLabel = `${length.toFixed(2)}ft × ${width.toFixed(2)}ft`;
   return (
     <g transform={`translate(${areaCenter.x}, ${areaCenter.y})`}>
-      <rect x={-length / 2} y={-width / 2} width={length} height={width} fill="rgba(244,63,94,0.18)" stroke="#f43f5e" strokeWidth={0.8} />
-      <text x={-length / 2 + 1.2} y={-width / 2 - 1.2} className="obstacle-label">
-        {dimensionLabel}
-      </text>
+      <rect x={-length / 2} y={-width / 2} width={length} height={width} fill="rgba(239, 68, 68, 0.18)" stroke="#ef4444" strokeWidth={0.8} />
     </g>
   );
 }
@@ -293,13 +278,10 @@ function ParkingSpotShadow({ spot }) {
         y={-width / 2}
         width={length}
         height={width}
-        fill="rgba(148,163,184,0.12)"
-        stroke="rgba(148,163,184,0.35)"
+        fill="rgba(148, 163, 184, 0.12)"
+        stroke="rgba(148, 163, 184, 0.4)"
         strokeDasharray="4 2"
       />
-      <text x={0} y={width / 2 + 2.5} className="parking-label" textAnchor="middle">
-        Parking
-      </text>
     </g>
   );
 }
@@ -751,18 +733,15 @@ function SimulatorV2() {
         <button className="link" onClick={() => navigate(-1)}>
           ← Back
         </button>
-        <div className="title">SlipBot Simulator V2</div>
-        <div className="header-actions">
-          <button className="link" onClick={() => navigate("/example-wms")}>WMS View</button>
-          <button className="link" onClick={() => navigate("/dashboard")}>Dashboard</button>
-        </div>
+        <div className="title">SlipBot Simulator</div>
+        <div className="header-actions" />
       </header>
 
       <section className="toolbar">
         <div className="button-group">
           <button onClick={addSlipbot}>Add SlipBot</button>
           <button className={drawMode ? "active" : ""} onClick={() => setDrawMode(v => !v)}>
-            {drawMode ? "Drawing…" : "Draw"}
+            {drawMode ? "Drawing" : "Draw Obstacle"}
           </button>
           <button onClick={commandEnter}>Enter</button>
           <button onClick={commandExit}>Exit</button>
@@ -789,7 +768,7 @@ function SimulatorV2() {
           >
             <defs>
               <pattern id="grid" width={GRID_GAP} height={GRID_GAP} patternUnits="userSpaceOnUse">
-                <path d={`M ${GRID_GAP} 0 L 0 0 0 ${GRID_GAP}`} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="0.4" />
+                <path d={`M ${GRID_GAP} 0 L 0 0 0 ${GRID_GAP}`} fill="none" stroke="rgba(148, 163, 184, 0.4)" strokeWidth="0.4" />
               </pattern>
             </defs>
             <rect x="0" y="0" width={WORLD_WIDTH} height={WORLD_HEIGHT} fill="url(#grid)" />
@@ -859,7 +838,6 @@ function SimulatorV2() {
                   Clear Route
                 </button>
               </div>
-              <p className="hint">Use Enter to load the trailer and Exit to return to parking.</p>
             </div>
           ) : (
             <p className="panel-body muted">Click an object to manage it.</p>
