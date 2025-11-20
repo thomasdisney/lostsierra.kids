@@ -62,7 +62,13 @@ function ExampleWMS() {
         throw new Error(body.error || "Failed to load inventory");
       }
       const data = await safelyParseJson(response);
-      setInventory(Array.isArray(data) ? data : []);
+      const nextInventory = Array.isArray(data)
+        ? data
+        : Array.isArray(data.inventory)
+        ? data.inventory
+        : [];
+      setInventory(nextInventory);
+      setOrderQueue(Array.isArray(data.orderQueue) ? data.orderQueue : []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -139,51 +145,38 @@ function ExampleWMS() {
       return;
     }
 
+    setLoading(true);
     setError(null);
 
-    setInventory((prev) =>
-      prev.map((invItem) => {
-        if (invItem.part_number !== item.part_number) return invItem;
-        const newQty = Math.max(0, Number(invItem.current_qty) - qty);
-        const updated = { ...invItem, current_qty: newQty };
-
-        if (newQty <= Number(invItem.min_qty)) {
-          const note =
-            inputs.note ||
-            `Hit minimum after consuming ${qty} (Ticket #${inputs.tfiTicket}).`;
-          setOrderQueue((queue) => {
-            const hasPendingOrder = queue.some(
-              (order) =>
-                order.part_number === invItem.part_number && order.status !== "completed"
-            );
-
-            if (hasPendingOrder) return queue;
-
-            return [
-              ...queue,
-              {
-                part_number: invItem.part_number,
-                description: invItem.description,
-                note,
-                status: "open",
-              },
-            ];
-          });
+    fetch("/api/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "consume",
+        part_number: item.part_number,
+        qty,
+        tfiTicket: inputs.tfiTicket,
+        note: inputs.note,
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await safelyParseJson(response);
+          throw new Error(body.error || "Unable to consume inventory");
         }
-
-        return updated;
+        await fetchInventory();
+        setActionInputs((prev) => ({
+          ...prev,
+          [item.part_number]: {
+            ...prev[item.part_number],
+            consumeQty: "",
+            tfiTicket: "",
+            note: "",
+          },
+        }));
       })
-    );
-
-    setActionInputs((prev) => ({
-      ...prev,
-      [item.part_number]: {
-        ...prev[item.part_number],
-        consumeQty: "",
-        tfiTicket: "",
-        note: "",
-      },
-    }));
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   };
 
   const handleReceive = (item) => {
@@ -204,33 +197,34 @@ function ExampleWMS() {
       return;
     }
 
+    setLoading(true);
     setError(null);
 
-    setInventory((prev) =>
-      prev.map((invItem) =>
-        invItem.part_number === item.part_number
-          ? { ...invItem, current_qty: Number(invItem.current_qty) + qty }
-          : invItem
-      )
-    );
-
-    setOrderQueue((queue) =>
-      queue
-        .map((order) =>
-          order.part_number === item.part_number && order.status === "sent"
-            ? { ...order, status: "completed" }
-            : order
-        )
-        .filter((order) => order.status !== "completed")
-    );
-
-    setActionInputs((prev) => ({
-      ...prev,
-      [item.part_number]: {
-        ...prev[item.part_number],
-        receiveQty: "",
-      },
-    }));
+    fetch("/api/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "receive",
+        part_number: item.part_number,
+        qty,
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await safelyParseJson(response);
+          throw new Error(body.error || "Unable to receive inventory");
+        }
+        await fetchInventory();
+        setActionInputs((prev) => ({
+          ...prev,
+          [item.part_number]: {
+            ...prev[item.part_number],
+            receiveQty: "",
+          },
+        }));
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   };
 
   const handleThresholdUpdate = async (item) => {
@@ -299,13 +293,23 @@ function ExampleWMS() {
   };
 
   const handleSendOrder = (partNumber) => {
-    setOrderQueue((queue) =>
-      queue.map((order) =>
-        order.part_number === partNumber && order.status === "open"
-          ? { ...order, status: "sent" }
-          : order
-      )
-    );
+    setLoading(true);
+    setError(null);
+
+    fetch("/api/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "send_order", part_number: partNumber }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await safelyParseJson(response);
+          throw new Error(body.error || "Unable to send order");
+        }
+        await fetchInventory();
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   };
 
   return (
