@@ -1,10 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-function notifyClerk(item) {
-  console.log(`Order part ${item.part_number} up to ${item.max_qty}`);
-}
-
 const initialConsumeState = {
   part_number: "",
   qty: "",
@@ -22,7 +18,7 @@ function ExampleWMS() {
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [viewMode, setViewMode] = useState("user");
+  const [viewMode, setViewMode] = useState("fieldTech");
   const [orderQueue, setOrderQueue] = useState([]);
   const [consumeForm, setConsumeForm] = useState(initialConsumeState);
   const [openAdjustmentFor, setOpenAdjustmentFor] = useState(null);
@@ -31,6 +27,9 @@ function ExampleWMS() {
   const [inventoryManagerOpen, setInventoryManagerOpen] = useState(false);
   const [inventoryEdits, setInventoryEdits] = useState([]);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [autoOrderNotices, setAutoOrderNotices] = useState([]);
+  const [bomOpen, setBomOpen] = useState(false);
+  const [receiveInputs, setReceiveInputs] = useState({});
 
   const lowStockItems = useMemo(
     () => inventory.filter((item) => Number(item.current_qty) <= Number(item.min_qty)),
@@ -46,12 +45,58 @@ function ExampleWMS() {
     [orderQueue]
   );
 
+  const restockOrders = useMemo(
+    () => orderQueue.filter((request) => request.request_type === "restock"),
+    [orderQueue]
+  );
+
+  const openRestockOrders = useMemo(
+    () => restockOrders.filter((request) => request.status === "open"),
+    [restockOrders]
+  );
+
+  const sentRestockOrders = useMemo(
+    () => restockOrders.filter((request) => request.status === "sent"),
+    [restockOrders]
+  );
+
   useEffect(() => {
     fetchInventory();
   }, []);
 
   useEffect(() => {
-    lowStockItems.forEach((item) => notifyClerk(item));
+    let isActive = true;
+    const createAutoOrders = async () => {
+      if (lowStockItems.length === 0) {
+        setAutoOrderNotices([]);
+        return;
+      }
+
+      const notices = [];
+      for (const item of lowStockItems) {
+        try {
+          await ensureRestockOrder(
+            item.part_number,
+            "Auto-created after hitting minimum threshold."
+          );
+          notices.push(`Restock order has been created for ${item.part_number}.`);
+        } catch (orderError) {
+          if (isActive) {
+            setError(orderError.message);
+          }
+        }
+      }
+
+      if (isActive) {
+        setAutoOrderNotices(notices);
+      }
+    };
+
+    createAutoOrders();
+
+    return () => {
+      isActive = false;
+    };
   }, [lowStockItems]);
 
   const findInventoryItem = (partNumber) =>
@@ -195,7 +240,7 @@ function ExampleWMS() {
     }
   };
 
-  const ensureOrderExists = async (partNumber) => {
+  const ensureRestockOrder = async (partNumber, reason = "") => {
     const hasActiveOrder = orderQueue.some(
       (order) =>
         order.part_number === partNumber &&
@@ -218,7 +263,7 @@ function ExampleWMS() {
         action: "request_adjustment",
         part_number: partNumber,
         requested_qty: item.max_qty,
-        reason: "Auto-created restock request for shipping.",
+        reason: reason || "Field Tech created restock request.",
         request_type: "restock",
       }),
     });
@@ -245,43 +290,90 @@ function ExampleWMS() {
     setError(null);
 
     try {
-      const queueAfterEnsure = await ensureOrderExists(partNumber);
+      const queueAfterEnsure = await ensureRestockOrder(partNumber);
       const hasSentOrder = queueAfterEnsure.some(
         (order) => order.part_number === partNumber && order.status === "sent"
       );
 
-      let queueAfterSend = queueAfterEnsure;
-      if (!hasSentOrder) {
-        const sendResponse = await fetch("/api/inventory", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "send_order", part_number: partNumber }),
-        });
-
-        if (!sendResponse.ok) {
-          const body = await safelyParseJson(sendResponse);
-          throw new Error(body.error || "Unable to send order");
-        }
-
-        const body = await safelyParseJson(sendResponse);
-        queueAfterSend = Array.isArray(body.orderQueue) ? body.orderQueue : queueAfterEnsure;
-        setOrderQueue(queueAfterSend);
+      if (hasSentOrder) {
+        setError("Order is already marked as sent. Field Techs will handle receiving.");
+        return;
       }
 
-      const receiveResponse = await fetch("/api/inventory", {
+      const sendResponse = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send_order", part_number: partNumber }),
+      });
+
+      if (!sendResponse.ok) {
+        const body = await safelyParseJson(sendResponse);
+        throw new Error(body.error || "Unable to send order");
+      }
+
+      const body = await safelyParseJson(sendResponse);
+      const nextQueue = Array.isArray(body.orderQueue) ? body.orderQueue : queueAfterEnsure;
+      setOrderQueue(nextQueue);
+      setShipmentInputs((prev) => ({ ...prev, [partNumber]: "" }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateOrder = async (partNumber) => {
+    if (!partNumber) {
+      setError("Select a part to create an order.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const queueAfterEnsure = await ensureRestockOrder(
+        partNumber,
+        "Field Tech created this order manually."
+      );
+      setOrderQueue(queueAfterEnsure);
+      setAutoOrderNotices((prev) => {
+        const next = new Set(prev);
+        next.add(`Restock order has been created for ${partNumber}.`);
+        return Array.from(next);
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReceive = async (partNumber, fallbackQty) => {
+    const qty = Number(receiveInputs[partNumber] ?? fallbackQty);
+    if (!qty || qty <= 0) {
+      setError("Enter a quantity received before completing receipt.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "receive", part_number: partNumber, qty }),
       });
 
-      if (!receiveResponse.ok) {
-        const body = await safelyParseJson(receiveResponse);
-        throw new Error(body.error || "Unable to complete shipment");
+      if (!response.ok) {
+        const body = await safelyParseJson(response);
+        throw new Error(body.error || "Unable to receive shipment");
       }
 
-      const body = await safelyParseJson(receiveResponse);
-      setOrderQueue(Array.isArray(body.orderQueue) ? body.orderQueue : queueAfterSend);
-      setShipmentInputs((prev) => ({ ...prev, [partNumber]: "" }));
+      const body = await safelyParseJson(response);
+      setOrderQueue(Array.isArray(body.orderQueue) ? body.orderQueue : orderQueue);
+      setReceiveInputs((prev) => ({ ...prev, [partNumber]: "" }));
       await fetchInventory();
     } catch (err) {
       setError(err.message);
@@ -356,9 +448,9 @@ function ExampleWMS() {
       {
         part_number: "",
         description: "",
-        current_qty: "",
-        min_qty: "",
-        max_qty: "",
+        current_qty: 0,
+        min_qty: 0,
+        max_qty: 0,
         original_part_number: null,
       },
     ]);
@@ -412,28 +504,28 @@ function ExampleWMS() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f8fafc] via-[#eef2ff] to-[#e0f2fe] text-slate-800">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-800 text-slate-100">
       <div className="mx-auto max-w-6xl px-6 py-10 space-y-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="text-sm text-blue-700 hover:text-blue-900 transition"
+            className="text-sm text-amber-400 hover:text-amber-200 transition"
           >
             ← Back to home
           </button>
-          <div className="flex items-center gap-3 bg-white/90 rounded-full border border-slate-200 shadow-md p-1.5">
+          <div className="flex items-center gap-3 bg-slate-800/80 rounded-full border border-slate-700 shadow-md p-1.5">
             {[
-              { label: "User view", value: "user" },
+              { label: "Field Tech", value: "fieldTech" },
               { label: "Shipping clerk", value: "shippingClerk" },
             ].map((mode) => (
               <button
                 key={mode.value}
                 onClick={() => setViewMode(mode.value)}
-                className={`px-4 py-2 text-sm font-medium rounded-full transition shadow-sm ${
+                className={`px-4 py-2 text-sm font-semibold rounded-full transition shadow-sm ${
                   viewMode === mode.value
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-700 hover:bg-slate-100"
+                    ? "bg-amber-500 text-slate-900"
+                    : "text-slate-200 hover:bg-slate-700"
                 }`}
               >
                 {mode.label}
@@ -443,43 +535,41 @@ function ExampleWMS() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            On-site inventory Tool
+          <h1 className="text-3xl font-extrabold tracking-tight text-amber-300 drop-shadow">
+            On-site Inventory Tool
           </h1>
-          <p className="text-base text-slate-600 leading-relaxed">
-            {viewMode === "user"
-              ? "Use consume and audit tools to keep live inventory aligned with work orders."
-              : "Ship only what is requested and complete restock orders without directly editing inventory."}
+          <p className="text-base text-slate-200/80 leading-relaxed">
+            {viewMode === "fieldTech"
+              ? "Field Tech view: create and receive orders while keeping quantities in sync with the floor."
+              : "Shipping Clerk view: prep and dispatch orders that Field Techs will receive against inventory."}
           </p>
         </div>
 
-        {lowStockItems.length > 0 && (
-          <div className="p-5 bg-gradient-to-r from-amber-50 via-amber-50 to-orange-50 border border-amber-100 text-amber-800 rounded-2xl shadow-sm">
-            <p className="font-semibold">Low stock alert!</p>
+        {autoOrderNotices.length > 0 && (
+          <div className="p-5 bg-slate-800 border border-amber-500/40 text-amber-200 rounded-2xl shadow-lg">
+            <p className="font-semibold tracking-wide">Order updates</p>
             <ul className="list-disc list-inside text-sm leading-relaxed">
-              {lowStockItems.map((item) => (
-                <li key={item.part_number}>
-                  {item.part_number} - current {item.current_qty}, min {item.min_qty}
-                </li>
+              {autoOrderNotices.map((message) => (
+                <li key={message}>{message}</li>
               ))}
             </ul>
           </div>
         )}
 
         {error && (
-          <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700">
+          <div className="p-3 rounded-md bg-rose-900/80 border border-rose-700 text-rose-100 shadow-lg">
             Error: {error}
           </div>
         )}
-        {viewMode === "user" ? (
+        {viewMode === "fieldTech" ? (
           <div className="space-y-6">
-            <section className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg p-6 space-y-5">
+            <section className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-2xl shadow-lg p-6 space-y-5">
               <div className="flex flex-col gap-2">
-                <h2 className="text-xl font-semibold text-slate-900">Consume tool</h2>
+                <h2 className="text-xl font-semibold text-amber-300">Consume tool</h2>
               </div>
               <form onSubmit={handleConsumeSubmit} className="space-y-4">
                 <div className="flex flex-col gap-3">
-                  <label className="text-sm font-medium text-slate-800">
+                  <label className="text-sm font-medium text-slate-200">
                     I am consuming
                     <div className="mt-2 flex flex-col gap-3 md:flex-row md:items-center md:gap-2">
                       <input
@@ -488,40 +578,48 @@ function ExampleWMS() {
                         value={consumeForm.qty}
                         onChange={(e) => setConsumeForm((prev) => ({ ...prev, qty: e.target.value }))}
                         placeholder="Qty"
-                        className="w-full md:w-24 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                        className="w-full md:w-24 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
                       />
                       <select
                         value={consumeForm.part_number}
-                        onChange={(e) => setConsumeForm((prev) => ({ ...prev, part_number: e.target.value }))}
-                        className="w-full md:w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (value === "__FULL_BOM__") {
+                            setBomOpen(true);
+                            return;
+                          }
+                          setConsumeForm((prev) => ({ ...prev, part_number: value }));
+                        }}
+                        className="w-full md:w-48 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
                       >
                         {inventory.map((item) => (
                           <option key={item.part_number} value={item.part_number}>
                             {item.part_number} - {item.description}
                           </option>
                         ))}
+                        <option value="__FULL_BOM__">See full BOM</option>
                       </select>
-                      <span className="text-sm font-medium text-slate-700">for</span>
+                      <span className="text-sm font-medium text-slate-300">for</span>
                       <input
                         type="text"
                         value={consumeForm.tfiTicket}
                         onChange={(e) => setConsumeForm((prev) => ({ ...prev, tfiTicket: e.target.value }))}
                         placeholder="TFI Ticket #"
-                        className="w-full md:w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                        className="w-full md:w-48 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
                       />
-                      <span className="text-sm font-medium text-slate-700">.</span>
+                      <span className="text-sm font-medium text-slate-300">.</span>
                     </div>
                   </label>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-semibold uppercase text-slate-500">Optional note</label>
+                    <label className="text-xs font-semibold uppercase text-slate-400">Optional note</label>
                     <input
                       type="text"
                       value={consumeForm.note}
                       onChange={(e) => setConsumeForm((prev) => ({ ...prev, note: e.target.value }))}
                       placeholder="Note for the shipping clerk"
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                      className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -535,18 +633,110 @@ function ExampleWMS() {
               </form>
             </section>
 
-            <section className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg">
+            <section className="bg-slate-800/80 border border-slate-700 rounded-2xl shadow-lg p-6 space-y-4">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-xl font-semibold text-amber-300">Restock orders</h2>
+                <p className="text-sm text-slate-300">
+                  Create replenishment requests and receive shipments sent by the clerk.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs uppercase text-slate-400 font-semibold">Part number</span>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={consumeForm.part_number}
+                      onChange={(e) => setConsumeForm((prev) => ({ ...prev, part_number: e.target.value }))}
+                      className="w-56 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
+                    >
+                      {inventory.map((item) => (
+                        <option key={item.part_number} value={item.part_number}>
+                          {item.part_number}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCreateOrder(consumeForm.part_number)}
+                  disabled={loading}
+                  className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-amber-400 disabled:opacity-70"
+                >
+                  Create order
+                </button>
+                <p className="text-sm text-slate-300">Creates a restock request to max for this part.</p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-slate-100">Incoming shipments</h3>
+                  <span className="text-xs text-slate-400">Receive to update inventory.</span>
+                </div>
+                {sentRestockOrders.length === 0 ? (
+                  <p className="text-sm text-slate-400">No shipments en route yet.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="bg-slate-900 text-slate-300 uppercase tracking-wide text-xs">
+                        <tr>
+                          <th className="p-3">Part Number</th>
+                          <th className="p-3">Description</th>
+                          <th className="p-3">Qty expected</th>
+                          <th className="p-3">Receive</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700">
+                        {sentRestockOrders.map((order) => (
+                          <tr key={`${order.part_number}-${order.id}`} className="bg-slate-900/70">
+                            <td className="p-3 font-semibold text-amber-200">{order.part_number}</td>
+                            <td className="p-3 text-slate-200">{order.description}</td>
+                            <td className="p-3 text-slate-200">{order.requested_qty ?? "—"}</td>
+                            <td className="p-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={receiveInputs[order.part_number] ?? order.requested_qty ?? ""}
+                                  onChange={(e) =>
+                                    setReceiveInputs((prev) => ({
+                                      ...prev,
+                                      [order.part_number]: e.target.value,
+                                    }))
+                                  }
+                                  className="w-28 rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleReceive(order.part_number, order.requested_qty)}
+                                  disabled={loading}
+                                  className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:opacity-70"
+                                >
+                                  Receive
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-2xl shadow-lg">
               <div className="flex items-center justify-between px-6 py-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Audit tool</h2>
-                  <p className="text-sm text-slate-600">Review the full inventory and request corrections.</p>
+                  <h2 className="text-xl font-semibold text-amber-300">Audit tool</h2>
+                  <p className="text-sm text-slate-300">Review the full inventory and request corrections.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setAuditOpen((prev) => !prev)}
                   className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm transition ${
                     auditOpen
-                      ? "border border-slate-200 text-slate-800 hover:bg-slate-50 bg-white"
+                      ? "border border-slate-600 text-slate-100 hover:bg-slate-800 bg-slate-900"
                       : "bg-indigo-500 text-white hover:bg-indigo-600"
                   }`}
                 >
@@ -556,7 +746,7 @@ function ExampleWMS() {
               {auditOpen ? (
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide text-xs">
+                    <thead className="bg-slate-900 text-slate-300 uppercase tracking-wide text-xs">
                       <tr>
                         <th className="p-4">Part Number</th>
                         <th className="p-4">Description</th>
@@ -566,15 +756,15 @@ function ExampleWMS() {
                         <th className="p-4">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-700">
                       {inventory.map((item) => (
                         <Fragment key={item.part_number}>
-                          <tr className="bg-white hover:bg-slate-50/60 transition">
-                            <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
-                            <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
-                            <td className="p-4 text-slate-900">{item.current_qty}</td>
-                            <td className="p-4 text-slate-900">{item.min_qty}</td>
-                            <td className="p-4 text-slate-900">{item.max_qty}</td>
+                          <tr className="bg-slate-900/70 hover:bg-slate-800 transition">
+                            <td className="p-4 font-semibold text-amber-200">{item.part_number}</td>
+                            <td className="p-4 text-slate-200 max-w-xs">{item.description}</td>
+                            <td className="p-4 text-slate-200">{item.current_qty}</td>
+                            <td className="p-4 text-slate-200">{item.min_qty}</td>
+                            <td className="p-4 text-slate-200">{item.max_qty}</td>
                             <td className="p-4">
                               <button
                                 type="button"
@@ -592,29 +782,29 @@ function ExampleWMS() {
                             </td>
                           </tr>
                           {openAdjustmentFor === item.part_number && (
-                            <tr className="bg-slate-50">
+                            <tr className="bg-slate-900/60">
                               <td colSpan={6} className="p-4">
                                 <div className="grid gap-4 md:grid-cols-4 items-end">
                                   <div className="space-y-1">
-                                    <label className="text-xs font-semibold uppercase text-slate-500">Part</label>
+                                    <label className="text-xs font-semibold uppercase text-slate-300">Part</label>
                                     <input
                                       type="text"
                                       value={`${item.part_number} — ${item.description}`}
                                       disabled
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
                                     />
                                   </div>
                                   <div className="space-y-1">
-                                    <label className="text-xs font-semibold uppercase text-slate-500">Current quantity</label>
+                                    <label className="text-xs font-semibold uppercase text-slate-300">Current quantity</label>
                                     <input
                                       type="text"
                                       value={item.current_qty}
                                       disabled
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
                                     />
                                   </div>
                                   <div className="space-y-1">
-                                    <label className="text-xs font-semibold uppercase text-slate-500">Correct quantity</label>
+                                    <label className="text-xs font-semibold uppercase text-slate-300">Correct quantity</label>
                                     <input
                                       type="text"
                                       inputMode="numeric"
@@ -625,18 +815,18 @@ function ExampleWMS() {
                                           requested_qty: e.target.value,
                                         }))
                                       }
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:border-amber-400 focus:outline-none"
                                     />
                                   </div>
                                   <div className="space-y-1 md:col-span-1">
-                                    <label className="text-xs font-semibold uppercase text-slate-500">Reason</label>
+                                    <label className="text-xs font-semibold uppercase text-slate-300">Reason</label>
                                     <textarea
                                       value={adjustmentForm.reason}
                                       onChange={(e) =>
                                         setAdjustmentForm((prev) => ({ ...prev, reason: e.target.value }))
                                       }
                                       rows={2}
-                                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                                      className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:border-amber-400 focus:outline-none"
                                     />
                                   </div>
                                 </div>
@@ -812,63 +1002,60 @@ function ExampleWMS() {
               </section>
             )}
 
-            <section className="bg-white/95 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg">
+            <section className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 rounded-2xl shadow-lg">
               <div className="flex items-center justify-between px-6 py-4">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">Items requiring shipment</h2>
-                  <p className="text-sm text-slate-600">Only items at or below minimum are shown. Enter what you shipped to update inventory.</p>
+                  <h2 className="text-xl font-semibold text-amber-300">Open restock orders</h2>
+                  <p className="text-sm text-slate-300">Send parts for Field Techs to receive later.</p>
                 </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-slate-600 uppercase tracking-wide text-xs">
+                  <thead className="bg-slate-900 text-slate-300 uppercase tracking-wide text-xs">
                     <tr>
                       <th className="p-4">Part Number</th>
                       <th className="p-4">Description</th>
-                      <th className="p-4">Current / Min / Max</th>
-                      <th className="p-4">Quantity Shipped</th>
+                      <th className="p-4">Requested Qty</th>
+                      <th className="p-4">Ship Qty</th>
                       <th className="p-4">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {lowStockItems.length === 0 && (
+                  <tbody className="divide-y divide-slate-700">
+                    {openRestockOrders.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-4 text-sm text-slate-600">
-                          All parts are above minimums.
+                        <td colSpan={5} className="p-4 text-sm text-slate-400">
+                          No open restock orders.
                         </td>
                       </tr>
                     )}
-                    {lowStockItems.map((item) => (
-                      <tr key={item.part_number} className="bg-white">
-                        <td className="p-4 font-semibold text-slate-900">{item.part_number}</td>
-                        <td className="p-4 text-slate-700 max-w-xs">{item.description}</td>
-                        <td className="p-4 text-slate-900">
-                          <div className="text-sm font-medium">{item.current_qty}</div>
-                          <div className="text-xs text-slate-500">Min {item.min_qty} · Max {item.max_qty}</div>
-                        </td>
+                    {openRestockOrders.map((order) => (
+                      <tr key={`${order.part_number}-${order.id || order.created_at}`} className="bg-slate-900/70">
+                        <td className="p-4 font-semibold text-amber-200">{order.part_number}</td>
+                        <td className="p-4 text-slate-200 max-w-xs">{order.description}</td>
+                        <td className="p-4 text-slate-200">{order.requested_qty ?? "—"}</td>
                         <td className="p-4">
                           <input
                             type="text"
                             inputMode="numeric"
-                            value={shipmentInputs[item.part_number] || ""}
+                            value={shipmentInputs[order.part_number] || order.requested_qty || ""}
                             onChange={(e) =>
                               setShipmentInputs((prev) => ({
                                 ...prev,
-                                [item.part_number]: e.target.value,
+                                [order.part_number]: e.target.value,
                               }))
                             }
                             placeholder="Qty shipped"
-                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
+                            className="w-full rounded-lg border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
                           />
                         </td>
                         <td className="p-4">
                           <button
                             type="button"
-                            onClick={() => completeShipment(item.part_number)}
+                            onClick={() => completeShipment(order.part_number)}
                             disabled={loading}
                             className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:opacity-70"
                           >
-                            Complete Order
+                            Send order
                           </button>
                         </td>
                       </tr>
@@ -993,6 +1180,65 @@ function ExampleWMS() {
           </div>
         )}
       </div>
+      {bomOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-10">
+          <div className="w-full max-w-4xl rounded-2xl border border-amber-500/40 bg-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-700 px-6 py-4">
+              <div>
+                <h2 className="text-xl font-semibold text-amber-300">Bill of Materials</h2>
+                <p className="text-sm text-slate-300">Review all parts, including zero-quantity placeholders.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBomOpen(false)}
+                className="rounded-lg border border-slate-600 px-3 py-1 text-sm font-semibold text-slate-100 hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-800 text-slate-300 uppercase tracking-wide text-xs">
+                  <tr>
+                    <th className="p-3">Part Number</th>
+                    <th className="p-3">Description</th>
+                    <th className="p-3">Qty</th>
+                    <th className="p-3">Min</th>
+                    <th className="p-3">Max</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-700">
+                  {inventory.map((item) => (
+                    <tr key={item.part_number} className="bg-slate-900/60">
+                      <td className="p-3 font-semibold text-amber-200">{item.part_number}</td>
+                      <td className="p-3 text-slate-200">{item.description}</td>
+                      <td className="p-3 text-slate-200">{item.current_qty}</td>
+                      <td className="p-3 text-slate-200">{item.min_qty}</td>
+                      <td className="p-3 text-slate-200">{item.max_qty}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-slate-700 px-6 py-4">
+              <p className="text-sm text-slate-300">
+                Need a placeholder? Add a part with quantity 0 in the inventory editor to pad the BOM.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setInventoryManagerOpen(true);
+                  addBlankInventoryRow();
+                  setBomOpen(false);
+                }}
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm hover:bg-amber-400"
+              >
+                Add 0-qty part
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
