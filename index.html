@@ -629,14 +629,14 @@
       border-radius: 18px;
       padding: 1.6rem;
       box-shadow: 0 15px 35px rgba(38, 77, 59, 0.15);
-      display: grid;
+      display: flex;
+      flex-direction: column;
       gap: 0.6rem;
-      grid-auto-rows: auto 1fr;
-      height: 100%;
       overflow: hidden;
       position: relative;
       transition: transform 0.3s ease, box-shadow 0.3s ease;
       border: 2px solid rgba(111, 85, 55, 0.25);
+      align-self: start;
     }
 
     .leader-card::after {
@@ -716,10 +716,36 @@
       letter-spacing: 0.02em;
       font-size: 0.9rem;
       color: var(--sage);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
     }
 
     .leader-card details.accordion summary::after {
       color: var(--sage);
+    }
+
+    .leader-card details.accordion summary .accordion-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid rgba(120, 145, 116, 0.4);
+      color: var(--forest);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: rgba(230, 239, 233, 0.6);
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .leader-card details.accordion[open] summary .accordion-hint {
+      background: rgba(242, 222, 145, 0.3);
+      border-color: rgba(111, 85, 55, 0.35);
+      color: var(--wood-dark);
     }
 
     .leader-card details.accordion .accordion-body {
@@ -1490,7 +1516,10 @@
             <h3>Stephanie McCoy</h3>
             <h4>Founder &amp; Executive Director</h4>
             <details class="accordion">
-              <summary>Biography</summary>
+              <summary>
+                <span>Biography</span>
+                <span class="accordion-hint">Read bio</span>
+              </summary>
               <div class="accordion-body">
                 <p>Stephanie founded Lost Sierra Kids in January 2024 after the First 5 Plumas playgroups were no longer able to continue. She has not only taught music, theater, and early childhood education across Northern Nevada since 2003, but also has 12+ years of Non-Profit and organizational leadership and management experience. She now channels that knowledge and experience into building a learning center that is rooted in the beloved Lost Sierra. Stephanie oversees the remodel, program development, and day-to-day care, ensuring every child and caregiver feels welcomed and supported. Stephanie will also teach our music, dramatic arts, and age appropriate kitchen learning on a weekly basis.</p>
               </div>
@@ -1505,7 +1534,10 @@
             <h3>Rhiannon Brooks</h3>
             <h4>Learning Center Director</h4>
             <details class="accordion">
-              <summary>Biography</summary>
+              <summary>
+                <span>Biography</span>
+                <span class="accordion-hint">Read bio</span>
+              </summary>
               <div class="accordion-body">
                 <p>Rhiannon Brooks has been working with children since 2019 and has over seven years of experience in early childhood education. She grew up in the Lost Sierra and has a deep love for the area and its community. Rhiannon holds an A.A. in Elementary Education and a B.A. in Early Childhood Education, and is preparing to begin her M.A. in Curriculum Development and Instruction. She is passionate about play-based, child-led learning and supporting social-emotional development. Rhiannon is excited to join the Lost Sierra Kids team, as the program perfectly aligns with her values and love for the Lost Sierra.</p>
               </div>
@@ -1520,7 +1552,10 @@
             <h3>Mahala Disney</h3>
             <h4>Creative &amp; Operations Director</h4>
             <details class="accordion">
-              <summary>Biography</summary>
+              <summary>
+                <span>Biography</span>
+                <span class="accordion-hint">Read bio</span>
+              </summary>
               <div class="accordion-body">
                 <p>Mahala is an experienced early childhood educator with over 16 years of experience working with children in a variety of settings, including home-based childcare, private nannying, and the Head Start program. As Creative &amp; Operations Director, she leads the organizational and creative foundation of the learning center, overseeing operations, scheduling systems, internal workflows, funding and grant development, budgeting support, and long-range planning.</p>
                 <p>Mahala provides creative leadership across curriculum vision, program design, marketing, communications, and community engagement, ensuring the center reflects thoughtful, nature-based education rooted in hands-on exploration, outdoor play, child-led discovery, and intentional daily rhythms. Her role supports the teaching team by building strong systems and a cohesive vision, allowing educators to focus fully on children and classroom learning.</p>
@@ -1533,7 +1568,10 @@
             <h3>Educator Team & Partners</h3>
             <h4>Local Expertise</h4>
             <details class="accordion">
-              <summary>Partnership overview</summary>
+              <summary>
+                <span>Partnership overview</span>
+                <span class="accordion-hint">Read more</span>
+              </summary>
               <div class="accordion-body">
                 <p>Lost Sierra Kids will employ local educators and assistant teachers from Plumas County. All educators and aids will be fully licensed and accredited, upholding our high level of education standards for this area. Lost Sierra Kids will assist all educators and aids to ensure their certifications. Every staff member will be able to pass a fingerprinting and background check, not only for state guidelines, but to ensure the safety of all the children that visit Lost Sierra Kids.  We currently are partners with First 5 Plumas and Plumas STARS, connecting us to additional county agencies and community resources. We also will bring in experts around Plumas County to lead our community classes (watercolor artists, yoga instructors, wood building and workshoping, acrylic artists,  and so many others). We aim to be a staple in our heartfelt community as well as a focal point for all things Children and Family in Plumas County. It takes a village to raise kind, creative, and educated children; therefore, we plan to showcase those in our community with so much to give.</p>
               </div>
@@ -1689,10 +1727,14 @@
             <iframe title="Map of Lost Sierra Kids at the Graeagle Schoolhouse" src="https://maps.google.com/maps?q=7701%20CA-89%20%2322%2C%20Graeagle%2C%20CA&z=18&t=m&output=embed" width="100%" height="220" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
           </div>
         </div>
-        <aside class="partners" aria-labelledby="partners-title" hidden>
+        <aside class="partners" aria-labelledby="partners-title">
           <h3 id="partners-title">Partners</h3>
           <p>We appreciate the local businesses supporting families in the Lost Sierra.</p>
-          <div class="partner-grid" role="list"></div>
+          <div class="partner-grid" role="list">
+            <img src="logos/BFJ_feather_logo_vert.jpg" alt="Bread for the Journey logo" role="listitem" loading="lazy" decoding="async" />
+            <img src="logos/logo-stacked-white.png" alt="Feather River Co-op logo" role="listitem" loading="lazy" decoding="async" />
+            <img src="logos/lost%20sierra%20ventures.png" alt="Lost Sierra Ventures logo" role="listitem" loading="lazy" decoding="async" />
+          </div>
         </aside>
       </div>
     </section>
@@ -2094,7 +2136,6 @@
       const validImages = images.filter(Boolean);
 
       if (!validImages.length) {
-        partnerSection.hidden = true;
         return;
       }
 
