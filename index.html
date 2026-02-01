@@ -996,16 +996,11 @@
       .top-bar {
         flex-direction: column;
         gap: 1rem;
+        justify-content: center;
       }
 
       .primary-navigation {
-        width: 100%;
-        justify-content: center;
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.6rem;
-        border-radius: 18px;
-        padding: 0.85rem;
+        display: none;
       }
 
       .primary-navigation a {
@@ -1031,6 +1026,10 @@
       section {
         padding: 3.5rem 6vw;
         scroll-margin-top: 110px;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
       }
 
       body {
@@ -1089,6 +1088,18 @@
         width: 100%;
       }
 
+      .section-title {
+        font-size: 1.85rem;
+      }
+
+      .leader-card {
+        padding: 1.35rem;
+      }
+
+      .leader-card__photo {
+        aspect-ratio: 3 / 4;
+      }
+
       .mobile-nav {
         width: calc(100% - 2rem);
         border-radius: 20px;
@@ -1101,7 +1112,8 @@
         flex: 1 1 calc(33% - 0.5rem);
         text-align: center;
         white-space: normal;
-        font-size: 0.68rem;
+        font-size: 0.7rem;
+        letter-spacing: 0.06em;
       }
 
       .mobile-nav .nav-donate {
@@ -1163,7 +1175,7 @@
           <li><strong>Founded:</strong> January 2024 by Stephanie McCoy after First 5 Plumas playgroups took a significant hiatus.</li>
           <li><strong>Families Served:</strong> 24-30 children and 12-15 caregivers weekly at our free community playgroup, and more than 60 families to date.</li>
           <li><strong>Funding Goal:</strong> Phase 1 build-out of our full-time early childhood learning center to open our main classroom, administration office, kitchen and storage, and outdoor playspaces.</li>
-          <li><strong>Opening Target:</strong> Summer 2026 with space for up to 27 children in our licensed multi-age classroom.</li>
+          <li><strong>Opening Target:</strong> August 2026 with space for up to 27 children in our licensed multi-age classroom.</li>
         </ul>
       </div>
     </div>
@@ -1227,22 +1239,12 @@
       <div class="leaders">
         <article class="leader-card">
           <div class="leader-card__photo">
-            <img src="Stephanie.jpg" alt="Photograph of Stephanie McCoy, Executive Director" loading="lazy" decoding="async" />
+            <img src="Stephanie.jpg" alt="Photograph of Stephanie McCoy, Founder &amp; Executive Director" loading="lazy" decoding="async" />
           </div>
           <div class="leader-card__body">
             <h3>Stephanie McCoy</h3>
-            <h4>Executive Director</h4>
+            <h4>Founder &amp; Executive Director</h4>
             <p>Stephanie founded Lost Sierra Kids in January 2024 after the First 5 Plumas playgroups were no longer able to continue. She has not only taught music, theater, and early childhood education across Northern Nevada since 2003, but also has 12+ years of Non-Profit and organizational leadership and management experience. She now channels that knowledge and experience into building a learning center that is rooted in the beloved Lost Sierra. Stephanie oversees the remodel, program development, and day-to-day care, ensuring every child and caregiver feels welcomed and supported. Stephanie will also teach our music, dramatic arts, and age appropriate kitchen learning on a weekly basis.</p>
-          </div>
-        </article>
-        <article class="leader-card leader-card--mahala">
-          <div class="leader-card__photo">
-            <img src="mahala.JPG" alt="Photograph of Mahala Disney" loading="lazy" decoding="async" />
-          </div>
-          <div class="leader-card__body">
-            <h3>Mahala Disney</h3>
-            <h4>Facilities Director</h4>
-            <p>Experienced early childhood educator with 16 years of experience working with children in settings ranging from home childcare and private nannying to the Head Start program. Passionate about providing novel, nature-based childcare that nurtures independence, curiosity, and confidence. Dedicated to creating structured yet playful environments where children learn through hands-on exploration, outdoor play, and child-led discovery. Committed to fostering a lifelong love of learning, creativity, and connection through nature, cooking, and meaningful daily rhythms.</p>
           </div>
         </article>
         <article class="leader-card">
@@ -1253,6 +1255,17 @@
             <h3>Rhiannon Brooks</h3>
             <h4>Learning Center Director</h4>
             <p>Rhiannon Brooks has been working with children since 2019 and has over seven years of experience in early childhood education. She grew up in the Lost Sierra and has a deep love for the area and its community. Rhiannon holds an A.A. in Elementary Education and a B.A. in Early Childhood Education, and is preparing to begin her M.A. in Curriculum Development and Instruction. She is passionate about play-based, child-led learning and supporting social-emotional development. Rhiannon is excited to join the Lost Sierra Kids team, as the program perfectly aligns with her values and love for the Lost Sierra.</p>
+          </div>
+        </article>
+        <article class="leader-card leader-card--mahala">
+          <div class="leader-card__photo">
+            <img src="mahala.JPG" alt="Photograph of Mahala Disney, Creative &amp; Operations Director" loading="lazy" decoding="async" />
+          </div>
+          <div class="leader-card__body">
+            <h3>Mahala Disney</h3>
+            <h4>Creative &amp; Operations Director</h4>
+            <p>Mahala is an experienced early childhood educator with over 16 years of experience working with children in a variety of settings, including home-based childcare, private nannying, and the Head Start program. As Creative &amp; Operations Director, she leads the organizational and creative foundation of the learning center, overseeing operations, scheduling systems, internal workflows, funding and grant development, budgeting support, and long-range planning.</p>
+            <p>Mahala provides creative leadership across curriculum vision, program design, marketing, communications, and community engagement, ensuring the center reflects thoughtful, nature-based education rooted in hands-on exploration, outdoor play, child-led discovery, and intentional daily rhythms. Her role supports the teaching team by building strong systems and a cohesive vision, allowing educators to focus fully on children and classroom learning.</p>
           </div>
         </article>
         <article class="leader-card">
