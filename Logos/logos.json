@@ -1,5 +1,14 @@
 [
-  "BFJ_feather_logo_vert.jpg",
-  "logo-stacked-white.png",
-  "lost sierra ventures.png"
+  {
+    "src": "BFJ_feather_logo_vert.jpg",
+    "alt": "Bread for the Journey"
+  },
+  {
+    "src": "logo-stacked-white.png",
+    "alt": "Feather River Co-op"
+  },
+  {
+    "src": "lost sierra ventures.png",
+    "alt": "Lost Sierra Ventures"
+  }
 ]
