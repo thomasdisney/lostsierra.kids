@@ -229,6 +229,31 @@
       flex-wrap: wrap;
     }
 
+    .donation-callout {
+      background: rgba(249, 246, 239, 0.9);
+      border-radius: 16px;
+      padding: 1rem 1.5rem;
+      margin: 0 0 1.5rem;
+      border: 2px solid rgba(242, 222, 145, 0.7);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+      color: var(--ink);
+    }
+
+    .donation-callout p {
+      margin: 0 0 0.75rem;
+      font-weight: 600;
+    }
+
+    .donation-callout .btn {
+      width: fit-content;
+    }
+
+    .donation-callout--footer {
+      text-align: center;
+      max-width: 780px;
+      margin: 0 auto;
+    }
+
     .btn {
       padding: 0.9rem 1.8rem;
       border-radius: 999px;
@@ -1025,6 +1050,65 @@
       }
     }
 
+    @media (max-width: 600px) {
+      .hero {
+        padding: 2.5rem 6vw 4rem;
+      }
+
+      .hero-copy::after {
+        display: none;
+      }
+
+      .hero-copy h1 {
+        font-size: 2.1rem;
+      }
+
+      .hero-copy p {
+        font-size: 1rem;
+      }
+
+      .hero-card {
+        transform: none;
+      }
+
+      .cta-group {
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+        font-size: 0.78rem;
+        padding: 0.85rem 1.4rem;
+      }
+
+      .donation-callout {
+        padding: 1rem;
+      }
+
+      .donation-callout .btn {
+        width: 100%;
+      }
+
+      .mobile-nav {
+        width: calc(100% - 2rem);
+        border-radius: 20px;
+        padding: 0.6rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .mobile-nav a {
+        flex: 1 1 calc(33% - 0.5rem);
+        text-align: center;
+        white-space: normal;
+        font-size: 0.68rem;
+      }
+
+      .mobile-nav .nav-donate {
+        flex: 1 1 100%;
+      }
+    }
+
     @media (max-width: 900px) {
       body {
         padding-bottom: 5.5rem;
@@ -1062,7 +1146,11 @@
     <div class="hero">
       <div class="hero-copy">
         <h1>Building a Community Learning Center for Plumas County Families</h1>
-        <p>Lost Sierra Kids is a local nonprofit in California currently working to open a full-time early childhood learning center that keeps families close to home. While we raise funds and garner material donations, we continue to host a free weekly playgroup for babies through age five (and siblings close in age) and their caregivers across Plumas County.</p>
+        <p>Lost Sierra Kids is a local nonprofit in California currently working to open a full-time early childhood learning center that keeps families close to home. While we raise funds and garner material donations, we are continuing our free weekly playgroup for babies through age five (and siblings close in age) and their caregivers across Plumas County.</p>
+        <div class="donation-callout">
+          <p>Support our Zeffy donation campaign and help us open the doors to the Lost Sierra Kids Learning Center.</p>
+          <a class="btn btn-primary" href="https://www.zeffy.com/en-US/donation-form/donate-to-make-a-difference-15503" target="_blank" rel="noreferrer">Donate to the Campaign</a>
+        </div>
         <div class="cta-group">
           <a class="btn btn-primary" href="#contact">Partner With Lost Sierra Kids</a>
           <a class="btn btn-primary" href="https://www.zeffy.com/en-US/donation-form/donate-to-make-a-difference-15503" target="_blank" rel="noreferrer">Donate Now</a>
@@ -1116,19 +1204,19 @@
         <div class="leaf-card">
           <h3>Phase 1 Center Build-Out</h3>
           <ul>
-            <li>Building out our full-time early childhood learning center to include our main classroom space, administration office, kitchen, and storage,  and outdoor play yard and Community Garden next to the Graeagle Emporium and across from the Graeagle Frosty in the heart of Downtown Graeagle.</li>
-            <li>Targeting ages 2–6 for full and part-time care, as well as up to 14+ for hourly drop-offs during summer, allows the widest possible age range to accommodate as many families as possible. We aim to offer learning and care to not only the residents of Plumas County but also have room to support our visitors to Plumas County as well, with a dedicated playspace and community family classes throughout the year.</li>
-            <li>Initial capacity for up to 27 school-aged children (as young as 2 years old) with an opening goal of Summer 2026.</li>
-            <li>Hourly options will also be available during peak tourist months so visiting families can freely explore the Lost Sierra.</li>
+            <li>Building out our full-time early childhood learning center to include our 2 classroom spaces, administration office, kitchen and storage, bathrooms for staff and students, and an outdoor play yard and Community Garden. Next to the Center, but under the same roof will still be the Graeagle Emporium/Happy Hunting Ground. The Graeagle Schoolhouse is located across from the Graeagle Frosty in the heart of Downtown.</li>
+            <li>Plans for holiday celebrations and performances, a student-based community garden, and communal mixed-aged learning. We truly believe that we can all learn something from one another, so what better way to bring back the traditional Schoolhouse feel than with a one-room, multi-age learning facility dedicated to each child's growth and development.</li>
+            <li>Our initial enrollment targets ages 2–6 for full and part-time care. We aim to offer learning and care to not only the residents of Plumas County but also have room to support our visitors to Plumas County as well, by continuing to hold our free weekly playgroups and offering community family oriented classes throughout the year.</li>
+            <li>Initial capacity for up to 24 children (as young as 2 years old) with a target opening date of August 2026.</li>
+            <li>Hourly drop-in options will be available during peak tourist months for up to age 14 so visiting families can freely explore the Lost Sierra. We aim to offer childcare for locals as well as tourists as we continue to grow.</li>
           </ul>
         </div>
         <div class="leaf-card">
           <h3>Community Hub</h3>
           <ul>
             <li>Phase 2: Addition of a dedicated community space for classes and shared programming.</li>
-            <li>Plans for holiday celebrations and performances, a student-based community garden, and communal mixed-aged learning. We truly believe that we can all learn something from one another, so what better way to bring back the traditional Schoolhouse feel than with a one-room, multi-age learning facility dedicated to each child's growth and development.</li>
             <li>Regular community offerings such as older-kid creation labs, Yoga for families,  parenting workshops, lactation support and learning, Parent-and-me art classes led by community artists, and so much more.</li>
-            <li>We believe in giving back to this community that has already given us so much, therefore we aim to be the go-to for all things Kids and Family. You can also find us each year at the Graeagle Fourth of July Celebration, Calpine Marketplace, as well as other community events.</li>
+            <li>We believe in giving back to this community that has already given us so much, therefore we aim to be the go-to for all things Kids and Family. We are currently partnered with First 5 Plumas, Plumas STARS, and plan to offer resource material and educational opportunities for those in need of available County Services such as wellness checkups, in home support, and much more. You can also find us each year at the Graeagle Fourth of July Celebration, Calpine Marketplace, as well as other community events with play areas for Littles, activities, and fun.</li>
           </ul>
         </div>
       </div>
@@ -1196,11 +1284,11 @@
             <tbody>
               <tr>
                 <td>Phase 1</td>
-                <td>Build out and open the main room of our full-time early childhood learning center (next to the Graeagle Emporium) with an opening target of Summer 2026.</td>
+                <td>Build out and open the main rooms of our full-time early childhood learning center for ages 2-6 (located inside the Historic Graeagle Schoolhouse, sharing a roof with Graeagle Emporium) with an opening target of August 2026.</td>
               </tr>
               <tr>
                 <td>Phase 2</td>
-                <td>Renovate our Community Classroom to allow more partnerships,  older learning,  and family resources.</td>
+                <td>Renovate our Community Classroom to allow more partnerships, older learning, and more family resources. Also the ability to offer hourly drop off care for up to age 14 for tourists during the summer months.</td>
               </tr>
             </tbody>
           </table>
@@ -1209,10 +1297,10 @@
         <div class="schedule-card">
           <h3>Initial Enrollment Plan</h3>
           <ul>
-            <li>Primary focus on ages 2–6 allows the widest age range possible for joint learning and licensing.</li>
-            <li>Space for up to 27 school-aged children in our multi age classroom once licensing is granted.</li>
-            <li>Flexible care options for local families balancing work schedules and commutes.</li>
-            <li>Drop-in care for tourists during peak months so families can enjoy the Lost Sierra with peace of mind.</li>
+            <li>Primary focus on ages 2–6 for full time or part time care which allows the widest age range possible for joint learning and licensing.</li>
+            <li>Space for up to 24 school-aged children in our classrooms once licensing is granted.</li>
+            <li>Flexible care options for local families balancing work schedules and commutes. We will offer care Monday- Friday with part time care available for either Tuesday/ Thursday or Monday/ Wednesday/ Friday.</li>
+            <li>Affordable care is a high priority for us. We will offer a sliding scale for tuition so we are accessible to add many families as possible and will accept payments through Plumas Rural Services as well.</li>
           </ul>
         </div>
         <div class="schedule-card">
@@ -1312,6 +1400,14 @@
           <p>We appreciate the local businesses supporting families in the Lost Sierra.</p>
           <div class="partner-grid" role="list"></div>
         </aside>
+      </div>
+    </section>
+
+    <section id="donate">
+      <h2 class="section-title">Support the Donation Campaign</h2>
+      <div class="donation-callout donation-callout--footer">
+        <p>Your gift powers the Learning Center build-out, weekly playgroups, and future family resources across the Lost Sierra.</p>
+        <a class="btn btn-primary" href="https://www.zeffy.com/en-US/donation-form/donate-to-make-a-difference-15503" target="_blank" rel="noreferrer">Donate Through Zeffy</a>
       </div>
     </section>
   </main>
