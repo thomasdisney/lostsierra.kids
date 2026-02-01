@@ -153,6 +153,16 @@
     .sidebar-actions .btn {
       width: 100%;
       justify-content: center;
+      font-size: 0.78rem;
+      padding: 0.75rem 1.2rem;
+    }
+
+    .sidebar-actions .btn-outline {
+      color: var(--forest);
+      border-color: rgba(38, 77, 59, 0.35);
+      background: rgba(249, 246, 239, 0.9);
+      text-transform: none;
+      letter-spacing: 0.04em;
     }
 
     .main-content {
@@ -426,7 +436,7 @@
     }
 
     section {
-      padding: 3.25rem 0;
+      padding: 2.6rem 0;
       position: relative;
       z-index: 1;
       scroll-margin-top: 140px;
@@ -442,7 +452,7 @@
       top: 0;
       left: 50%;
       width: min(680px, 85vw);
-      height: 140px;
+      height: 110px;
       background: radial-gradient(circle, rgba(123, 179, 209, 0.15), transparent 70%);
       transform: translate(-50%, -60%);
       pointer-events: none;
@@ -452,7 +462,7 @@
       font-family: 'Playfair Display', serif;
       font-size: clamp(2rem, 4vw, 2.8rem);
       text-align: center;
-      margin-bottom: 2.25rem;
+      margin-bottom: 1.6rem;
       color: var(--forest);
       position: relative;
     }
@@ -470,7 +480,7 @@
     .mission {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 2rem;
+      gap: 1.5rem;
       align-items: start;
     }
 
@@ -493,7 +503,7 @@
 
     .accordion-group {
       display: grid;
-      gap: 0.9rem;
+      gap: 0.75rem;
     }
 
     details.accordion {
@@ -549,14 +559,14 @@
     .split {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 2.25rem;
+      gap: 1.75rem;
       align-items: center;
     }
 
     .leaf-card {
       background: var(--paper);
       border-radius: 18px;
-      padding: 1.9rem;
+      padding: 1.7rem;
       position: relative;
       overflow: hidden;
       display: flex;
@@ -604,13 +614,13 @@
     }
 
     .leaf-card li {
-      margin-bottom: 0.6rem;
+      margin-bottom: 0.45rem;
     }
 
     .leaders {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.5rem;
+      gap: 1.25rem;
       align-items: start;
     }
 
@@ -720,7 +730,7 @@
       background: linear-gradient(135deg, rgba(24, 40, 30, 0.92), rgba(45, 70, 55, 0.92));
       color: #fff;
       border-radius: 18px;
-      padding: 2.4rem;
+      padding: 2rem;
       text-align: center;
       box-shadow: 0 20px 45px rgba(38, 77, 59, 0.4);
       position: relative;
@@ -752,13 +762,13 @@
     .schedule {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 2rem;
+      gap: 1.5rem;
     }
 
     .schedule-card {
       background: #fff;
       border-radius: 18px;
-      padding: 1.85rem;
+      padding: 1.6rem;
       box-shadow: 0 12px 30px rgba(38, 77, 59, 0.15);
       position: relative;
       overflow: hidden;
@@ -804,11 +814,11 @@
     .contact {
       background: #fff;
       border-radius: 18px;
-      padding: 2.4rem;
+      padding: 2rem;
       box-shadow: 0 20px 45px rgba(38, 77, 59, 0.15);
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 2.2rem;
+      gap: 1.8rem;
       align-items: center;
       position: relative;
       overflow: hidden;
@@ -1407,7 +1417,7 @@
           “ We believe that family comes first, and our families of Plumas County are so treasured. Therefore, we never charge for our playgroup meetups as we feel they bring such enrichment and connection to the families of Plumas County.”
         </blockquote>
         <div class="accordion-group">
-          <details class="accordion" open>
+          <details class="accordion">
             <summary>Weekly playgroup experience</summary>
             <div class="accordion-body">
               <p>
@@ -1479,7 +1489,7 @@
           <div class="leader-card__body">
             <h3>Stephanie McCoy</h3>
             <h4>Founder &amp; Executive Director</h4>
-            <details class="accordion" open>
+            <details class="accordion">
               <summary>Biography</summary>
               <div class="accordion-body">
                 <p>Stephanie founded Lost Sierra Kids in January 2024 after the First 5 Plumas playgroups were no longer able to continue. She has not only taught music, theater, and early childhood education across Northern Nevada since 2003, but also has 12+ years of Non-Profit and organizational leadership and management experience. She now channels that knowledge and experience into building a learning center that is rooted in the beloved Lost Sierra. Stephanie oversees the remodel, program development, and day-to-day care, ensuring every child and caregiver feels welcomed and supported. Stephanie will also teach our music, dramatic arts, and age appropriate kitchen learning on a weekly basis.</p>
@@ -1494,7 +1504,7 @@
           <div class="leader-card__body">
             <h3>Rhiannon Brooks</h3>
             <h4>Learning Center Director</h4>
-            <details class="accordion" open>
+            <details class="accordion">
               <summary>Biography</summary>
               <div class="accordion-body">
                 <p>Rhiannon Brooks has been working with children since 2019 and has over seven years of experience in early childhood education. She grew up in the Lost Sierra and has a deep love for the area and its community. Rhiannon holds an A.A. in Elementary Education and a B.A. in Early Childhood Education, and is preparing to begin her M.A. in Curriculum Development and Instruction. She is passionate about play-based, child-led learning and supporting social-emotional development. Rhiannon is excited to join the Lost Sierra Kids team, as the program perfectly aligns with her values and love for the Lost Sierra.</p>
@@ -1509,7 +1519,7 @@
           <div class="leader-card__body">
             <h3>Mahala Disney</h3>
             <h4>Creative &amp; Operations Director</h4>
-            <details class="accordion" open>
+            <details class="accordion">
               <summary>Biography</summary>
               <div class="accordion-body">
                 <p>Mahala is an experienced early childhood educator with over 16 years of experience working with children in a variety of settings, including home-based childcare, private nannying, and the Head Start program. As Creative &amp; Operations Director, she leads the organizational and creative foundation of the learning center, overseeing operations, scheduling systems, internal workflows, funding and grant development, budgeting support, and long-range planning.</p>
@@ -1522,7 +1532,7 @@
           <div class="leader-card__body">
             <h3>Educator Team & Partners</h3>
             <h4>Local Expertise</h4>
-            <details class="accordion" open>
+            <details class="accordion">
               <summary>Partnership overview</summary>
               <div class="accordion-body">
                 <p>Lost Sierra Kids will employ local educators and assistant teachers from Plumas County. All educators and aids will be fully licensed and accredited, upholding our high level of education standards for this area. Lost Sierra Kids will assist all educators and aids to ensure their certifications. Every staff member will be able to pass a fingerprinting and background check, not only for state guidelines, but to ensure the safety of all the children that visit Lost Sierra Kids.  We currently are partners with First 5 Plumas and Plumas STARS, connecting us to additional county agencies and community resources. We also will bring in experts around Plumas County to lead our community classes (watercolor artists, yoga instructors, wood building and workshoping, acrylic artists,  and so many others). We aim to be a staple in our heartfelt community as well as a focal point for all things Children and Family in Plumas County. It takes a village to raise kind, creative, and educated children; therefore, we plan to showcase those in our community with so much to give.</p>
@@ -1607,7 +1617,7 @@
       <div class="split">
         <div>
           <div class="accordion-group">
-            <details class="accordion" open>
+            <details class="accordion">
               <summary>Playgroup continuity</summary>
               <div class="accordion-body">
                 <p>Once the learning center is open, our free community playgroup will continue weekly as the cornerstone of Lost Sierra Kids. We believe in the power of play and community,  and will always welcome you each week to come play, learn, and grow with us.  A dedicated space will let us tailor gatherings to different ages while offering cross-class programming such as holiday celebrations, performances, a community garden, and collaborative learning opportunities.</p>
