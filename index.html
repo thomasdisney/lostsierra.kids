@@ -1992,6 +1992,8 @@
 
     const partnerSection = document.querySelector('.partners');
     const partnerGrid = document.querySelector('.partner-grid');
+    const partnerDescription = partnerSection ? partnerSection.querySelector('p') : null;
+    const logoExtensions = /(jpe?g|png|gif|webp|avif|svg)$/i;
 
     const formatLogoAlt = (filePath) => {
       const base = (filePath.split('/').pop() || '').replace(/\.[^.]+$/, '');
@@ -1999,7 +2001,7 @@
       return cleaned ? `${cleaned} logo` : 'Community partner logo';
     };
 
-    const fetchLogos = async () => {
+    const fetchLogoManifest = async () => {
       try {
         const response = await fetch('logos/logos.json', { cache: 'no-store' });
 
@@ -2011,34 +2013,67 @@
         }
       } catch (error) {}
 
-      return [];
+      return null;
     };
 
-    const normalizeLogos = (list) => {
+    const fetchLogoListing = async () => {
+      try {
+        const response = await fetch('logos/');
+
+        if (response.ok) {
+          const html = await response.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+          const anchors = Array.from(doc.querySelectorAll('a'));
+
+          const files = anchors
+            .map((anchor) => decodeURIComponent(anchor.getAttribute('href') || ''))
+            .filter((href) => logoExtensions.test(href))
+            .map((href) => `logos/${href.replace(/^\/?/, '')}`);
+
+          if (files.length) {
+            return files;
+          }
+        }
+      } catch (error) {}
+
+      return null;
+    };
+
+    const normalizeLogos = (...lists) => {
       const seen = new Set();
-      return list
-        .map((item) => (typeof item === 'string' ? { src: item, alt: '' } : item || {}))
-        .map(({ src, alt }) => {
+      const normalized = [];
+
+      lists.forEach((list) => {
+        if (!Array.isArray(list)) return;
+
+        list.forEach((item) => {
+          const { src, alt } = typeof item === 'string' ? { src: item, alt: '' } : item || {};
           const trimmedSrc = (src || '').toString().trim();
-          if (!trimmedSrc) return null;
+          if (!trimmedSrc) return;
 
           const prefixed = trimmedSrc.startsWith('logos/') ? trimmedSrc : `logos/${trimmedSrc.replace(/^\/?/, '')}`;
-          if (seen.has(prefixed)) return null;
+          const extension = prefixed.split('.').pop() || '';
+
+          if (!logoExtensions.test(extension) || seen.has(prefixed)) return;
           seen.add(prefixed);
 
-          return {
+          normalized.push({
             src: prefixed,
             alt: alt && alt.trim() ? alt : formatLogoAlt(prefixed),
-          };
-        })
-        .filter(Boolean);
+          });
+        });
+      });
+
+      return normalized;
     };
 
     const renderPartners = async () => {
       if (!partnerSection || !partnerGrid) return;
 
-      const manifest = await fetchLogos();
-      const logos = normalizeLogos(manifest);
+      const manifest = await fetchLogoManifest();
+      const listing = await fetchLogoListing();
+      const logos = normalizeLogos(manifest, listing);
 
       const images = await Promise.all(
         logos.map(
@@ -2068,6 +2103,10 @@
         img.setAttribute('role', 'listitem');
         partnerGrid.appendChild(img);
       });
+
+      if (partnerDescription) {
+        partnerDescription.textContent = 'Proudly supported by our community partners.';
+      }
 
       partnerSection.hidden = false;
     };
