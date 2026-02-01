@@ -682,16 +682,20 @@
 
     .partner-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-      gap: 0.85rem;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.9rem;
       align-items: center;
       justify-items: center;
     }
 
     .partner-grid img {
-      max-height: 60px;
-      width: 100%;
+      width: min(100%, 150px);
+      height: 70px;
       object-fit: contain;
+      padding: 0.35rem 0.5rem;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 6px 14px rgba(38, 77, 59, 0.12);
       filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.08));
     }
 
@@ -1497,16 +1501,6 @@
       let slides = [];
       let currentIndex = 0;
 
-      const prettifyFilename = (filePath) => {
-        const base = (filePath.split('/').pop() || '').replace(/\.[^.]+$/, '');
-        const normalized = base
-          .replace(/[_-]+/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : 'Lost Sierra Kids photo';
-      };
-
       const updateSlide = () => {
         if (!slidesContainer) return;
 
@@ -1515,7 +1509,7 @@
           buttons.forEach((button) => button.setAttribute('disabled', 'disabled'));
 
           if (status) {
-            status.textContent = 'No photos available right now.';
+            status.textContent = 'Photos are on their way.';
           }
 
           return;
@@ -1534,12 +1528,29 @@
         'photos/20250522_113224.jpg',
         'photos/20250626_113105.jpg',
         'photos/20250626_113922.jpg',
+        'photos/IMG_8278.jpeg',
+        'photos/IMG_8502.jpeg',
+        'photos/IMG_8504.jpeg',
+        'photos/IMG_8792.jpeg',
+        'photos/IMG_8795.jpeg',
+        'photos/IMG_8796.jpeg',
+        'photos/IMG_8798.jpeg',
+        'photos/IMG_8800.jpeg',
         'photos/image000000_20251024_123233.jpg',
         'photos/image000000_20251024_123428.jpg',
         'photos/received_844504624631456.jpeg',
       ];
 
-      const renderSlides = (photoSources) => {
+      const shuffle = (list) => {
+        const array = [...list];
+        for (let i = array.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      };
+
+      const renderSlides = (photoSources, allSources) => {
         if (!slidesContainer) return;
 
         slidesContainer.innerHTML = '';
@@ -1551,7 +1562,32 @@
           img.src = src;
           img.loading = index === 0 ? 'eager' : 'lazy';
           img.decoding = 'async';
-          img.alt = `Lost Sierra Kids photo: ${prettifyFilename(src)}`;
+          img.alt = 'Lost Sierra Kids community photo';
+          img.onerror = () => {
+            if (!Array.isArray(allSources) || !allSources.length) return;
+            const attempts = Number.parseInt(img.dataset.errorAttempts || '0', 10) + 1;
+            img.dataset.errorAttempts = attempts.toString();
+            if (attempts > allSources.length) return;
+
+            let replacement = null;
+            for (let i = 0; i < allSources.length; i += 1) {
+              const candidate = allSources[Math.floor(Math.random() * allSources.length)];
+              const candidateUrl = new URL(candidate, window.location.href).href;
+              if (candidate && candidateUrl !== img.src) {
+                replacement = candidate;
+                break;
+              }
+            }
+
+            if (replacement) {
+              img.src = replacement;
+            } else {
+              slide.remove();
+              slides = slides.filter((item) => item !== slide);
+              currentIndex = Math.min(currentIndex, slides.length - 1);
+              updateSlide();
+            }
+          };
 
           slide.appendChild(img);
           slidesContainer.appendChild(slide);
@@ -1572,9 +1608,7 @@
               return data;
             }
           }
-        } catch (error) {
-          console.warn('Could not load photos manifest', error);
-        }
+        } catch (error) {}
 
         return null;
       };
@@ -1624,11 +1658,25 @@
               return files;
             }
           }
-        } catch (error) {
-          console.warn('Could not read photos directory', error);
-        }
+        } catch (error) {}
 
         return null;
+      };
+
+      const loadImages = async (sources) => {
+        const imageChecks = await Promise.all(
+          sources.map(
+            (src) =>
+              new Promise((resolve) => {
+                const img = new Image();
+                img.src = src;
+                img.onload = () => resolve(src);
+                img.onerror = () => resolve(null);
+              })
+          )
+        );
+
+        return imageChecks.filter(Boolean);
       };
 
       const loadPhotos = async () => {
@@ -1640,11 +1688,13 @@
         const fromListing = await fetchDirectoryListing();
         const normalized = normalizeSources(fromManifest, fromListing);
         const sources = normalized.length ? normalized : normalizeSources(fallbackPhotos);
+        const shuffledSources = shuffle(sources);
+        const loadedSources = await loadImages(shuffledSources);
 
-        renderSlides(sources);
+        renderSlides(loadedSources, shuffledSources);
 
-        if (status && sources.length) {
-          status.textContent = `Photo 1 of ${sources.length}`;
+        if (status && loadedSources.length) {
+          status.textContent = `Photo 1 of ${loadedSources.length}`;
         }
       };
 
@@ -1677,7 +1727,7 @@
 
     const fetchLogos = async () => {
       try {
-        const response = await fetch('Logos/logos.json', { cache: 'no-store' });
+        const response = await fetch('logos/logos.json', { cache: 'no-store' });
 
         if (response.ok) {
           const data = await response.json();
@@ -1685,9 +1735,7 @@
             return data;
           }
         }
-      } catch (error) {
-        console.warn('Could not load logos manifest', error);
-      }
+      } catch (error) {}
 
       return [];
     };
@@ -1700,7 +1748,7 @@
           const trimmedSrc = (src || '').toString().trim();
           if (!trimmedSrc) return null;
 
-          const prefixed = trimmedSrc.startsWith('Logos/') ? trimmedSrc : `Logos/${trimmedSrc.replace(/^\/?/, '')}`;
+          const prefixed = trimmedSrc.startsWith('logos/') ? trimmedSrc : `logos/${trimmedSrc.replace(/^\/?/, '')}`;
           if (seen.has(prefixed)) return null;
           seen.add(prefixed);
 
