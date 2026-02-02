@@ -599,6 +599,124 @@ details.accordion .accordion-body ul {
 }
 
 /* --------------------------------------------------------------------------
+   Vision Cards (Collapsible)
+   -------------------------------------------------------------------------- */
+.vision-grid {
+  display: grid;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+details.vision-card {
+  background: white;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--stone);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+details.vision-card:hover {
+  box-shadow: 0 4px 20px hsl(var(--shadow-color) / 0.08);
+}
+
+details.vision-card > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding: var(--space-lg) var(--space-xl);
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.15s ease;
+}
+
+details.vision-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.vision-card > summary:hover {
+  background: var(--paper-warm);
+}
+
+.vision-card__header {
+  flex: 1;
+}
+
+.vision-card__header h3 {
+  font-size: var(--text-xl);
+  margin-bottom: var(--space-xs);
+}
+
+.vision-card__summary {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.vision-card__toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-xs) var(--space-md);
+  background: var(--paper-warm);
+  border: 1px solid var(--stone);
+  border-radius: 50px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--pine);
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+details.vision-card[open] .vision-card__toggle {
+  background: var(--sunlight-soft);
+  border-color: var(--sunlight);
+  color: var(--forest);
+}
+
+.vision-card__body {
+  padding: 0 var(--space-xl) var(--space-xl);
+  border-top: 1px solid var(--stone);
+  background: var(--paper-warm);
+}
+
+.vision-card__body ul {
+  margin: var(--space-md) 0 0;
+  padding-left: var(--space-lg);
+  color: var(--ink-soft);
+}
+
+.vision-card__body li {
+  margin-bottom: var(--space-sm);
+}
+
+.vision-card__body li::marker {
+  color: var(--pine);
+}
+
+/* Support Banner */
+.support-banner {
+  background: linear-gradient(135deg, var(--forest) 0%, var(--forest-light) 100%);
+  color: white;
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg) var(--space-xl);
+  text-align: center;
+}
+
+.support-banner h4 {
+  color: white;
+  font-size: var(--text-lg);
+  margin-bottom: var(--space-sm);
+}
+
+.support-banner p {
+  margin: 0;
+  opacity: 0.9;
+  max-width: 700px;
+  margin-inline: auto;
+}
+
+/* --------------------------------------------------------------------------
    Leadership Cards
    -------------------------------------------------------------------------- */
 .leaders {
@@ -705,25 +823,38 @@ details.accordion .accordion-body ul {
   padding: var(--space-md) 0 0;
 }
 
-/* Shared Leadership Banner */
-.shared-leadership {
-  background: linear-gradient(135deg, var(--forest) 0%, var(--forest-light) 100%);
-  color: white;
-  border-radius: var(--radius-xl);
-  padding: var(--space-2xl);
-  text-align: center;
-  margin-top: var(--space-xl);
+/* Team Card - Full Width Integrated Style */
+.leader-card--team {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, var(--paper-warm) 0%, white 100%);
+  border: 2px solid var(--stone);
+  display: flex;
+  align-items: center;
 }
 
-.shared-leadership h3 {
-  color: white;
-  margin-bottom: var(--space-md);
+.leader-card--team .leader-card__body {
+  gap: var(--space-sm);
 }
 
-.shared-leadership p {
-  max-width: 700px;
-  margin: 0 auto;
-  opacity: 0.9;
+.leader-card--team h3 {
+  font-size: var(--text-2xl);
+}
+
+.leader-card--team h4 {
+  color: var(--pine);
+  margin-bottom: var(--space-sm);
+}
+
+.leader-card--team p {
+  font-size: var(--text-base);
+  line-height: 1.7;
+  color: var(--ink-soft);
+  max-width: 800px;
+}
+
+.leader-card--team:hover {
+  transform: none;
+  box-shadow: 0 4px 20px hsl(var(--shadow-color) / 0.08);
 }
 
 /* --------------------------------------------------------------------------
@@ -940,6 +1071,15 @@ textarea {
   color: var(--forest);
 }
 
+.address-note {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  font-style: italic;
+  margin: var(--space-xs) 0 var(--space-md);
+  padding-left: var(--space-sm);
+  border-left: 2px solid var(--stone);
+}
+
 .map {
   border-radius: var(--radius-md);
   overflow: hidden;
@@ -953,39 +1093,45 @@ textarea {
 /* Partners */
 .partners {
   grid-column: 1 / -1;
-  background: var(--paper-warm);
+  background: transparent;
   border-radius: var(--radius-lg);
-  padding: var(--space-lg);
+  padding: var(--space-lg) 0;
   margin-top: var(--space-lg);
+  border-top: 1px solid var(--stone);
 }
 
 .partners h3 {
   font-size: var(--text-lg);
-  margin-bottom: var(--space-sm);
+  margin-bottom: var(--space-xs);
 }
 
 .partners > p {
   color: var(--ink-muted);
   font-size: var(--text-sm);
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-lg);
 }
 
 .partner-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-md);
+  gap: var(--space-xl);
   align-items: center;
+  justify-content: flex-start;
 }
 
 .partner-grid img {
-  height: 50px;
+  height: 70px;
   width: auto;
-  max-width: 140px;
+  max-width: 180px;
   object-fit: contain;
-  padding: var(--space-sm);
-  background: white;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--stone);
+  filter: grayscale(20%);
+  opacity: 0.85;
+  transition: all 0.2s ease;
+}
+
+.partner-grid img:hover {
+  filter: grayscale(0%);
+  opacity: 1;
 }
 
 /* --------------------------------------------------------------------------

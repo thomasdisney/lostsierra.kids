@@ -76,6 +76,20 @@ function initPhotoCarousel() {
     return array;
   }
 
+  // Put featured photo first, shuffle the rest
+  function orderPhotos(sources) {
+    const featuredPhoto = 'photos/IMG_8278.jpeg';
+    const hasFeatured = sources.some(src => src.toLowerCase().includes('img_8278'));
+
+    if (!hasFeatured) {
+      return shuffle(sources);
+    }
+
+    const featured = sources.find(src => src.toLowerCase().includes('img_8278'));
+    const rest = sources.filter(src => !src.toLowerCase().includes('img_8278'));
+    return [featured, ...shuffle(rest)];
+  }
+
   function renderSlides(photoSources, allSources) {
     if (!slidesContainer) return;
 
@@ -205,10 +219,10 @@ function initPhotoCarousel() {
     const fromListing = await fetchDirectoryListing();
     const normalized = normalizeSources(fromManifest, fromListing);
     const sources = normalized.length ? normalized : normalizeSources(fallbackPhotos);
-    const shuffled = shuffle(sources);
-    const loaded = await loadImages(shuffled);
+    const ordered = orderPhotos(sources);
+    const loaded = await loadImages(ordered);
 
-    renderSlides(loaded, shuffled);
+    renderSlides(loaded, ordered);
 
     if (status && loaded.length) {
       status.textContent = `1 of ${loaded.length}`;
