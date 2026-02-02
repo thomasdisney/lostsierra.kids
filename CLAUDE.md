@@ -39,7 +39,7 @@
 - Mobile bottom navigation bar
 
 ## User Preferences (learned from session)
-1. **Bias for action** - Push directly to prod, skip planning mode
+1. **Always take action** - Never ask for permission. Edit files, commit, and push without confirmation. No planning mode, no "should I proceed?" questions.
 2. **Use frontend-design skill** for polished, modern aesthetics
 3. **Mobile-first** - Always consider mobile navigation and layout
 4. **Clean copy** - Replace verbose text like "Biography" with "Read more"
