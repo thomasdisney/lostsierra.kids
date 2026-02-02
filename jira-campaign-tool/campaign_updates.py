@@ -10,10 +10,10 @@ import os
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
 from openpyxl.utils.dataframe import dataframe_to_rows
-from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.worksheet.table import Table, TableStyleInfo
 
 # Set UTF-8 encoding for console output on Windows
 if sys.platform == "win32":
@@ -38,10 +38,21 @@ def find_latest_jira_export():
 
     if not jira_files:
         print("[ERROR] No Jira export file found in Downloads folder")
-        return None
+        print("[ERROR] Please export your campaigns from Jira and save to Downloads")
+        sys.exit(1)
 
     # Sort by modification time (most recent first)
     latest = sorted(jira_files, key=lambda f: f.stat().st_mtime, reverse=True)[0]
+
+    # Validate file is recent (not older than current date)
+    file_mtime = datetime.fromtimestamp(latest.stat().st_mtime)
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if file_mtime.date() < today.date():
+        print(f"[ERROR] Jira export file is stale (last modified: {file_mtime.date()})")
+        print(f"[ERROR] Please export a fresh copy from Jira")
+        sys.exit(1)
+
     return latest
 
 
@@ -96,14 +107,14 @@ def read_jira_export(file_path):
                 df = pd.read_excel(file_path, engine='openpyxl')
 
         print(f"[OK] Read Jira export: {file_path.name}")
-        print(f"  - {len(df)} total rows")
+        print(f"  - {len(df)} total tickets")
         return df
     except Exception as e:
         print(f"[ERROR] Error reading file: {e}")
         sys.exit(1)
 
 
-def process_campaigns(df, config):
+def process_campaigns(df):
     """Filter and process campaign data from the export."""
     # Make column names case-insensitive for lookup
     df_cols = {col.lower(): col for col in df.columns}
@@ -124,10 +135,27 @@ def process_campaigns(df, config):
 
     print(f"[OK] Found {len(campaigns_df)} campaign tickets")
 
-    return campaigns_df
+    return campaigns_df, df
 
 
-def create_formatted_workbook(campaigns_df, config, output_path):
+def add_autofilter(worksheet, df):
+    """Add AutoFilter dropdown to worksheet headers."""
+    if len(df) == 0:
+        return
+
+    # Get the range for the data
+    max_row = len(df) + 1
+    max_col = len(df.columns)
+
+    # Convert to Excel column letters
+    from openpyxl.utils import get_column_letter
+    end_col = get_column_letter(max_col)
+
+    # Add AutoFilter
+    worksheet.auto_filter.ref = f"A1:{end_col}{max_row}"
+
+
+def create_formatted_workbook(campaigns_df, all_df, config, output_path):
     """Create a formatted Excel workbook with multiple sheets."""
     wb = Workbook()
     wb.remove(wb.active)  # Remove default sheet
@@ -150,8 +178,6 @@ def create_formatted_workbook(campaigns_df, config, output_path):
         bottom=Side(style="thin")
     )
 
-    jira_url = config.get("jira_base_url", "https://jira.atlassian.net")
-
     # Create Summary sheet
     ws_summary = wb.create_sheet("Summary", 0)
     summary_data = [
@@ -159,6 +185,7 @@ def create_formatted_workbook(campaigns_df, config, output_path):
         ["Generated", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
         ["", ""],
         ["Total Campaigns", len(campaigns_df)],
+        ["Total Tickets", len(all_df)],
     ]
 
     # Add status breakdown if status column exists
@@ -166,7 +193,7 @@ def create_formatted_workbook(campaigns_df, config, output_path):
         status_col = next(col for col in campaigns_df.columns if col.lower() == "status")
         status_counts = campaigns_df[status_col].value_counts()
         summary_data.append(["", ""])
-        summary_data.append(["Status Breakdown", ""])
+        summary_data.append(["Campaign Status Breakdown", ""])
         for status, count in status_counts.items():
             summary_data.append([status, count])
 
@@ -179,17 +206,58 @@ def create_formatted_workbook(campaigns_df, config, output_path):
     ws_summary.column_dimensions["A"].width = 25
     ws_summary.column_dimensions["B"].width = 15
 
+    # Create Raw Data sheet (consolidated source)
+    ws_raw = wb.create_sheet("Raw Data", 1)
+
+    # Select relevant fields only
+    relevant_fields = [col for col in all_df.columns
+                      if col.lower() not in ["project id", "project url"]]
+    raw_display = all_df[relevant_fields].copy()
+
+    # Rename columns for display
+    column_mapping = {col: col.replace("_", " ").title() for col in raw_display.columns}
+    raw_display = raw_display.rename(columns=column_mapping)
+
+    # Write headers
+    for col_idx, column_title in enumerate(raw_display.columns, 1):
+        cell = ws_raw.cell(1, col_idx, column_title)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # Write data rows
+    for row_idx, row in enumerate(dataframe_to_rows(raw_display, index=False, header=False), 2):
+        for col_idx, value in enumerate(row, 1):
+            cell = ws_raw.cell(row_idx, col_idx, value)
+            cell.border = border
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    # Auto-fit columns
+    for column in ws_raw.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws_raw.column_dimensions[column_letter].width = adjusted_width
+
+    # Add AutoFilter to raw data
+    ws_raw.freeze_panes = "A2"
+    add_autofilter(ws_raw, raw_display)
+
     # Create Campaign Details sheet
-    ws_details = wb.create_sheet("Campaign Details", 1)
+    ws_details = wb.create_sheet("Campaign Details", 2)
 
     # Prepare data for details sheet
     display_df = campaigns_df.copy()
 
     # Rename columns for display
-    column_mapping = {
-        col: col.replace("_", " ").title()
-        for col in display_df.columns
-    }
+    column_mapping = {col: col.replace("_", " ").title() for col in display_df.columns}
     display_df = display_df.rename(columns=column_mapping)
 
     # Write headers
@@ -228,13 +296,14 @@ def create_formatted_workbook(campaigns_df, config, output_path):
         adjusted_width = min(max_length + 2, 50)
         ws_details.column_dimensions[column_letter].width = adjusted_width
 
-    # Freeze header row
+    # Freeze header row and add AutoFilter
     ws_details.freeze_panes = "A2"
+    add_autofilter(ws_details, display_df)
 
     # Create Timeline sheet if date columns exist
     date_columns = [col for col in display_df.columns if "date" in col.lower() or "created" in col.lower()]
     if date_columns:
-        ws_timeline = wb.create_sheet("Timeline", 2)
+        ws_timeline = wb.create_sheet("Timeline", 3)
 
         # Sort by first date column found
         timeline_df = display_df.copy()
@@ -271,7 +340,9 @@ def create_formatted_workbook(campaigns_df, config, output_path):
             adjusted_width = min(max_length + 2, 50)
             ws_timeline.column_dimensions[column_letter].width = adjusted_width
 
+        # Add AutoFilter
         ws_timeline.freeze_panes = "A2"
+        add_autofilter(ws_timeline, timeline_df)
 
     # Save workbook
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -289,17 +360,16 @@ def main():
     # Load configuration
     config = load_config(config_path)
 
-    # Find latest Jira export
+    # Find latest Jira export (with validation)
     jira_file = find_latest_jira_export()
     if not jira_file:
-        print("\n💡 Tip: Export campaigns from Jira and save to your Downloads folder")
         sys.exit(1)
 
     print(f"[OK] Found: {jira_file.name}\n")
 
     # Read and process data
-    df = read_jira_export(jira_file)
-    campaigns_df = process_campaigns(df, config)
+    all_df = read_jira_export(jira_file)
+    campaigns_df, all_df = process_campaigns(all_df)
 
     if len(campaigns_df) == 0:
         print("[WARN] No campaigns found in export")
@@ -310,7 +380,7 @@ def main():
     timestamp = datetime.now().strftime("%Y-%m-%d")
     output_file = output_folder / f"campaign_update_{timestamp}.xlsx"
 
-    create_formatted_workbook(campaigns_df, config, output_file)
+    create_formatted_workbook(campaigns_df, all_df, config, output_file)
 
     print(f"\n[SUCCESS] Report saved to: {output_file}")
 
