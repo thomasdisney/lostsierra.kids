@@ -6,6 +6,7 @@ Automatically processes Jira campaign exports and generates formatted Excel repo
 
 import json
 import sys
+import os
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
@@ -36,7 +37,7 @@ def find_latest_jira_export():
     ]
 
     if not jira_files:
-        print("❌ No Jira export file found in Downloads folder")
+        print("[ERROR] No Jira export file found in Downloads folder")
         return None
 
     # Sort by modification time (most recent first)
@@ -68,16 +69,16 @@ def load_config(config_path):
         with open(config_path, "w") as f:
             json.dump(template, f, indent=2)
 
-        print(f"✓ Created template config: {config_path}")
+        print(f"[OK] Created template config: {config_path}")
         return template
 
     try:
         with open(config_path, "r") as f:
             config = json.load(f)
-        print(f"✓ Loaded campaign definitions from {config_path.name}")
+        print(f"[OK] Loaded campaign definitions from {config_path.name}")
         return config
     except json.JSONDecodeError as e:
-        print(f"❌ Error parsing config file: {e}")
+        print(f"[ERROR] Error parsing config file: {e}")
         sys.exit(1)
 
 
@@ -94,11 +95,11 @@ def read_jira_export(file_path):
                 # Fallback to openpyxl engine
                 df = pd.read_excel(file_path, engine='openpyxl')
 
-        print(f"✓ Read Jira export: {file_path.name}")
+        print(f"[OK] Read Jira export: {file_path.name}")
         print(f"  - {len(df)} total rows")
         return df
     except Exception as e:
-        print(f"❌ Error reading file: {e}")
+        print(f"[ERROR] Error reading file: {e}")
         sys.exit(1)
 
 
@@ -121,7 +122,7 @@ def process_campaigns(df, config):
         # If no issue type column, assume all rows are campaigns
         campaigns_df = df.copy()
 
-    print(f"✓ Found {len(campaigns_df)} campaign tickets")
+    print(f"[OK] Found {len(campaigns_df)} campaign tickets")
 
     return campaigns_df
 
@@ -275,7 +276,7 @@ def create_formatted_workbook(campaigns_df, config, output_path):
     # Save workbook
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
-    print(f"✓ Generated report: {output_path}")
+    print(f"[OK] Generated report: {output_path}")
 
 
 def main():
@@ -283,7 +284,7 @@ def main():
     script_dir = Path(__file__).parent
     config_path = script_dir / "campaign_definitions.json"
 
-    print("🚀 Jira Campaign Update Tool\n")
+    print("[JIRA] Campaign Update Tool\n")
 
     # Load configuration
     config = load_config(config_path)
@@ -294,14 +295,14 @@ def main():
         print("\n💡 Tip: Export campaigns from Jira and save to your Downloads folder")
         sys.exit(1)
 
-    print(f"✓ Found: {jira_file.name}\n")
+    print(f"[OK] Found: {jira_file.name}\n")
 
     # Read and process data
     df = read_jira_export(jira_file)
     campaigns_df = process_campaigns(df, config)
 
     if len(campaigns_df) == 0:
-        print("⚠️  No campaigns found in export")
+        print("[WARN] No campaigns found in export")
         sys.exit(0)
 
     # Generate output
@@ -311,7 +312,18 @@ def main():
 
     create_formatted_workbook(campaigns_df, config, output_file)
 
-    print(f"\n✅ Done! Report saved to: {output_file}")
+    print(f"\n[SUCCESS] Report saved to: {output_file}")
+
+    # Open the file with default application
+    try:
+        if sys.platform == "win32":
+            os.startfile(output_file)
+        elif sys.platform == "darwin":
+            os.system(f'open "{output_file}"')
+        else:
+            os.system(f'xdg-open "{output_file}"')
+    except Exception as e:
+        print(f"[INFO] Could not auto-open file: {e}")
 
 
 if __name__ == "__main__":
