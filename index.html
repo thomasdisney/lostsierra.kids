@@ -1,1409 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Lost Sierra Kids is a California nonprofit building a full-time early childhood learning center while continuing a free weekly playgroup for Plumas County families." />
-  <meta name="theme-color" content="#264d3b" />
-  <link rel="canonical" href="https://lostsierra.kids/" />
-  <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <link rel="shortcut icon" href="/favicon.ico" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-  <meta name="apple-mobile-web-app-title" content="Lost Sierra Kids" />
-  <link rel="manifest" href="/site.webmanifest" />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://lostsierra.kids/" />
-  <meta property="og:title" content="Lost Sierra Kids | Community Learning Center Initiative in Graeagle, CA" />
-  <meta property="og:description" content="Local nonprofit Lost Sierra Kids is building a full-time early childhood learning center while sustaining a free weekly playgroup across Plumas County." />
-  <meta property="og:image" content="https://lostsierra.kids/logo.png" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Lost Sierra Kids | Community Learning Center Initiative in Graeagle, CA" />
-  <meta name="twitter:description" content="Local nonprofit Lost Sierra Kids is building a full-time early childhood learning center while sustaining a free weekly playgroup across Plumas County." />
-  <meta name="twitter:image" content="https://lostsierra.kids/logo.png" />
-  <title>Lost Sierra Kids | Community Learning Center Initiative in Graeagle, CA</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <script>
-    document.documentElement.classList.add('js');
-  </script>
-  <style>
-    html {
-      scroll-behavior: smooth;
-    }
-
-    :root {
-      --forest: #264d3b;
-      --sky: #7bb3d1;
-      --sun: #f2de91;
-      --earth: #c9b59a;
-      --cream: #f9f6ef;
-      --slate: #3f4843;
-      --sage: #789174;
-      --mist: #e6efe9;
-      --chalkboard: #1f3227;
-      --ink: #1d1a16;
-      --paper: #f6efe3;
-      --wood: #9b7a50;
-      --wood-dark: #6f5537;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    *:focus-visible {
-      outline: 3px solid var(--sky);
-      outline-offset: 3px;
-    }
-
-    body {
-      margin: 0;
-      font-family: 'Nunito', sans-serif;
-      color: var(--ink);
-      background-color: var(--paper);
-      background-image:
-        repeating-linear-gradient(
-          to bottom,
-          rgba(38, 77, 59, 0.06) 0,
-          rgba(38, 77, 59, 0.06) 1px,
-          transparent 1px,
-          transparent 28px
-        ),
-        radial-gradient(circle at 15% 10%, rgba(242, 222, 145, 0.18), transparent 40%),
-        radial-gradient(circle at 85% 80%, rgba(120, 145, 116, 0.12), transparent 45%);
-      line-height: 1.65;
-    }
-
-    .page-layout {
-      display: grid;
-      grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
-      gap: 2.5rem;
-      padding: 0 5vw 4rem;
-    }
-
-    .sidebar {
-      position: sticky;
-      top: 2rem;
-      align-self: start;
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-      z-index: 3;
-    }
-
-    .sidebar-card {
-      background: #fff;
-      border-radius: 18px;
-      padding: 1.4rem 1.2rem;
-      box-shadow: 0 18px 35px rgba(38, 77, 59, 0.12);
-      border: 2px solid rgba(111, 85, 55, 0.2);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .sidebar-card::after {
-      content: '';
-      position: absolute;
-      inset: 10px;
-      border-radius: 14px;
-      border: 1px dashed rgba(31, 50, 39, 0.18);
-      pointer-events: none;
-    }
-
-    .sidebar-card h3 {
-      margin: 0 0 0.75rem;
-      font-family: 'Playfair Display', serif;
-      color: var(--forest);
-      font-size: 1.2rem;
-    }
-
-    .sidebar-nav {
-      display: grid;
-      gap: 0.5rem;
-    }
-
-    .sidebar-nav a {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.55rem 0.75rem;
-      border-radius: 12px;
-      background: rgba(249, 246, 239, 0.8);
-      font-weight: 700;
-      color: var(--forest);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-size: 0.7rem;
-      border: 1px solid rgba(38, 77, 59, 0.12);
-      transition: transform 0.2s ease, background 0.2s ease;
-    }
-
-    .sidebar-nav a:hover {
-      transform: translateY(-1px);
-      background: rgba(242, 222, 145, 0.25);
-    }
-
-    .sidebar-actions {
-      display: grid;
-      gap: 0.6rem;
-    }
-
-    .sidebar-actions .btn {
-      width: 100%;
-      justify-content: center;
-      font-size: 0.78rem;
-      padding: 0.75rem 1.2rem;
-    }
-
-    .sidebar-actions .btn-outline {
-      color: var(--forest);
-      border-color: rgba(38, 77, 59, 0.35);
-      background: rgba(249, 246, 239, 0.9);
-      text-transform: none;
-      letter-spacing: 0.04em;
-    }
-
-    .main-content {
-      min-width: 0;
-    }
-
-    .skip-link {
-      position: absolute;
-      top: 0;
-      left: 0;
-      transform: translateY(-120%);
-      background: var(--forest);
-      color: #fff;
-      padding: 0.75rem 1.25rem;
-      border-radius: 0 0 16px 0;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      transition: transform 0.2s ease;
-      z-index: 100;
-    }
-
-    .skip-link:focus-visible {
-      transform: translateY(0);
-    }
-
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    img {
-      max-width: 100%;
-      display: block;
-    }
-
-    header {
-      position: relative;
-      background: linear-gradient(135deg, rgba(17, 32, 24, 0.92), rgba(43, 62, 48, 0.82)),
-      url('/pic1.jpg') center/cover;
-      color: #fff;
-      padding-bottom: 4rem;
-      overflow: hidden;
-      border-bottom: 12px solid var(--wood-dark);
-      box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.2);
-    }
-
-    header::before {
-      content: '';
-      position: absolute;
-      inset: -40% 0 0 0;
-      background:
-        radial-gradient(circle at 20% 20%, rgba(242, 222, 145, 0.25), transparent 45%),
-        radial-gradient(circle at 80% 10%, rgba(123, 179, 209, 0.25), transparent 40%),
-        radial-gradient(circle at 50% 60%, rgba(255, 255, 255, 0.12), transparent 55%);
-      animation: drift 18s ease-in-out infinite;
-      opacity: 0.9;
-    }
-
-    header::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 10px;
-      background: linear-gradient(90deg, var(--wood), var(--wood-dark));
-    }
-
-    .top-bar {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1.5rem 5vw 0;
-      gap: 1.5rem;
-      position: relative;
-      z-index: 2;
-    }
-
-    .logo {
-      display: inline-flex;
-      align-items: center;
-    }
-
-    .logo img {
-      height: clamp(150px, 22vw, 280px);
-      width: auto;
-      display: block;
-      filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.35));
-    }
-
-    .primary-navigation {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      padding: 0.5rem 0.75rem;
-      background: rgba(17, 32, 24, 0.65);
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-    }
-
-    .primary-navigation a {
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      font-size: 0.75rem;
-      padding: 0.35rem 0.75rem;
-      border-radius: 999px;
-      transition: background 0.2s ease, color 0.2s ease;
-    }
-
-    .primary-navigation a:hover {
-      background: rgba(242, 222, 145, 0.18);
-      color: #fff;
-    }
-
-    .hero {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 2.25rem;
-      padding: 3rem 5vw 5rem;
-      position: relative;
-      z-index: 2;
-    }
-
-    .hero-copy {
-      position: relative;
-      z-index: 1;
-    }
-
-    .hero-copy::after {
-      content: '';
-      position: absolute;
-      top: -2rem;
-      left: -1.5rem;
-      width: 120%;
-      height: 120%;
-      border-radius: 18px;
-      background: rgba(255, 255, 255, 0.1);
-      transform: rotate(-1deg);
-      z-index: -1;
-      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
-    }
-
-    .hero-copy h1 {
-      font-family: 'Playfair Display', serif;
-      font-size: clamp(2.4rem, 5vw, 3.6rem);
-      margin-bottom: 1rem;
-    }
-
-    .hero-copy p {
-      font-size: 1.05rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .cta-group {
-      display: flex;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .donation-callout {
-      background: rgba(249, 246, 239, 0.9);
-      border-radius: 16px;
-      padding: 1rem 1.5rem;
-      margin: 0 0 1.5rem;
-      border: 2px solid rgba(242, 222, 145, 0.7);
-      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
-      color: var(--ink);
-    }
-
-    .donation-callout p {
-      margin: 0 0 0.75rem;
-      font-weight: 600;
-    }
-
-    .donation-callout .btn {
-      width: fit-content;
-    }
-
-    .donation-callout--footer {
-      text-align: center;
-      max-width: 780px;
-      margin: 0 auto;
-    }
-
-    .btn {
-      padding: 0.9rem 1.8rem;
-      border-radius: 999px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-size: 0.85rem;
-      cursor: pointer;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-      border: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .btn-primary {
-      background-color: var(--sun);
-      color: var(--forest);
-      box-shadow: 0 12px 25px rgba(0, 0, 0, 0.2);
-    }
-
-    .btn-outline {
-      background-color: transparent;
-      color: #fff;
-      border: 2px solid rgba(255, 255, 255, 0.75);
-    }
-
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
-    }
-
-    .btn::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.35) 50%, transparent 100%);
-      transform: translateX(-120%);
-      transition: transform 0.6s ease;
-    }
-
-    .btn:hover::after {
-      transform: translateX(120%);
-    }
-
-    .hero-card {
-      background: var(--paper);
-      color: var(--ink);
-      border-radius: 18px;
-      padding: 2rem;
-      box-shadow: 0 25px 45px rgba(27, 52, 41, 0.25);
-      position: relative;
-      border: 3px solid var(--wood-dark);
-      transform: rotate(0.6deg);
-    }
-
-    .hero-card::after {
-      content: '';
-      position: absolute;
-      inset: 10px;
-      border-radius: 14px;
-      border: 1px dashed rgba(31, 50, 39, 0.35);
-      pointer-events: none;
-    }
-
-    .hero-card h3 {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.4rem;
-      margin-bottom: 1rem;
-    }
-
-    .hero-card ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-
-    .hero-card li {
-      padding: 0.5rem 0;
-      border-bottom: 1px solid rgba(38, 77, 59, 0.15);
-    }
-
-    section {
-      padding: 2.6rem 0;
-      position: relative;
-      z-index: 1;
-      scroll-margin-top: 140px;
-    }
-
-    section:nth-of-type(even) {
-      background-color: rgba(255, 255, 255, 0.8);
-    }
-
-    section::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 50%;
-      width: min(680px, 85vw);
-      height: 110px;
-      background: radial-gradient(circle, rgba(123, 179, 209, 0.15), transparent 70%);
-      transform: translate(-50%, -60%);
-      pointer-events: none;
-    }
-
-    h2.section-title {
-      font-family: 'Playfair Display', serif;
-      font-size: clamp(2rem, 4vw, 2.8rem);
-      text-align: center;
-      margin-bottom: 1.6rem;
-      color: var(--forest);
-      position: relative;
-    }
-
-    h2.section-title::after {
-      content: '';
-      width: 120px;
-      height: 4px;
-      border-radius: 999px;
-      background: linear-gradient(90deg, var(--wood), transparent);
-      display: block;
-      margin: 0.8rem auto 0;
-    }
-
-    .mission {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.5rem;
-      align-items: start;
-    }
-
-    .mission blockquote {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.4rem;
-      color: var(--forest);
-      padding: 1.5rem;
-      border-left: 6px solid var(--wood);
-      background: rgba(255, 255, 255, 0.85);
-      border-radius: 14px;
-      box-shadow: 0 12px 25px rgba(31, 50, 39, 0.12);
-      margin: 0;
-    }
-
-    .mission p {
-      margin: 0;
-      font-size: 1.05rem;
-    }
-
-    .accordion-group {
-      display: grid;
-      gap: 0.75rem;
-    }
-
-    details.accordion {
-      border-radius: 16px;
-      background: #fff;
-      border: 2px solid rgba(111, 85, 55, 0.2);
-      box-shadow: 0 12px 25px rgba(31, 50, 39, 0.1);
-      overflow: hidden;
-    }
-
-    details.accordion summary {
-      list-style: none;
-      cursor: pointer;
-      padding: 1rem 1.2rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-size: 0.75rem;
-      color: var(--forest);
-      background: rgba(249, 246, 239, 0.85);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-    }
-
-    details.accordion summary::-webkit-details-marker {
-      display: none;
-    }
-
-    details.accordion summary::after {
-      content: '+';
-      font-size: 1.2rem;
-      color: var(--wood-dark);
-      transition: transform 0.2s ease;
-    }
-
-    details.accordion[open] summary::after {
-      content: '–';
-      transform: translateY(-1px);
-    }
-
-    details.accordion .accordion-body {
-      padding: 1rem 1.2rem 1.3rem;
-      background: #fff;
-    }
-
-    details.accordion .accordion-body p,
-    details.accordion .accordion-body ul {
-      margin: 0;
-    }
-
-    .split {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.75rem;
-      align-items: center;
-    }
-
-    .leaf-card {
-      background: var(--paper);
-      border-radius: 18px;
-      padding: 1.7rem;
-      position: relative;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      height: 100%;
-      border: 2px solid rgba(111, 85, 55, 0.4);
-      box-shadow: 0 16px 30px rgba(31, 50, 39, 0.15);
-    }
-
-    .leaf-card::after {
-      content: '';
-      position: absolute;
-      top: -30px;
-      right: -30px;
-      width: 140px;
-      height: 140px;
-      background: rgba(242, 222, 145, 0.25);
-      border-radius: 50%;
-    }
-
-    .leaf-card::before {
-      content: '';
-      position: absolute;
-      inset: 12px;
-      border-radius: 14px;
-      border: 1px dashed rgba(31, 50, 39, 0.3);
-      pointer-events: none;
-    }
-
-    .leaf-card h3 {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.5rem;
-      margin-top: 0;
-      color: var(--forest);
-      min-height: 3.2rem;
-      display: flex;
-      align-items: flex-end;
-    }
-
-    .leaf-card ul {
-      padding-left: 1rem;
-      margin: 0;
-      flex: 1;
-    }
-
-    .leaf-card li {
-      margin-bottom: 0.45rem;
-    }
-
-    .leaders {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.25rem;
-      align-items: start;
-    }
-
-    .leader-card {
-      background: #fff;
-      border-radius: 18px;
-      padding: 1.6rem;
-      box-shadow: 0 15px 35px rgba(38, 77, 59, 0.15);
-      display: flex;
-      flex-direction: column;
-      gap: 0.6rem;
-      overflow: hidden;
-      position: relative;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-      border: 2px solid rgba(111, 85, 55, 0.25);
-      align-self: start;
-    }
-
-    .leader-card::after {
-      content: '';
-      position: absolute;
-      inset: 10px;
-      border-radius: 14px;
-      border: 1px dashed rgba(31, 50, 39, 0.18);
-      pointer-events: none;
-    }
-
-    .leader-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 20px 40px rgba(38, 77, 59, 0.2);
-    }
-
-    .leader-card__body {
-      display: flex;
-      flex-direction: column;
-      gap: 0.2rem;
-      margin-top: 0.2rem;
-    }
-
-    .leader-card__photo {
-      position: relative;
-      width: 100%;
-      border-radius: 14px;
-      overflow: hidden;
-      background: #f7f2e8;
-      aspect-ratio: 4 / 5;
-      border: 2px solid rgba(111, 85, 55, 0.3);
-    }
-
-    .leader-card__photo img {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      object-position: center 20%;
-      filter: saturate(1.05);
-      display: block;
-    }
-
-    .leader-card h3 {
-      font-family: 'Playfair Display', serif;
-      margin: 0;
-      font-size: clamp(1.2rem, 2vw, 1.5rem);
-      color: var(--forest);
-    }
-
-    .leader-card h4 {
-      margin: 0;
-      text-transform: uppercase;
-      font-size: clamp(0.85rem, 1.5vw, 0.95rem);
-      letter-spacing: 0.08em;
-      color: var(--sage);
-    }
-
-    .leader-card p {
-      font-size: 1rem;
-      line-height: 1.65;
-      margin: 0;
-    }
-
-    .leader-card details.accordion {
-      border: none;
-      box-shadow: none;
-      background: transparent;
-    }
-
-    .leader-card details.accordion summary {
-      padding: 0.4rem 0;
-      background: transparent;
-      border-radius: 0;
-      text-transform: none;
-      letter-spacing: 0.02em;
-      font-size: 0.9rem;
-      color: var(--sage);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-    }
-
-    .leader-card details.accordion summary::after {
-      color: var(--sage);
-    }
-
-    .leader-card details.accordion summary .accordion-hint {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.2rem 0.65rem;
-      border-radius: 999px;
-      border: 1px solid rgba(120, 145, 116, 0.4);
-      color: var(--forest);
-      font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      background: rgba(230, 239, 233, 0.6);
-      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-    }
-
-    .leader-card details.accordion[open] summary .accordion-hint {
-      background: rgba(242, 222, 145, 0.3);
-      border-color: rgba(111, 85, 55, 0.35);
-      color: var(--wood-dark);
-    }
-
-    .leader-card details.accordion .accordion-body {
-      padding: 0.6rem 0 0;
-    }
-
-    .shared-leadership {
-      background: linear-gradient(135deg, rgba(24, 40, 30, 0.92), rgba(45, 70, 55, 0.92));
-      color: #fff;
-      border-radius: 18px;
-      padding: 2rem;
-      text-align: center;
-      box-shadow: 0 20px 45px rgba(38, 77, 59, 0.4);
-      position: relative;
-      overflow: hidden;
-      border: 3px solid rgba(255, 255, 255, 0.15);
-    }
-
-    .shared-leadership::after {
-      content: '';
-      position: absolute;
-      inset: 10px;
-      border-radius: 14px;
-      border: 1px dashed rgba(255, 255, 255, 0.25);
-      pointer-events: none;
-    }
-
-    .shared-leadership h3 {
-      font-family: 'Playfair Display', serif;
-      font-size: 2rem;
-      margin-bottom: 1rem;
-    }
-
-    .shared-leadership p {
-      max-width: 720px;
-      margin: 0 auto;
-      font-size: 1.05rem;
-    }
-
-    .schedule {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.5rem;
-    }
-
-    .schedule-card {
-      background: #fff;
-      border-radius: 18px;
-      padding: 1.6rem;
-      box-shadow: 0 12px 30px rgba(38, 77, 59, 0.15);
-      position: relative;
-      overflow: hidden;
-      border: 2px solid rgba(111, 85, 55, 0.25);
-    }
-
-    .schedule-card::after {
-      content: '';
-      position: absolute;
-      top: -35px;
-      right: -20px;
-      width: 120px;
-      height: 120px;
-      background: rgba(242, 222, 145, 0.18);
-      border-radius: 50%;
-    }
-
-    .schedule-card h3 {
-      margin-top: 0;
-      font-family: 'Playfair Display', serif;
-      color: var(--forest);
-    }
-
-    .schedule-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.95rem;
-    }
-
-    .schedule-table th,
-    .schedule-table td {
-      padding: 0.75rem 0.5rem;
-      border-bottom: 1px solid rgba(38, 77, 59, 0.15);
-    }
-
-    .schedule-table th {
-      text-transform: uppercase;
-      font-size: 0.8rem;
-      letter-spacing: 0.08em;
-      color: var(--sage);
-    }
-
-    .contact {
-      background: #fff;
-      border-radius: 18px;
-      padding: 2rem;
-      box-shadow: 0 20px 45px rgba(38, 77, 59, 0.15);
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 1.8rem;
-      align-items: center;
-      position: relative;
-      overflow: hidden;
-      border: 3px solid rgba(111, 85, 55, 0.25);
-    }
-
-    @media (max-width: 1024px) {
-      .page-layout {
-        grid-template-columns: 1fr;
-        padding: 0 5vw 3rem;
-      }
-
-      .sidebar {
-        position: relative;
-        top: auto;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      }
-    }
-
-    @media (max-width: 720px) {
-      .sidebar {
-        grid-template-columns: 1fr;
-      }
-
-      section {
-        padding: 2.75rem 0;
-      }
-    }
-
-    .contact::before {
-      content: '';
-      position: absolute;
-      inset: -40% 50% 30% -20%;
-      background: radial-gradient(circle, rgba(242, 222, 145, 0.18), transparent 70%);
-      pointer-events: none;
-    }
-
-    .partners {
-      background: rgba(242, 222, 145, 0.2);
-      border-radius: 18px;
-      padding: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-      align-self: start;
-    }
-
-    .partners h3 {
-      margin: 0;
-      font-size: 1.1rem;
-      color: var(--forest);
-    }
-
-    .partners p {
-      margin: 0;
-      font-size: 0.95rem;
-      color: var(--slate);
-    }
-
-    .partner-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 0.9rem;
-      align-items: center;
-      justify-items: center;
-    }
-
-    .partner-grid img {
-      width: min(100%, 150px);
-      height: 70px;
-      object-fit: contain;
-      padding: 0.35rem 0.5rem;
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 6px 14px rgba(38, 77, 59, 0.12);
-      filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.08));
-    }
-
-    .photo-carousel {
-      background: #fff;
-      border-radius: 18px;
-      padding: 1.5rem;
-      box-shadow: 0 16px 35px rgba(38, 77, 59, 0.15);
-      border: 2px solid rgba(111, 85, 55, 0.2);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .photo-carousel::after {
-      content: '';
-      position: absolute;
-      inset: 10px;
-      border-radius: 14px;
-      border: 1px dashed rgba(38, 77, 59, 0.18);
-      pointer-events: none;
-    }
-
-    .carousel-track {
-      position: relative;
-      overflow: hidden;
-      border-radius: 16px;
-      height: clamp(320px, 50vw, 520px);
-    }
-
-    .carousel-slides {
-      display: flex;
-      transition: transform 0.4s ease;
-      height: 100%;
-    }
-
-    .carousel-slide {
-      min-width: 100%;
-      height: 100%;
-    }
-
-    .carousel-slide img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-      filter: saturate(1.05);
-    }
-
-    .carousel-controls {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1rem;
-      margin-top: 1rem;
-    }
-
-    .carousel-text {
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-      flex: 1;
-    }
-
-    .carousel-controls p {
-      margin: 0;
-      font-weight: 600;
-      color: var(--forest);
-    }
-
-    .carousel-status {
-      margin: 0;
-      flex: 1;
-      color: #55645c;
-      font-weight: 600;
-      font-size: 0.95rem;
-    }
-
-    .carousel-buttons {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .carousel-button {
-      background: var(--forest);
-      color: #fff;
-      border: none;
-      border-radius: 50%;
-      width: 44px;
-      height: 44px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      box-shadow: 0 8px 20px rgba(38, 77, 59, 0.2);
-      transition: background 0.2s ease, transform 0.2s ease;
-    }
-
-    .carousel-button:hover {
-      background: #1f3f31;
-      transform: translateY(-2px);
-    }
-
-    form {
-      display: grid;
-      gap: 1rem;
-    }
-
-    label {
-      font-weight: 600;
-      font-size: 0.9rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--sage);
-    }
-
-    input,
-    textarea {
-      padding: 0.9rem 1rem;
-      border-radius: 12px;
-      border: 1px solid rgba(38, 77, 59, 0.2);
-      font-family: inherit;
-      font-size: 1rem;
-      background: rgba(249, 246, 239, 0.6);
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    input:focus,
-    textarea:focus {
-      outline: none;
-      border-color: var(--forest);
-      box-shadow: 0 0 0 4px rgba(38, 77, 59, 0.15);
-    }
-
-    textarea {
-      min-height: 140px;
-      resize: vertical;
-    }
-
-    .contact-details {
-      display: grid;
-      gap: 1rem;
-    }
-
-    .contact-details h3 {
-      font-family: 'Playfair Display', serif;
-      font-size: 1.8rem;
-      margin: 0;
-      color: var(--forest);
-    }
-
-    .contact-details p {
-      margin: 0;
-    }
-
-    .contact-details .info-item {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .contact-details .info-item span {
-      font-weight: 700;
-      color: var(--forest);
-    }
-
-    .map {
-      margin-top: 1.5rem;
-      border-radius: 18px;
-      overflow: hidden;
-      box-shadow: 0 10px 25px rgba(38, 77, 59, 0.15);
-    }
-
-    .footer {
-      background: var(--forest);
-      color: #fff;
-      text-align: center;
-      padding: 2rem 5vw 3rem;
-      position: relative;
-      overflow: hidden;
-      border-top: 10px solid var(--wood-dark);
-    }
-
-    .footer::before {
-      content: '';
-      position: absolute;
-      top: -80px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 140%;
-      height: 160px;
-      background: rgba(246, 239, 227, 0.8);
-      border-radius: 0 0 50% 50%;
-    }
-
-    .footer-content {
-      position: relative;
-      z-index: 1;
-    }
-
-    .footer nav {
-      justify-content: center;
-      margin-top: 1rem;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-
-    .newsletter {
-      margin-top: 2rem;
-      display: flex;
-      justify-content: center;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-    }
-
-    .nonprofit-note {
-      margin: 1.5rem auto 0;
-      max-width: 720px;
-      font-size: 0.95rem;
-      line-height: 1.6;
-      color: rgba(255, 255, 255, 0.85);
-    }
-
-    .newsletter input {
-      flex: 1 1 220px;
-      max-width: 320px;
-    }
-
-    .mobile-nav {
-      position: fixed;
-      bottom: 1.25rem;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(17, 32, 24, 0.92);
-      color: #fff;
-      padding: 0.5rem 0.8rem;
-      border-radius: 999px;
-      display: flex;
-      gap: 0.4rem;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      backdrop-filter: blur(8px);
-      z-index: 50;
-    }
-
-    .mobile-nav a {
-      padding: 0.5rem 0.85rem;
-      border-radius: 999px;
-      font-weight: 700;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      background: rgba(255, 255, 255, 0.08);
-      white-space: nowrap;
-      transition: background 0.2s ease, transform 0.2s ease;
-    }
-
-    .mobile-nav a:focus-visible,
-    .mobile-nav a:hover {
-      background: rgba(242, 222, 145, 0.25);
-      transform: translateY(-1px);
-    }
-
-    .mobile-nav .nav-donate {
-      background: var(--sun);
-      color: var(--forest);
-    }
-
-    @keyframes drift {
-      0% {
-        transform: translateY(0) scale(1);
-      }
-      50% {
-        transform: translateY(12px) scale(1.03);
-      }
-      100% {
-        transform: translateY(0) scale(1);
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      html {
-        scroll-behavior: auto;
-      }
-
-      *,
-      *::before,
-      *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-      }
-    }
-
-    @media (max-width: 800px) {
-      header {
-        padding-bottom: 4rem;
-      }
-
-      .top-bar {
-        flex-direction: column;
-        gap: 1rem;
-        justify-content: center;
-      }
-
-      .primary-navigation {
-        display: none;
-      }
-
-      .primary-navigation a {
-        text-align: center;
-        font-size: 0.78rem;
-        padding: 0.55rem 0.65rem;
-      }
-
-      .cta-group {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .cta-group .btn {
-        width: 100%;
-      }
-
-      .hero-copy::after {
-        width: 100%;
-        left: 0;
-      }
-
-      section {
-        padding: 3.5rem 6vw;
-        scroll-margin-top: 110px;
-      }
-
-      .hero {
-        grid-template-columns: 1fr;
-      }
-
-      body {
-        background-image:
-          repeating-linear-gradient(
-            to bottom,
-            rgba(38, 77, 59, 0.05) 0,
-            rgba(38, 77, 59, 0.05) 1px,
-            transparent 1px,
-            transparent 26px
-          ),
-          radial-gradient(circle at 20% 0%, rgba(242, 222, 145, 0.16), transparent 45%);
-      }
-
-      .logo img {
-        height: 120px;
-      }
-    }
-
-    @media (max-width: 600px) {
-      .hero {
-        padding: 2.5rem 6vw 4rem;
-      }
-
-      .hero-copy::after {
-        display: none;
-      }
-
-      .hero-copy h1 {
-        font-size: 2.1rem;
-      }
-
-      .hero-copy p {
-        font-size: 1rem;
-      }
-
-      .hero-card {
-        transform: none;
-      }
-
-      .cta-group {
-        flex-direction: column;
-      }
-
-      .btn {
-        width: 100%;
-        font-size: 0.78rem;
-        padding: 0.85rem 1.4rem;
-      }
-
-      .donation-callout {
-        padding: 1rem;
-      }
-
-      .donation-callout .btn {
-        width: 100%;
-      }
-
-      .section-title {
-        font-size: 1.85rem;
-      }
-
-      .leader-card {
-        padding: 1.35rem;
-      }
-
-      .leader-card__photo {
-        aspect-ratio: 3 / 4;
-      }
-
-      .mobile-nav {
-        width: calc(100% - 2rem);
-        border-radius: 20px;
-        padding: 0.6rem;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-      }
-
-      .mobile-nav a {
-        flex: 1 1 calc(33% - 0.5rem);
-        text-align: center;
-        white-space: normal;
-        font-size: 0.7rem;
-        letter-spacing: 0.06em;
-      }
-
-      .mobile-nav .nav-donate {
-        flex: 1 1 100%;
-      }
-    }
-
-    @media (max-width: 900px) {
-      body {
-        padding-bottom: 5.5rem;
-      }
-
-      .mobile-nav {
-        width: min(95vw, 520px);
-      }
-    }
-
-    @media (min-width: 901px) {
-      .mobile-nav {
-        display: none;
-      }
-    }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Lost Sierra Kids is a California nonprofit building a full-time early childhood learning center while continuing a free weekly playgroup for Plumas County families.">
+  <meta name="theme-color" content="#1e3a2f">
+  <link rel="canonical" href="https://lostsierrakids.com/">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" href="/favicon/favicon-96x96.png" sizes="96x96">
+  <link rel="icon" type="image/svg+xml" href="/favicon/favicon.svg">
+  <link rel="shortcut icon" href="/favicon/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="Lost Sierra Kids">
+  <link rel="manifest" href="/site.webmanifest">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://lostsierrakids.com/">
+  <meta property="og:title" content="Lost Sierra Kids | Community Learning Center in Graeagle, CA">
+  <meta property="og:description" content="Local nonprofit building a full-time early childhood learning center while sustaining a free weekly playgroup across Plumas County.">
+  <meta property="og:image" content="https://lostsierrakids.com/images/logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Lost Sierra Kids | Community Learning Center in Graeagle, CA">
+  <meta name="twitter:description" content="Local nonprofit building a full-time early childhood learning center while sustaining a free weekly playgroup across Plumas County.">
+  <meta name="twitter:image" content="https://lostsierrakids.com/images/logo.png">
+
+  <title>Lost Sierra Kids | Community Learning Center in Graeagle, CA</title>
+
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
+
   <header>
     <div class="top-bar">
-      <div class="logo">
-        <img src="logo.png" alt="Lost Sierra Kids logo" loading="lazy" decoding="async" />
-      </div>
-      <nav id="primary-navigation" class="primary-navigation" aria-label="Primary">
+      <a href="/" class="logo">
+        <img src="/images/logo.png" alt="Lost Sierra Kids" loading="eager" decoding="async">
+      </a>
+      <nav class="primary-navigation" aria-label="Primary">
         <a href="#mission">Our Story</a>
         <a href="#curriculum">Vision</a>
-        <a href="#leadership">Leadership</a>
+        <a href="#leadership">Team</a>
         <a href="#schedule">Phases</a>
         <a href="#photos">Photos</a>
         <a href="#community">Community</a>
         <a href="#contact">Connect</a>
       </nav>
     </div>
+
     <div class="hero">
       <div class="hero-copy">
         <h1>Building a Community Learning Center for Plumas County Families</h1>
-        <p>Lost Sierra Kids is a local nonprofit in California currently working to open a full-time early childhood learning center that keeps families close to home. While we raise funds and garner material donations, we are continuing our free weekly playgroup for babies through age five (and siblings close in age) and their caregivers across Plumas County.</p>
+        <p>Lost Sierra Kids is a local nonprofit in California working to open a full-time early childhood learning center that keeps families close to home. We host free weekly playgroups for babies through age five and their caregivers across Plumas County.</p>
+
         <div class="donation-callout">
-          <p>Support our Zeffy donation campaign and help us open the doors to the Lost Sierra Kids Learning Center.</p>
+          <p>Support our campaign and help us open the doors to the Lost Sierra Kids Learning Center.</p>
           <a class="btn btn-primary" href="https://www.zeffy.com/en-US/donation-form/donate-to-make-a-difference-15503" target="_blank" rel="noreferrer">Donate to the Campaign</a>
         </div>
+
         <div class="cta-group">
-          <a class="btn btn-primary" href="#contact">Partner With Lost Sierra Kids</a>
-          <a class="btn btn-primary" href="https://www.zeffy.com/en-US/donation-form/donate-to-make-a-difference-15503" target="_blank" rel="noreferrer">Donate Now</a>
+          <a class="btn btn-primary" href="#contact">Partner With Us</a>
           <a class="btn btn-outline" href="#mission">Read Our Story</a>
         </div>
       </div>
+
       <div class="hero-card">
         <h3>Community Snapshot</h3>
         <ul>
           <li><strong>Founded:</strong> January 2024 by Stephanie McCoy after First 5 Plumas playgroups took a significant hiatus.</li>
           <li><strong>Families Served:</strong> 24-30 children and 12-15 caregivers weekly at our free community playgroup, and more than 60 families to date.</li>
-          <li><strong>Funding Goal:</strong> Phase 1 build-out of our full-time early childhood learning center to open our main classrooms, bathrooms, administration office, kitchen and storage, and outdoor playspaces.</li>
+          <li><strong>Funding Goal:</strong> Phase 1 build-out of our full-time early childhood learning center.</li>
           <li><strong>Opening Target:</strong> August 2026 with space for up to 24 children in our licensed two-room facility.</li>
         </ul>
       </div>
@@ -1413,11 +80,11 @@
   <div class="page-layout">
     <aside class="sidebar" aria-label="Section navigation">
       <div class="sidebar-card">
-        <h3>Quick Jumps</h3>
+        <h3>Quick Links</h3>
         <nav class="sidebar-nav">
           <a href="#mission">Our Story</a>
           <a href="#curriculum">Vision</a>
-          <a href="#leadership">Leadership</a>
+          <a href="#leadership">Team</a>
           <a href="#schedule">Phases</a>
           <a href="#photos">Photos</a>
           <a href="#community">Community</a>
@@ -1429,7 +96,7 @@
         <h3>Take Action</h3>
         <div class="sidebar-actions">
           <a class="btn btn-primary" href="https://www.zeffy.com/en-US/donation-form/donate-to-make-a-difference-15503" target="_blank" rel="noreferrer">Donate</a>
-          <a class="btn btn-outline" href="https://www.facebook.com/p/Lost-Sierra-Kids-61555225559244/" target="_blank" rel="noopener">Facebook Updates</a>
+          <a class="btn btn-outline" href="https://www.facebook.com/p/Lost-Sierra-Kids-61555225559244/" target="_blank" rel="noopener">Follow on Facebook</a>
           <a class="btn btn-outline" href="#contact">Partner With Us</a>
         </div>
       </div>
@@ -1437,342 +104,337 @@
 
     <main id="main-content" class="main-content">
       <section id="mission">
-      <h2 class="section-title">Our Story & Mission</h2>
-      <div class="mission">
-        <blockquote>
-          “ We believe that family comes first, and our families of Plumas County are so treasured. Therefore, we never charge for our playgroup meetups as we feel they bring such enrichment and connection to the families of Plumas County.”
-        </blockquote>
-        <div class="accordion-group">
-          <details class="accordion">
-            <summary>Weekly playgroup experience</summary>
-            <div class="accordion-body">
-              <p>
-                Lost Sierra Kids is a local nonprofit in California seeking funding and material donations to open a learning center facility in Graeagle, CA. Each week, we welcome babies through age five (and siblings close in age) and their caregivers free of charge to our community playgroup filled with led music instruction, hands-on nature-based art instruction, and lots of social interaction. Depending on the season, we set up the Mohawk Resource Center in Blairsden or the Graeagle Soccer Field in Graeagle with various children's equipment such as educational learning toys for fine motor development; puppets, wooden trains, and imagination tents for creative play; toddler climbing equipment, stepping stones and balance toys for gross motor development, and so much more. Each week our theme and curriculum is different to allow maximum learning and fun.  Some weekly themes have included “Can You Find Them?: All About Mushrooms”, “Harvest Day: Veggie Exploration” and “Feathered Friends: All About Birds”.
-              </p>
-            </div>
-          </details>
-          <details class="accordion">
-            <summary>How Lost Sierra Kids began</summary>
-            <div class="accordion-body">
-              <p>
-                Founded in January 2024 by Stephanie McCoy after the First 5 Plumas playgroups were unable to continue. Lost Sierra Kids currently connects with dozens of families from all over Plumas County including Portola, Quincy, Clio, Blairsden, Beckwourth, and beyond. On average we host 20-30 children and 10-15 caregivers every week, and we have already served more than 60 families across Plumas County, and welcome new families each week.
-              </p>
-            </div>
-          </details>
-          <details class="accordion">
-            <summary>Why the learning center matters now</summary>
-            <div class="accordion-body">
-              <p>
-                After nearly two years of listening to our community, we realize there is a desperate need for additional accessible childcare in Plumas County. Families routinely face tiring commutes, long waitlists, and construction delays just to reach care. Opening a learning center in Graeagle will let parents work closer to home and keep their young children rooted in the beauty of the Lost Sierra.
-              </p>
-            </div>
-          </details>
-        </div>
-      </div>
-    </section>
-
-    <section id="curriculum">
-      <h2 class="section-title">Our Vision for Care & Community</h2>
-      <div class="split">
-        <div class="leaf-card">
-          <h3>Free Weekly Community Playgroup</h3>
-          <ul>
-            <li>Babies through age five (and siblings close in age) gather weekly for music, art, and connection.</li>
-            <li>Caregivers join led music instruction that teaches the fundamentals of music, including beat, tempo, and dynamics, using various child-appropriate instruments such as bells, rhythm sticks,  blocks,  and shakers.</li>
-            <li>Hands-on art stations centered around our weekly theme, using various mediums, including watercolor, paint, clay, and nature sculptures.</li>
-            <li>Led nature study science, including: hands-on mushroom observation and dissection, vegetable study, and a themed educational story time.</li>
-            <li>Rotational setups at the Mohawk Resource Center and Graeagle Soccer Field keep play fresh with new play items and layouts.</li>
-          </ul>
-        </div>
-        <div class="leaf-card">
-          <h3>Phase 1 Center Build-Out</h3>
-          <ul>
-            <li>Building out our full-time early childhood learning center to include our 2 classroom spaces, administration office, kitchen and storage, bathrooms for staff and students, and an outdoor play yard and Community Garden. Next to the Center, but under the same roof will still be the Graeagle Emporium/Happy Hunting Ground. The Graeagle Schoolhouse is located across from the Graeagle Frosty in the heart of Downtown.</li>
-            <li>Plans for holiday celebrations and performances, a student-based community garden, and communal mixed-aged learning. We truly believe that we can all learn something from one another, so what better way to bring back the traditional Schoolhouse feel than with a two-room, multi-age learning facility dedicated to each child's growth and development.</li>
-            <li>Our initial enrollment targets ages 2–6 for full and part-time care. We aim to offer learning and care to not only the residents of Plumas County but also have room to support our visitors to Plumas County as well, by continuing to hold our free weekly playgroups and offering community family oriented classes throughout the year.</li>
-            <li>Initial capacity for up to 24 children (as young as 2 years old) with a target opening date of August 2026.</li>
-          </ul>
-        </div>
-        <div class="leaf-card">
-          <h3>Community Hub</h3>
-          <p><strong>Phase 2</strong></p>
-          <ul>
-            <li>Addition of a dedicated community space for classes and shared programming.</li>
-            <li>Hourly drop-in options will be available during peak tourist months for up to age 14 so visiting families can freely explore the Lost Sierra. We aim to offer childcare for locals as well as tourists as we continue to grow.</li>
-            <li>Regular community offerings such as older-kid creation labs, Yoga for families,  parenting workshops, lactation support and learning, Parent-and-me art classes led by community artists, and so much more.</li>
-            <li>We believe in giving back to this community that has already given us so much, therefore we aim to be the go-to for all things Kids and Family. We are currently partnered with First 5 Plumas, Plumas STARS, and plan to offer resource material and educational opportunities for those in need of available County Services such as wellness checkups, in home support, and much more. You can also find us each year at the Graeagle Fourth of July Celebration, Calpine Marketplace, as well as other community events with play areas for Littles, activities, and fun.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
-
-      <section id="leadership">
-      <h2 class="section-title">Leadership & Staffing</h2>
-      <div class="leaders">
-        <article class="leader-card">
-          <div class="leader-card__photo">
-            <img src="Stephanie.jpg" alt="Photograph of Stephanie McCoy, Founder &amp; Executive Director" loading="lazy" decoding="async" />
-          </div>
-          <div class="leader-card__body">
-            <h3>Stephanie McCoy</h3>
-            <h4>Founder &amp; Executive Director</h4>
-            <details class="accordion">
-              <summary>
-                <span>Biography</span>
-                <span class="accordion-hint">Read bio</span>
-              </summary>
-              <div class="accordion-body">
-                <p>Stephanie founded Lost Sierra Kids in January 2024 after the First 5 Plumas playgroups were no longer able to continue. She has not only taught music, theater, and early childhood education across Northern Nevada since 2003, but also has 12+ years of Non-Profit and organizational leadership and management experience. She now channels that knowledge and experience into building a learning center that is rooted in the beloved Lost Sierra. Stephanie oversees the remodel, program development, and day-to-day care, ensuring every child and caregiver feels welcomed and supported. Stephanie will also teach our music, dramatic arts, and age appropriate kitchen learning on a weekly basis.</p>
-              </div>
-            </details>
-          </div>
-        </article>
-        <article class="leader-card">
-          <div class="leader-card__photo">
-            <img src="headshot.jpeg" alt="Photograph of Rhiannon Brooks, Learning Center Director" loading="lazy" decoding="async" />
-          </div>
-          <div class="leader-card__body">
-            <h3>Rhiannon Brooks</h3>
-            <h4>Learning Center Director</h4>
-            <details class="accordion">
-              <summary>
-                <span>Biography</span>
-                <span class="accordion-hint">Read bio</span>
-              </summary>
-              <div class="accordion-body">
-                <p>Rhiannon Brooks has been working with children since 2019 and has over seven years of experience in early childhood education. She grew up in the Lost Sierra and has a deep love for the area and its community. Rhiannon holds an A.A. in Elementary Education and a B.A. in Early Childhood Education, and is preparing to begin her M.A. in Curriculum Development and Instruction. She is passionate about play-based, child-led learning and supporting social-emotional development. Rhiannon is excited to join the Lost Sierra Kids team, as the program perfectly aligns with her values and love for the Lost Sierra.</p>
-              </div>
-            </details>
-          </div>
-        </article>
-        <article class="leader-card leader-card--mahala">
-          <div class="leader-card__photo">
-            <img src="mahala.JPG" alt="Photograph of Mahala Disney, Creative &amp; Operations Director" loading="lazy" decoding="async" />
-          </div>
-          <div class="leader-card__body">
-            <h3>Mahala Disney</h3>
-            <h4>Creative &amp; Operations Director</h4>
-            <details class="accordion">
-              <summary>
-                <span>Biography</span>
-                <span class="accordion-hint">Read bio</span>
-              </summary>
-              <div class="accordion-body">
-                <p>Mahala is an experienced early childhood educator with over 16 years of experience working with children in a variety of settings, including home-based childcare, private nannying, and the Head Start program. As Creative &amp; Operations Director, she leads the organizational and creative foundation of the learning center, overseeing operations, scheduling systems, internal workflows, funding and grant development, budgeting support, and long-range planning.</p>
-                <p>Mahala provides creative leadership across curriculum vision, program design, marketing, communications, and community engagement, ensuring the center reflects thoughtful, nature-based education rooted in hands-on exploration, outdoor play, child-led discovery, and intentional daily rhythms. Her role supports the teaching team by building strong systems and a cohesive vision, allowing educators to focus fully on children and classroom learning.</p>
-              </div>
-            </details>
-          </div>
-        </article>
-        <article class="leader-card">
-          <div class="leader-card__body">
-            <h3>Educator Team & Partners</h3>
-            <h4>Local Expertise</h4>
-            <details class="accordion">
-              <summary>
-                <span>Partnership overview</span>
-                <span class="accordion-hint">Read more</span>
-              </summary>
-              <div class="accordion-body">
-                <p>Lost Sierra Kids will employ local educators and assistant teachers from Plumas County. All educators and aids will be fully licensed and accredited, upholding our high level of education standards for this area. Lost Sierra Kids will assist all educators and aids to ensure their certifications. Every staff member will be able to pass a fingerprinting and background check, not only for state guidelines, but to ensure the safety of all the children that visit Lost Sierra Kids.  We currently are partners with First 5 Plumas and Plumas STARS, connecting us to additional county agencies and community resources. We also will bring in experts around Plumas County to lead our community classes (watercolor artists, yoga instructors, wood building and workshoping, acrylic artists,  and so many others). We aim to be a staple in our heartfelt community as well as a focal point for all things Children and Family in Plumas County. It takes a village to raise kind, creative, and educated children; therefore, we plan to showcase those in our community with so much to give.</p>
-              </div>
-            </details>
-          </div>
-        </article>
-      </div>
-      <div class="shared-leadership">
-        <h3>Commitment to Quality Care</h3>
-        <p>We will uphold the highest state and county standards for our staff, curriculum, and teaching methods. Our goal is to provide a safe place where parents can leave their children knowing they will be well cared for and encouraged to learn and grow. By investing in training and partnerships now, we are laying the groundwork for a trusted learning center that reflects the true heart of the Lost Sierra and the loving community that surrounds it.</p>
-      </div>
-    </section>
-
-    <section id="schedule">
-      <h2 class="section-title">Phased Facility Plan</h2>
-      <div class="schedule">
-        <div class="schedule-card">
-          <h3>Funding & Timeline</h3>
-          <table class="schedule-table">
-            <thead>
-              <tr>
-                <th>Phase</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Phase 1</td>
-                <td>Build out and open the main rooms of our full-time early childhood learning center for ages 2-6 (located inside the Historic Graeagle Schoolhouse, sharing a roof with Graeagle Emporium) with an opening target of August 2026.</td>
-              </tr>
-              <tr>
-                <td>Phase 2</td>
-                <td>Renovate our Community Classroom to allow more partnerships, older learning, and more family resources. Also the ability to offer hourly drop off care for up to age 14 for tourists during the summer months.</td>
-              </tr>
-            </tbody>
-          </table>
-          <p>Your investment in Phase 1 moves us from planning to welcoming children into a safe, licensed space.</p>
-        </div>
-        <div class="schedule-card">
-          <h3>Initial Enrollment Plan</h3>
-          <ul>
-            <li>Primary focus on ages 2–6 for full time or part time care which allows the widest age range possible for joint learning and licensing.</li>
-            <li>Space for up to 24 school-aged children in our classrooms once licensing is granted.</li>
-            <li>Flexible care options for local families balancing work schedules and commutes. We will offer care Monday- Friday with part time care available for either Tuesday/ Thursday or Monday/ Wednesday/ Friday.</li>
-            <li>Affordable care is a high priority for us. We will offer a sliding scale for tuition so we are accessible to as many families as possible and will accept payments through Plumas Rural Services as well.</li>
-          </ul>
-        </div>
-        <div class="schedule-card">
-          <h3>How Support Helps</h3>
-          <ul>
-            <li>Accelerates construction and licensing so families spend less time driving long distances for care.</li>
-            <li>Equips the classroom with quality materials that mirror our playgroup experiences.</li>
-            <li>Creates jobs for local educators and pathways for assistants to earn childcare certifications.</li>
-            <li>Establishes a foundation for future community classes, parent resources, and cross-program events.</li>
-          </ul>
-        </div>
-      </div>
-    </section>
-
-    <section id="photos">
-      <h2 class="section-title">Adventure Photo Parade</h2>
-      <div class="photo-carousel">
-        <div class="carousel-track" aria-live="polite">
-          <div class="carousel-slides"></div>
-        </div>
-        <div class="carousel-controls">
-          <div class="carousel-text">
-            <p>Snapshots from our community playgroups and team leading the learning center remodel.</p>
-            <p class="carousel-status" aria-live="polite">Loading photos…</p>
-          </div>
-          <div class="carousel-buttons">
-            <button class="carousel-button" type="button" data-direction="prev" aria-label="Show previous photo">&#8592;</button>
-            <button class="carousel-button" type="button" data-direction="next" aria-label="Show next photo">&#8594;</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-      <section id="community">
-      <h2 class="section-title">Rooted in Community</h2>
-      <div class="split">
-        <div>
+        <h2 class="section-title">Our Story & Mission</h2>
+        <div class="mission">
+          <blockquote>
+            "We believe that family comes first, and our families of Plumas County are so treasured. Therefore, we never charge for our playgroup meetups as we feel they bring such enrichment and connection to the families of Plumas County."
+          </blockquote>
           <div class="accordion-group">
             <details class="accordion">
-              <summary>Playgroup continuity</summary>
+              <summary>Weekly playgroup experience</summary>
               <div class="accordion-body">
-                <p>Once the learning center is open, our free community playgroup will continue weekly as the cornerstone of Lost Sierra Kids. We believe in the power of play and community,  and will always welcome you each week to come play, learn, and grow with us.  A dedicated space will let us tailor gatherings to different ages while offering cross-class programming such as holiday celebrations, performances, a community garden, and collaborative learning opportunities.</p>
+                <p>Lost Sierra Kids is a local nonprofit in California seeking funding and material donations to open a learning center facility in Graeagle, CA. Each week, we welcome babies through age five (and siblings close in age) and their caregivers free of charge to our community playgroup filled with led music instruction, hands-on nature-based art instruction, and lots of social interaction. Depending on the season, we set up the Mohawk Resource Center in Blairsden or the Graeagle Soccer Field in Graeagle with various children's equipment. Each week our theme and curriculum is different to allow maximum learning and fun. Some weekly themes have included "Can You Find Them?: All About Mushrooms", "Harvest Day: Veggie Exploration" and "Feathered Friends: All About Birds".</p>
               </div>
             </details>
             <details class="accordion">
-              <summary>Family resource hub</summary>
+              <summary>How Lost Sierra Kids began</summary>
               <div class="accordion-body">
-                <p>We aim to be a hub for all things family in Plumas County. By inviting educators and experts from within our community, we can expand resources for locals and visitors alike and ensure every family has access to enriching, affordable support. Because every family deserves support.</p>
+                <p>Founded in January 2024 by Stephanie McCoy after the First 5 Plumas playgroups were unable to continue. Lost Sierra Kids currently connects with dozens of families from all over Plumas County including Portola, Quincy, Clio, Blairsden, Beckwourth, and beyond. On average we host 20-30 children and 10-15 caregivers every week, and we have already served more than 60 families across Plumas County, welcoming new families each week.</p>
+              </div>
+            </details>
+            <details class="accordion">
+              <summary>Why the learning center matters now</summary>
+              <div class="accordion-body">
+                <p>After nearly two years of listening to our community, we realize there is a desperate need for additional accessible childcare in Plumas County. Families routinely face tiring commutes, long waitlists, and construction delays just to reach care. Opening a learning center in Graeagle will let parents work closer to home and keep their young children rooted in the beauty of the Lost Sierra.</p>
               </div>
             </details>
           </div>
-          <div class="cta-group">
-            <a class="btn btn-primary" href="https://www.facebook.com/p/Lost-Sierra-Kids-61555225559244/" target="_blank" rel="noopener">Follow on Facebook: @lostsierrakids</a>
+        </div>
+      </section>
+
+      <section id="curriculum">
+        <h2 class="section-title">Our Vision for Care & Community</h2>
+        <div class="split">
+          <div class="leaf-card">
+            <h3>Free Weekly Community Playgroup</h3>
+            <ul>
+              <li>Babies through age five (and siblings close in age) gather weekly for music, art, and connection.</li>
+              <li>Caregivers join led music instruction teaching the fundamentals of music, including beat, tempo, and dynamics.</li>
+              <li>Hands-on art stations centered around our weekly theme using watercolor, paint, clay, and nature sculptures.</li>
+              <li>Led nature study science including hands-on mushroom observation, vegetable study, and themed educational story time.</li>
+              <li>Rotational setups at the Mohawk Resource Center and Graeagle Soccer Field keep play fresh.</li>
+            </ul>
+          </div>
+          <div class="leaf-card">
+            <h3>Phase 1 Center Build-Out</h3>
+            <ul>
+              <li>Building out our full-time early childhood learning center with 2 classroom spaces, administration office, kitchen and storage, bathrooms, and outdoor play yard with Community Garden.</li>
+              <li>Plans for holiday celebrations and performances, a student-based community garden, and communal mixed-aged learning.</li>
+              <li>Initial enrollment targets ages 2-6 for full and part-time care.</li>
+              <li>Initial capacity for up to 24 children with a target opening date of August 2026.</li>
+            </ul>
+          </div>
+          <div class="leaf-card">
+            <h3>Community Hub (Phase 2)</h3>
+            <ul>
+              <li>Addition of a dedicated community space for classes and shared programming.</li>
+              <li>Hourly drop-in options during peak tourist months for up to age 14 so visiting families can explore the Lost Sierra.</li>
+              <li>Regular community offerings such as older-kid creation labs, family yoga, parenting workshops, and parent-and-me art classes.</li>
+              <li>Partnership with First 5 Plumas and Plumas STARS for additional county resources.</li>
+            </ul>
           </div>
         </div>
-        <div class="leaf-card">
-          <h3>Classes on the Horizon</h3>
-          <ul>
-            <li>Creative labs for older kids— watercolor and acrylic art, woodworking and building, and other hands-on projects.</li>
-            <li>Parenting classes and resources in partnership with First 5 Plumas and Plumas STARS.</li>
-            <li>Lactation support groups and classes for new parents with Nourishing Newborns.</li>
-            <li>Workshops led by local educators and experts who call the Lost Sierra home, held at the Historic White Sulfur Springs Ranch. Allows for historical learning as well as connection.</li>
-          </ul>
+      </section>
+
+      <section id="leadership">
+        <h2 class="section-title">Leadership & Team</h2>
+        <div class="leaders">
+          <article class="leader-card">
+            <div class="leader-card__photo">
+              <img src="/images/Stephanie.jpg" alt="Stephanie McCoy" loading="lazy" decoding="async">
+            </div>
+            <div class="leader-card__body">
+              <h3>Stephanie McCoy</h3>
+              <h4>Founder & Executive Director</h4>
+              <details class="accordion">
+                <summary>
+                  <span class="accordion-hint">Read more</span>
+                </summary>
+                <div class="accordion-body">
+                  <p>Stephanie founded Lost Sierra Kids in January 2024 after the First 5 Plumas playgroups were no longer able to continue. She has taught music, theater, and early childhood education across Northern Nevada since 2003, and has 12+ years of nonprofit and organizational leadership experience. She now channels that knowledge into building a learning center rooted in the beloved Lost Sierra.</p>
+                </div>
+              </details>
+            </div>
+          </article>
+
+          <article class="leader-card">
+            <div class="leader-card__photo">
+              <img src="/images/headshot.jpeg" alt="Rhiannon Brooks" loading="lazy" decoding="async">
+            </div>
+            <div class="leader-card__body">
+              <h3>Rhiannon Brooks</h3>
+              <h4>Learning Center Director</h4>
+              <details class="accordion">
+                <summary>
+                  <span class="accordion-hint">Read more</span>
+                </summary>
+                <div class="accordion-body">
+                  <p>Rhiannon has been working with children since 2019 and has over seven years of experience in early childhood education. She grew up in the Lost Sierra and has a deep love for the area. Rhiannon holds an A.A. in Elementary Education and a B.A. in Early Childhood Education, and is preparing for her M.A. in Curriculum Development and Instruction.</p>
+                </div>
+              </details>
+            </div>
+          </article>
+
+          <article class="leader-card">
+            <div class="leader-card__photo">
+              <img src="/images/mahala.JPG" alt="Mahala Disney" loading="lazy" decoding="async">
+            </div>
+            <div class="leader-card__body">
+              <h3>Mahala Disney</h3>
+              <h4>Creative & Operations Director</h4>
+              <details class="accordion">
+                <summary>
+                  <span class="accordion-hint">Read more</span>
+                </summary>
+                <div class="accordion-body">
+                  <p>Mahala is an experienced early childhood educator with over 16 years of experience working with children in a variety of settings. As Creative & Operations Director, she leads the organizational and creative foundation of the learning center, overseeing operations, scheduling systems, funding and grant development, and long-range planning.</p>
+                </div>
+              </details>
+            </div>
+          </article>
+
+          <article class="leader-card">
+            <div class="leader-card__body">
+              <h3>Educator Team & Partners</h3>
+              <h4>Local Expertise</h4>
+              <details class="accordion">
+                <summary>
+                  <span class="accordion-hint">Read more</span>
+                </summary>
+                <div class="accordion-body">
+                  <p>Lost Sierra Kids will employ local educators and assistant teachers from Plumas County. All educators will be fully licensed and accredited. We are partners with First 5 Plumas and Plumas STARS, and bring in local experts to lead community classes. We aim to be a staple in our community and a focal point for all things Children and Family in Plumas County.</p>
+                </div>
+              </details>
+            </div>
+          </article>
         </div>
-      </div>
-    </section>
+
+        <div class="shared-leadership">
+          <h3>Commitment to Quality Care</h3>
+          <p>We uphold the highest state and county standards for our staff, curriculum, and teaching methods. Our goal is to provide a safe place where parents can leave their children knowing they will be well cared for and encouraged to learn and grow.</p>
+        </div>
+      </section>
+
+      <section id="schedule">
+        <h2 class="section-title">Phased Facility Plan</h2>
+        <div class="schedule">
+          <div class="schedule-card">
+            <h3>Funding & Timeline</h3>
+            <table class="schedule-table">
+              <thead>
+                <tr>
+                  <th>Phase</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Phase 1</td>
+                  <td>Build out and open the main rooms of our full-time early childhood learning center for ages 2-6 with an opening target of August 2026.</td>
+                </tr>
+                <tr>
+                  <td>Phase 2</td>
+                  <td>Renovate our Community Classroom for partnerships, older learning, and hourly drop-off care during summer months.</td>
+                </tr>
+              </tbody>
+            </table>
+            <p>Your investment in Phase 1 moves us from planning to welcoming children into a safe, licensed space.</p>
+          </div>
+
+          <div class="schedule-card">
+            <h3>Initial Enrollment Plan</h3>
+            <ul>
+              <li>Primary focus on ages 2-6 for full time or part time care.</li>
+              <li>Space for up to 24 children once licensing is granted.</li>
+              <li>Flexible care options Monday-Friday with part-time available.</li>
+              <li>Affordable care with sliding scale tuition and Plumas Rural Services payments accepted.</li>
+            </ul>
+          </div>
+
+          <div class="schedule-card">
+            <h3>How Support Helps</h3>
+            <ul>
+              <li>Accelerates construction and licensing so families spend less time driving long distances.</li>
+              <li>Equips the classroom with quality materials that mirror our playgroup experiences.</li>
+              <li>Creates jobs for local educators and certification pathways.</li>
+              <li>Establishes a foundation for future community classes and resources.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="photos">
+        <h2 class="section-title">Community Photos</h2>
+        <div class="photo-carousel" tabindex="0" aria-label="Photo carousel">
+          <div class="carousel-track" aria-live="polite">
+            <div class="carousel-slides"></div>
+          </div>
+          <div class="carousel-controls">
+            <div class="carousel-text">
+              <p>Snapshots from our community playgroups and learning center progress.</p>
+              <p class="carousel-status" aria-live="polite">Loading photos...</p>
+            </div>
+            <div class="carousel-buttons">
+              <button class="carousel-button" type="button" data-direction="prev" aria-label="Previous photo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+              <button class="carousel-button" type="button" data-direction="next" aria-label="Next photo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="community">
+        <h2 class="section-title">Rooted in Community</h2>
+        <div class="split">
+          <div>
+            <div class="accordion-group">
+              <details class="accordion">
+                <summary>Playgroup continuity</summary>
+                <div class="accordion-body">
+                  <p>Once the learning center is open, our free community playgroup will continue weekly as the cornerstone of Lost Sierra Kids. We believe in the power of play and community, and will always welcome you each week to come play, learn, and grow with us.</p>
+                </div>
+              </details>
+              <details class="accordion">
+                <summary>Family resource hub</summary>
+                <div class="accordion-body">
+                  <p>We aim to be a hub for all things family in Plumas County. By inviting educators and experts from within our community, we can expand resources for locals and visitors alike and ensure every family has access to enriching, affordable support.</p>
+                </div>
+              </details>
+            </div>
+            <div class="cta-group" style="margin-top: var(--space-lg);">
+              <a class="btn btn-primary" href="https://www.facebook.com/p/Lost-Sierra-Kids-61555225559244/" target="_blank" rel="noopener">Follow on Facebook</a>
+            </div>
+          </div>
+          <div class="leaf-card">
+            <h3>Classes on the Horizon</h3>
+            <ul>
+              <li>Creative labs for older kids including watercolor, acrylic art, and woodworking.</li>
+              <li>Parenting classes and resources in partnership with First 5 Plumas and Plumas STARS.</li>
+              <li>Lactation support groups and classes for new parents.</li>
+              <li>Workshops led by local educators and experts at the Historic White Sulfur Springs Ranch.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
 
       <section id="contact">
-      <h2 class="section-title">Connect with Lost Sierra Kids</h2>
-      <div class="contact">
-        <form action="https://formsubmit.co/lostsierrakids@gmail.com" method="POST">
-          <input type="hidden" name="_subject" value="New Lost Sierra Kids inquiry" />
-          <input type="hidden" name="_captcha" value="false" />
-          <label for="name">Your Name</label>
-          <input type="text" id="name" name="name" placeholder="Jane Doe" autocomplete="name" required>
+        <h2 class="section-title">Connect with Lost Sierra Kids</h2>
+        <div class="contact">
+          <form action="https://formsubmit.co/lostsierrakids@gmail.com" method="POST">
+            <input type="hidden" name="_subject" value="New Lost Sierra Kids inquiry">
+            <input type="hidden" name="_captcha" value="false">
 
-          <label for="email">Email</label>
-          <input type="email" id="email" name="email" placeholder="you@email.com" autocomplete="email" required>
+            <label for="name">Your Name</label>
+            <input type="text" id="name" name="name" placeholder="Jane Doe" autocomplete="name" required>
 
-          <label for="phone">Phone</label>
-          <input type="tel" id="phone" name="phone" placeholder="(555) 555-5555" autocomplete="tel">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" placeholder="you@email.com" autocomplete="email" required>
 
-          <label for="message">How can we support your family?</label>
-          <textarea id="message" name="message" placeholder="Tell us about your child, schedule needs, or questions." rows="5" required></textarea>
+            <label for="phone">Phone</label>
+            <input type="tel" id="phone" name="phone" placeholder="(555) 555-5555" autocomplete="tel">
 
-          <button type="submit" class="btn btn-primary">Send Inquiry</button>
-        </form>
-        <div class="contact-details">
-          <h3>We'd Love to Hear From You</h3>
-          <p>Connect with us to discuss funding partnerships, learn more about our phased plan, or share how child care access impacts your family. We’re ready to collaborate.</p>
-          <div class="info-item">
-            <span>Email:</span>
-            <a href="mailto:Lostsierrakids@gmail.com">Lostsierrakids@gmail.com</a>
+            <label for="message">How can we support your family?</label>
+            <textarea id="message" name="message" placeholder="Tell us about your child, schedule needs, or questions." rows="5" required></textarea>
+
+            <button type="submit" class="btn btn-primary">Send Message</button>
+          </form>
+
+          <div class="contact-details">
+            <h3>We'd Love to Hear From You</h3>
+            <p>Connect with us to discuss funding partnerships, learn more about our phased plan, or share how child care access impacts your family.</p>
+
+            <div class="info-item">
+              <span>Email:</span>
+              <a href="mailto:Lostsierrakids@gmail.com">Lostsierrakids@gmail.com</a>
+            </div>
+            <div class="info-item">
+              <span>Address:</span>
+              <span>7701 CA-89 #22, Graeagle, CA</span>
+            </div>
+
+            <div class="map">
+              <iframe title="Map of Lost Sierra Kids" src="https://maps.google.com/maps?q=7701%20CA-89%20%2322%2C%20Graeagle%2C%20CA&z=18&t=m&output=embed" width="100%" height="200" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            </div>
           </div>
-          <div class="info-item">
-            <span>Phone:</span>
-            <p>coming soon</p>
-          </div>
-          <div class="info-item">
-            <span>Physical Address:</span>
-            <p>7701 CA-89 #22, Graeagle, CA</p>
-          </div>
-          <div class="info-item">
-            <span>Mailing Address:</span>
-            <p>Coming soon</p>
-          </div>
-          <div class="map">
-            <iframe title="Map of Lost Sierra Kids at the Graeagle Schoolhouse" src="https://maps.google.com/maps?q=7701%20CA-89%20%2322%2C%20Graeagle%2C%20CA&z=18&t=m&output=embed" width="100%" height="220" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-          </div>
+
+          <aside class="partners" aria-labelledby="partners-title">
+            <h3 id="partners-title">Community Partners</h3>
+            <p>We appreciate the local businesses supporting families in the Lost Sierra.</p>
+            <div class="partner-grid" role="list">
+              <img src="logos/BFJ_feather_logo_vert.jpg" alt="Bread for the Journey logo" role="listitem" loading="lazy" decoding="async">
+              <img src="logos/logo-stacked-white.png" alt="Feather River Co-op logo" role="listitem" loading="lazy" decoding="async">
+              <img src="logos/lost%20sierra%20ventures.png" alt="Lost Sierra Ventures logo" role="listitem" loading="lazy" decoding="async">
+            </div>
+          </aside>
         </div>
-        <aside class="partners" aria-labelledby="partners-title">
-          <h3 id="partners-title">Partners</h3>
-          <p>We appreciate the local businesses supporting families in the Lost Sierra.</p>
-          <div class="partner-grid" role="list">
-            <img src="logos/BFJ_feather_logo_vert.jpg" alt="Bread for the Journey logo" role="listitem" loading="lazy" decoding="async" />
-            <img src="logos/logo-stacked-white.png" alt="Feather River Co-op logo" role="listitem" loading="lazy" decoding="async" />
-            <img src="logos/lost%20sierra%20ventures.png" alt="Lost Sierra Ventures logo" role="listitem" loading="lazy" decoding="async" />
-          </div>
-        </aside>
-      </div>
-    </section>
+      </section>
 
       <section id="donate">
-      <h2 class="section-title">Support the Donation Campaign</h2>
-      <div class="donation-callout donation-callout--footer">
-        <p>Your gift powers the Learning Center build-out, weekly playgroups, and future family resources across the Lost Sierra.</p>
-        <a class="btn btn-primary" href="https://www.zeffy.com/en-US/donation-form/donate-to-make-a-difference-15503" target="_blank" rel="noreferrer">Donate Through Zeffy</a>
-      </div>
-    </section>
+        <h2 class="section-title">Support the Campaign</h2>
+        <div class="donation-callout donation-callout--footer">
+          <p>Your gift powers the Learning Center build-out, weekly playgroups, and future family resources across the Lost Sierra.</p>
+          <a class="btn btn-primary" href="https://www.zeffy.com/en-US/donation-form/donate-to-make-a-difference-15503" target="_blank" rel="noreferrer">Donate Through Zeffy</a>
+        </div>
+      </section>
     </main>
   </div>
 
   <footer class="footer">
     <div class="footer-content">
-      <p>&copy; <span id="year"></span> Lost Sierra Kids • Community Learning Center Initiative • Graeagle, California</p>
+      <p>&copy; <span id="year"></span> Lost Sierra Kids &bull; Community Learning Center &bull; Graeagle, California</p>
       <nav aria-label="Footer">
         <a href="#mission">Our Story</a>
         <a href="#curriculum">Vision</a>
-        <a href="#leadership">Leadership</a>
+        <a href="#leadership">Team</a>
         <a href="#schedule">Phases</a>
         <a href="#photos">Photos</a>
         <a href="#community">Community</a>
         <a href="#contact">Connect</a>
       </nav>
       <form class="newsletter" action="https://formsubmit.co/newsletter@lostsierrakids.com" method="POST">
-        <input type="hidden" name="_subject" value="Lost Sierra Kids newsletter" />
-        <input type="hidden" name="_captcha" value="false" />
-        <input type="email" name="email" placeholder="Join our newsletter for seasonal updates" aria-label="Email address" autocomplete="email" required />
+        <input type="hidden" name="_subject" value="Lost Sierra Kids newsletter">
+        <input type="hidden" name="_captcha" value="false">
+        <input type="email" name="email" placeholder="Join our newsletter" aria-label="Email address" autocomplete="email" required>
         <button class="btn btn-primary" type="submit">Subscribe</button>
       </form>
-      <p class="nonprofit-note">Lost Sierra Kids is a 501(c)(3) tax-exempt nonprofit organization. Donations are tax deductible as allowed by law. Tax ID: 99-4059002.</p>
+      <p class="nonprofit-note">Lost Sierra Kids is a 501(c)(3) tax-exempt nonprofit organization. Donations are tax deductible. Tax ID: 99-4059002.</p>
     </div>
   </footer>
 
-  <nav class="mobile-nav" aria-label="Quick navigation">
+  <nav class="mobile-nav" aria-label="Mobile navigation">
     <a href="#mission">Story</a>
     <a href="#leadership">Team</a>
     <a href="#photos">Photos</a>
@@ -1785,14 +447,11 @@
       "@context": "https://schema.org",
       "@type": "ChildCare",
       "name": "Lost Sierra Kids",
-      "description": "Local nonprofit seeking funding to open a full-time early childhood learning center while sustaining a free weekly playgroup for families across Plumas County.",
-      "url": "https://lostsierra.kids/",
+      "description": "Local nonprofit building a full-time early childhood learning center while sustaining a free weekly playgroup for families across Plumas County.",
+      "url": "https://lostsierrakids.com/",
       "taxID": "99-4059002",
-      "telephone": "coming soon",
       "email": "Lostsierrakids@gmail.com",
-      "sameAs": [
-        "https://www.facebook.com/p/Lost-Sierra-Kids-61555225559244/"
-      ],
+      "sameAs": ["https://www.facebook.com/p/Lost-Sierra-Kids-61555225559244/"],
       "address": {
         "@type": "PostalAddress",
         "streetAddress": "7701 CA-89 #22",
@@ -1802,359 +461,9 @@
         "addressCountry": "US"
       },
       "areaServed": "Lost Sierra region",
-      "foundingDate": "2024",
-      "openingHoursSpecification": []
+      "foundingDate": "2024"
     }
   </script>
-  <script>
-    document.getElementById('year').textContent = new Date().getFullYear();
-    const carousel = document.querySelector('.photo-carousel');
-
-    if (carousel) {
-      const slidesContainer = carousel.querySelector('.carousel-slides');
-      const buttons = carousel.querySelectorAll('.carousel-button');
-      const status = carousel.querySelector('.carousel-status');
-      const photoExtensions = /(jpe?g|png|gif|webp|avif)$/i;
-      let slides = [];
-      let currentIndex = 0;
-
-      const updateSlide = () => {
-        if (!slidesContainer) return;
-
-        if (!slides.length) {
-          slidesContainer.style.transform = 'translateX(0)';
-          buttons.forEach((button) => button.setAttribute('disabled', 'disabled'));
-
-          if (status) {
-            status.textContent = 'Photos are on their way.';
-          }
-
-          return;
-        }
-
-        buttons.forEach((button) => button.removeAttribute('disabled'));
-        slidesContainer.style.transform = `translateX(-${currentIndex * 100}%)`;
-
-        if (status) {
-          status.textContent = `Photo ${currentIndex + 1} of ${slides.length}`;
-        }
-      };
-
-      const fallbackPhotos = [
-        'photos/20250508_112555.jpg',
-        'photos/20250522_113224.jpg',
-        'photos/20250626_113105.jpg',
-        'photos/20250626_113922.jpg',
-        'photos/IMG_8278.jpeg',
-        'photos/IMG_8502.jpeg',
-        'photos/IMG_8504.jpeg',
-        'photos/IMG_8792.jpeg',
-        'photos/IMG_8795.jpeg',
-        'photos/IMG_8796.jpeg',
-        'photos/IMG_8798.jpeg',
-        'photos/IMG_8800.jpeg',
-        'photos/image000000_20251024_123233.jpg',
-        'photos/image000000_20251024_123428.jpg',
-        'photos/received_844504624631456.jpeg',
-      ];
-
-      const shuffle = (list) => {
-        const array = [...list];
-        for (let i = array.length - 1; i > 0; i -= 1) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [array[i], array[j]] = [array[j], array[i]];
-        }
-        return array;
-      };
-
-      const renderSlides = (photoSources, allSources) => {
-        if (!slidesContainer) return;
-
-        slidesContainer.innerHTML = '';
-        slides = photoSources.map((src, index) => {
-          const slide = document.createElement('div');
-          slide.className = 'carousel-slide';
-
-          const img = document.createElement('img');
-          img.src = src;
-          img.loading = index === 0 ? 'eager' : 'lazy';
-          img.decoding = 'async';
-          img.alt = 'Lost Sierra Kids community photo';
-          img.onerror = () => {
-            if (!Array.isArray(allSources) || !allSources.length) return;
-            const attempts = Number.parseInt(img.dataset.errorAttempts || '0', 10) + 1;
-            img.dataset.errorAttempts = attempts.toString();
-            if (attempts > allSources.length) return;
-
-            let replacement = null;
-            for (let i = 0; i < allSources.length; i += 1) {
-              const candidate = allSources[Math.floor(Math.random() * allSources.length)];
-              const candidateUrl = new URL(candidate, window.location.href).href;
-              if (candidate && candidateUrl !== img.src) {
-                replacement = candidate;
-                break;
-              }
-            }
-
-            if (replacement) {
-              img.src = replacement;
-            } else {
-              slide.remove();
-              slides = slides.filter((item) => item !== slide);
-              currentIndex = Math.min(currentIndex, slides.length - 1);
-              updateSlide();
-            }
-          };
-
-          slide.appendChild(img);
-          slidesContainer.appendChild(slide);
-          return slide;
-        });
-
-        currentIndex = 0;
-        updateSlide();
-      };
-
-      const fetchPhotoManifest = async () => {
-        try {
-          const response = await fetch('photos/photos.json', { cache: 'no-store' });
-
-          if (response.ok) {
-            const data = await response.json();
-            if (Array.isArray(data)) {
-              return data;
-            }
-          }
-        } catch (error) {}
-
-        return null;
-      };
-
-      const normalizeSources = (...lists) => {
-        const deduped = [];
-        const seen = new Set();
-
-        lists.forEach((list) => {
-          if (!Array.isArray(list)) return;
-
-          list.forEach((src) => {
-            if (!src) return;
-            const cleaned = src.toString().trim();
-
-            if (!cleaned) return;
-
-            const prefixed = cleaned.startsWith('photos/') ? cleaned : `photos/${cleaned.replace(/^\/?/, '')}`;
-            const extension = prefixed.split('.').pop() || '';
-
-            if (!photoExtensions.test(extension) || seen.has(prefixed)) return;
-
-            seen.add(prefixed);
-            deduped.push(prefixed);
-          });
-        });
-
-        return deduped;
-      };
-
-      const fetchDirectoryListing = async () => {
-        try {
-          const response = await fetch('photos/');
-
-          if (response.ok) {
-            const html = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const anchors = Array.from(doc.querySelectorAll('a'));
-
-            const files = anchors
-              .map((anchor) => decodeURIComponent(anchor.getAttribute('href') || ''))
-              .filter((href) => photoExtensions.test(href))
-              .map((href) => `photos/${href.replace(/^\/?/, '')}`);
-
-            if (files.length) {
-              return files;
-            }
-          }
-        } catch (error) {}
-
-        return null;
-      };
-
-      const loadImages = async (sources) => {
-        const imageChecks = await Promise.all(
-          sources.map(
-            (src) =>
-              new Promise((resolve) => {
-                const img = new Image();
-                img.src = src;
-                img.onload = () => resolve(src);
-                img.onerror = () => resolve(null);
-              })
-          )
-        );
-
-        return imageChecks.filter(Boolean);
-      };
-
-      const loadPhotos = async () => {
-        if (status) {
-          status.textContent = 'Loading photos…';
-        }
-
-        const fromManifest = await fetchPhotoManifest();
-        const fromListing = await fetchDirectoryListing();
-        const normalized = normalizeSources(fromManifest, fromListing);
-        const sources = normalized.length ? normalized : normalizeSources(fallbackPhotos);
-        const shuffledSources = shuffle(sources);
-        const loadedSources = await loadImages(shuffledSources);
-
-        renderSlides(loadedSources, shuffledSources);
-
-        if (status && loadedSources.length) {
-          status.textContent = `Photo 1 of ${loadedSources.length}`;
-        }
-      };
-
-      buttons.forEach((button) => {
-        button.addEventListener('click', () => {
-          if (!slides.length) return;
-          const direction = button.dataset.direction;
-
-          if (direction === 'next') {
-            currentIndex = (currentIndex + 1) % slides.length;
-          } else if (direction === 'prev') {
-            currentIndex = (currentIndex - 1 + slides.length) % slides.length;
-          }
-
-          updateSlide();
-        });
-      });
-
-      loadPhotos();
-    }
-
-    const partnerSection = document.querySelector('.partners');
-    const partnerGrid = document.querySelector('.partner-grid');
-    const partnerDescription = partnerSection ? partnerSection.querySelector('p') : null;
-    const logoExtensions = /(jpe?g|png|gif|webp|avif|svg)$/i;
-
-    const formatLogoAlt = (filePath) => {
-      const base = (filePath.split('/').pop() || '').replace(/\.[^.]+$/, '');
-      const cleaned = base.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-      return cleaned ? `${cleaned} logo` : 'Community partner logo';
-    };
-
-    const fetchLogoManifest = async () => {
-      try {
-        const response = await fetch('logos/logos.json', { cache: 'no-store' });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data)) {
-            return data;
-          }
-        }
-      } catch (error) {}
-
-      return null;
-    };
-
-    const fetchLogoListing = async () => {
-      try {
-        const response = await fetch('logos/');
-
-        if (response.ok) {
-          const html = await response.text();
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, 'text/html');
-          const anchors = Array.from(doc.querySelectorAll('a'));
-
-          const files = anchors
-            .map((anchor) => decodeURIComponent(anchor.getAttribute('href') || ''))
-            .filter((href) => logoExtensions.test(href))
-            .map((href) => `logos/${href.replace(/^\/?/, '')}`);
-
-          if (files.length) {
-            return files;
-          }
-        }
-      } catch (error) {}
-
-      return null;
-    };
-
-    const normalizeLogos = (...lists) => {
-      const seen = new Set();
-      const normalized = [];
-
-      lists.forEach((list) => {
-        if (!Array.isArray(list)) return;
-
-        list.forEach((item) => {
-          const { src, alt } = typeof item === 'string' ? { src: item, alt: '' } : item || {};
-          const trimmedSrc = (src || '').toString().trim();
-          if (!trimmedSrc) return;
-
-          const prefixed = trimmedSrc.startsWith('logos/') ? trimmedSrc : `logos/${trimmedSrc.replace(/^\/?/, '')}`;
-          const extension = prefixed.split('.').pop() || '';
-
-          if (!logoExtensions.test(extension) || seen.has(prefixed)) return;
-          seen.add(prefixed);
-
-          normalized.push({
-            src: prefixed,
-            alt: alt && alt.trim() ? alt : formatLogoAlt(prefixed),
-          });
-        });
-      });
-
-      return normalized;
-    };
-
-    const renderPartners = async () => {
-      if (!partnerSection || !partnerGrid) return;
-
-      const manifest = await fetchLogoManifest();
-      const listing = await fetchLogoListing();
-      const logos = normalizeLogos(manifest, listing);
-
-      const images = await Promise.all(
-        logos.map(
-          (logo) =>
-            new Promise((resolve) => {
-              const img = new Image();
-              img.loading = 'lazy';
-              img.decoding = 'async';
-              img.src = logo.src;
-              img.alt = logo.alt;
-
-              img.onload = () => resolve(img);
-              img.onerror = () => resolve(null);
-            })
-        )
-      );
-
-      const validImages = images.filter(Boolean);
-
-      if (!validImages.length) {
-        return;
-      }
-
-      partnerGrid.innerHTML = '';
-      validImages.forEach((img) => {
-        img.setAttribute('role', 'listitem');
-        partnerGrid.appendChild(img);
-      });
-
-      if (partnerDescription) {
-        partnerDescription.textContent = 'Proudly supported by our community partners.';
-      }
-
-      partnerSection.hidden = false;
-    };
-
-    renderPartners();
-
-  </script>
+  <script src="/js/main.js" defer></script>
 </body>
 </html>

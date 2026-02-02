@@ -1,0 +1,22 @@
+# Local development files
+config.yaml
+custom_callbacks.py
+__pycache__/
+excel/
+tomdisney/
+LSK/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs
+*.log
+npm-debug.log*
