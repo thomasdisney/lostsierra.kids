@@ -1,0 +1,23 @@
+{
+  "campaigns": [
+    {
+      "id": "PROJ-1",
+      "name": "Example Campaign",
+      "description": "Campaign description",
+      "owner": "Team Name",
+      "custom_fields": {}
+    }
+  ],
+  "jira_base_url": "https://yourcompany.atlassian.net",
+  "output_settings": {
+    "output_folder": "./reports",
+    "include_fields": [
+      "key",
+      "summary",
+      "status",
+      "assignee",
+      "priority",
+      "labels"
+    ]
+  }
+}
