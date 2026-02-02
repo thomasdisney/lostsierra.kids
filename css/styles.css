@@ -1118,6 +1118,28 @@ textarea {
   border: none;
 }
 
+.featured-partner {
+  text-align: center;
+  margin-bottom: var(--space-2xl);
+  padding-bottom: var(--space-xl);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.featured-partner img {
+  height: 120px;
+  width: auto;
+  max-width: 300px;
+  margin-bottom: var(--space-md);
+}
+
+.featured-partner p {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: var(--text-base);
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
 .partners h3 {
   font-size: var(--text-lg);
   margin-bottom: var(--space-xs);
