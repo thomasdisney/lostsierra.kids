@@ -1129,7 +1129,8 @@ textarea {
   height: 120px;
   width: auto;
   max-width: 300px;
-  margin-bottom: var(--space-md);
+  margin: 0 auto var(--space-md);
+  border-radius: var(--radius-md);
 }
 
 .featured-partner p {
