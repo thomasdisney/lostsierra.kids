@@ -727,33 +727,37 @@ export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
   try {
+    // Parse the path from the URL
+    const url = new URL(req.url || "", "http://localhost");
+    const pathname = url.pathname;
+
     // Public auth endpoints
-    if (req.path === "/api/auth/login" && req.method === "POST") {
+    if (pathname === "/api/auth/login" && req.method === "POST") {
       return handleLogin(req, res);
     }
 
-    if (req.path === "/api/auth/me" && req.method === "GET") {
+    if (pathname === "/api/auth/me" && req.method === "GET") {
       return handleMe(req, res);
     }
 
     // Admin endpoints
-    if (req.path === "/api/admin/users" && req.method === "POST") {
+    if (pathname === "/api/admin/users" && req.method === "POST") {
       return handleAdminCreateUser(req, res);
     }
 
-    if (req.path === "/api/admin/users" && req.method === "GET") {
+    if (pathname === "/api/admin/users" && req.method === "GET") {
       return handleAdminListUsers(req, res);
     }
 
-    if (req.path === "/api/admin/users" && req.method === "PATCH") {
+    if (pathname === "/api/admin/users" && req.method === "PATCH") {
       return handleAdminUpdateUser(req, res);
     }
 
-    if (req.path === "/api/admin/locations" && req.method === "POST") {
+    if (pathname === "/api/admin/locations" && req.method === "POST") {
       return handleAdminCreateLocation(req, res);
     }
 
-    if (req.path === "/api/admin/locations" && req.method === "GET") {
+    if (pathname === "/api/admin/locations" && req.method === "GET") {
       return handleAdminListLocations(req, res);
     }
 

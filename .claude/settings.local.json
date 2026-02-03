@@ -28,7 +28,8 @@
       "Bash(\"C:\\\\Users\\\\ThomasDisney\\\\.bun\\\\bin\\\\bun.exe\" --version)",
       "Bash(git diff-tree:*)",
       "Skill(ralph-loop:ralph-loop)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npm install:*)"
     ]
   },
   "outputStyle": "default"
