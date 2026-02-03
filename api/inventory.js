@@ -1,4 +1,6 @@
 import postgres from "postgres";
+import crypto from "crypto";
+import jwt from "jsonwebtoken";
 
 ensureDatabaseConfigured();
 const sql = postgres(process.env.DATABASE_URL, { ssl: "verify-full" });
@@ -9,23 +11,66 @@ function ensureDatabaseConfigured() {
       "DATABASE_URL is not configured. Please set it to your Postgres connection string."
     );
   }
+  if (!process.env.JWT_SECRET) {
+    throw new Error(
+      "JWT_SECRET is not configured. Please set it in your environment."
+    );
+  }
 }
 
 const setupPromise = (async () => {
+  // Users table
   await sql`
-    CREATE TABLE IF NOT EXISTS inventory (
-      part_number text PRIMARY KEY,
-      description text NOT NULL,
-      current_qty integer NOT NULL DEFAULT 0,
-      min_qty integer NOT NULL DEFAULT 0,
-      max_qty integer NOT NULL DEFAULT 0
+    CREATE TABLE IF NOT EXISTS users (
+      id serial PRIMARY KEY,
+      email text UNIQUE NOT NULL,
+      password_hash text NOT NULL,
+      name text NOT NULL,
+      role text NOT NULL CHECK (role IN ('admin', 'user')) DEFAULT 'user',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      is_active boolean NOT NULL DEFAULT true
     );
   `;
 
+  // Locations table
+  await sql`
+    CREATE TABLE IF NOT EXISTS locations (
+      id serial PRIMARY KEY,
+      name text NOT NULL,
+      warehouse_code text UNIQUE NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+  `;
+
+  // User-Location junction table (many-to-many)
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_locations (
+      user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      location_id integer NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      PRIMARY KEY (user_id, location_id)
+    );
+  `;
+
+  // Inventory table with location support
+  await sql`
+    CREATE TABLE IF NOT EXISTS inventory (
+      part_number text NOT NULL,
+      location_id integer NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      description text NOT NULL,
+      current_qty integer NOT NULL DEFAULT 0,
+      min_qty integer NOT NULL DEFAULT 0,
+      max_qty integer NOT NULL DEFAULT 0,
+      PRIMARY KEY (part_number, location_id)
+    );
+  `;
+
+  // Order queue table with user and location tracking
   await sql`
     CREATE TABLE IF NOT EXISTS order_queue (
       id serial PRIMARY KEY,
-      part_number text NOT NULL REFERENCES inventory(part_number) ON DELETE CASCADE,
+      part_number text NOT NULL,
+      location_id integer NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      user_id integer REFERENCES users(id) ON DELETE SET NULL,
       description text NOT NULL,
       note text,
       request_type text NOT NULL CHECK (request_type IN ('restock', 'adjustment')) DEFAULT 'restock',
@@ -35,34 +80,99 @@ const setupPromise = (async () => {
     );
   `;
 
-  await sql`ALTER TABLE order_queue ADD COLUMN IF NOT EXISTS request_type text DEFAULT 'restock';`;
-  await sql`ALTER TABLE order_queue ADD COLUMN IF NOT EXISTS requested_qty integer;`;
-  await sql`ALTER TABLE order_queue DROP CONSTRAINT IF EXISTS order_queue_status_check;`;
-  await sql`ALTER TABLE order_queue DROP CONSTRAINT IF EXISTS order_queue_request_type_check;`;
-  await sql`
-    ALTER TABLE order_queue
-    ADD CONSTRAINT order_queue_status_check
-    CHECK (status IN ('open', 'sent', 'completed', 'pending', 'approved', 'denied'));
-  `;
-  await sql`
-    ALTER TABLE order_queue
-    ADD CONSTRAINT order_queue_request_type_check
-    CHECK (request_type IN ('restock', 'adjustment'));
-  `;
+  // Seed default admin user if none exists
+  const adminCount = await sql`SELECT COUNT(*) as count FROM users WHERE role = 'admin';`;
+  if (adminCount[0].count === 0) {
+    const adminPassword = hashPassword("admin123");
+    await sql`
+      INSERT INTO users (email, password_hash, name, role)
+      VALUES ('admin@wms.local', ${adminPassword}, 'Admin', 'admin')
+      ON CONFLICT (email) DO NOTHING;
+    `;
+  }
 
+  // Seed default location if none exists
+  const locationCount = await sql`SELECT COUNT(*) as count FROM locations;`;
+  if (locationCount[0].count === 0) {
+    await sql`
+      INSERT INTO locations (name, warehouse_code)
+      VALUES ('Main Warehouse', 'MAIN')
+      ON CONFLICT (warehouse_code) DO NOTHING;
+    `;
+  }
+
+  // Get the main location
+  const mainLocation = await sql`SELECT id FROM locations WHERE warehouse_code = 'MAIN' LIMIT 1;`;
+  const locationId = mainLocation[0]?.id || 1;
+
+  // Seed sample inventory items at main location
   await Promise.all([
     sql`
-      INSERT INTO inventory (part_number, description, current_qty, min_qty, max_qty)
-      VALUES ('WIDGET-100', 'Widget Frame', 18, 10, 40)
-      ON CONFLICT (part_number) DO NOTHING;
+      INSERT INTO inventory (part_number, location_id, description, current_qty, min_qty, max_qty)
+      VALUES ('WIDGET-100', ${locationId}, 'Widget Frame', 18, 10, 40)
+      ON CONFLICT (part_number, location_id) DO NOTHING;
     `,
     sql`
-      INSERT INTO inventory (part_number, description, current_qty, min_qty, max_qty)
-      VALUES ('BOLT-425', 'High-torque bolt', 6, 8, 25)
-      ON CONFLICT (part_number) DO NOTHING;
+      INSERT INTO inventory (part_number, location_id, description, current_qty, min_qty, max_qty)
+      VALUES ('BOLT-425', ${locationId}, 'High-torque bolt', 6, 8, 25)
+      ON CONFLICT (part_number, location_id) DO NOTHING;
     `,
   ]);
 })();
+
+// Utility functions for authentication
+function hashPassword(password) {
+  return crypto.pbkdf2Sync(password, process.env.JWT_SECRET || "secret", 10000, 64, "sha256").toString("hex");
+}
+
+function verifyPassword(password, hash) {
+  return hashPassword(password) === hash;
+}
+
+function generateToken(user) {
+  return jwt.sign(
+    { id: user.id, email: user.email, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+}
+
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+function getTokenFromRequest(req) {
+  const authHeader = req.headers.authorization || "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/);
+  return match ? match[1] : null;
+}
+
+async function authenticateRequest(req) {
+  const token = getTokenFromRequest(req);
+  if (!token) return null;
+
+  const payload = verifyToken(token);
+  if (!payload) return null;
+
+  const user = await sql`SELECT id, email, name, role, is_active FROM users WHERE id = ${payload.id} LIMIT 1;`;
+  return user[0] || null;
+}
+
+// Get user's assigned locations
+async function getUserLocations(userId) {
+  const locations = await sql`
+    SELECT l.id, l.name, l.warehouse_code
+    FROM locations l
+    INNER JOIN user_locations ul ON l.id = ul.location_id
+    WHERE ul.user_id = ${userId}
+    ORDER BY l.name;
+  `;
+  return locations;
+}
 
 function normalizeItem(body) {
   const part_number = String(body.part_number || "").trim();
@@ -452,104 +562,234 @@ async function denyAdjustment(body) {
   return { order: rows[0] };
 }
 
+// Authentication endpoints
+async function handleLogin(req, res) {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required" });
+  }
+
+  const users = await sql`SELECT id, email, password_hash, name, role, is_active FROM users WHERE email = ${email} LIMIT 1;`;
+  const user = users[0];
+
+  if (!user || !user.is_active || !verifyPassword(password, user.password_hash)) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+
+  const token = generateToken(user);
+  const locations = await getUserLocations(user.id);
+
+  return res.status(200).json({
+    success: true,
+    token,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, locations },
+  });
+}
+
+async function handleMe(req, res) {
+  const user = await authenticateRequest(req);
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const locations = await getUserLocations(user.id);
+  return res.status(200).json({ user: { ...user, locations } });
+}
+
+// Admin endpoints
+async function handleAdminCreateUser(req, res) {
+  const admin = await authenticateRequest(req);
+  if (!admin || admin.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+
+  const { email, password, name, role, locationIds } = req.body || {};
+  if (!email || !password || !name) {
+    return res.status(400).json({ error: "Email, password, and name are required" });
+  }
+
+  const userRole = role === "admin" ? "admin" : "user";
+  const passwordHash = hashPassword(password);
+
+  const newUser = await sql.begin(async (tx) => {
+    const inserted = await tx`
+      INSERT INTO users (email, password_hash, name, role)
+      VALUES (${email}, ${passwordHash}, ${name}, ${userRole})
+      RETURNING id, email, name, role;
+    `;
+
+    if (locationIds && Array.isArray(locationIds) && locationIds.length > 0) {
+      for (const locId of locationIds) {
+        await tx`
+          INSERT INTO user_locations (user_id, location_id)
+          VALUES (${inserted[0].id}, ${locId})
+          ON CONFLICT DO NOTHING;
+        `;
+      }
+    }
+
+    return inserted[0];
+  });
+
+  const locations = await getUserLocations(newUser.id);
+  return res.status(201).json({ success: true, user: { ...newUser, locations } });
+}
+
+async function handleAdminListUsers(req, res) {
+  const admin = await authenticateRequest(req);
+  if (!admin || admin.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+
+  const users = await sql`SELECT id, email, name, role, is_active, created_at FROM users ORDER BY created_at DESC;`;
+  const usersWithLocations = await Promise.all(
+    users.map(async (user) => ({
+      ...user,
+      locations: await getUserLocations(user.id),
+    }))
+  );
+
+  return res.status(200).json({ users: usersWithLocations });
+}
+
+async function handleAdminUpdateUser(req, res) {
+  const admin = await authenticateRequest(req);
+  if (!admin || admin.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+
+  const { id, name, role, isActive, locationIds } = req.body || {};
+  if (!id) {
+    return res.status(400).json({ error: "User ID is required" });
+  }
+
+  const updated = await sql.begin(async (tx) => {
+    const userRole = role === "admin" ? "admin" : "user";
+    const updated = await tx`
+      UPDATE users
+      SET name = COALESCE(${name}, name),
+          role = COALESCE(${userRole}, role),
+          is_active = COALESCE(${isActive}, is_active)
+      WHERE id = ${id}
+      RETURNING id, email, name, role, is_active;
+    `;
+
+    if (locationIds && Array.isArray(locationIds)) {
+      await tx`DELETE FROM user_locations WHERE user_id = ${id};`;
+      for (const locId of locationIds) {
+        await tx`
+          INSERT INTO user_locations (user_id, location_id)
+          VALUES (${id}, ${locId})
+          ON CONFLICT DO NOTHING;
+        `;
+      }
+    }
+
+    return updated[0];
+  });
+
+  const locations = await getUserLocations(updated.id);
+  return res.status(200).json({ success: true, user: { ...updated, locations } });
+}
+
+async function handleAdminCreateLocation(req, res) {
+  const admin = await authenticateRequest(req);
+  if (!admin || admin.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+
+  const { name, warehouseCode } = req.body || {};
+  if (!name || !warehouseCode) {
+    return res.status(400).json({ error: "Name and warehouse code are required" });
+  }
+
+  const location = await sql`
+    INSERT INTO locations (name, warehouse_code)
+    VALUES (${name}, ${warehouseCode})
+    RETURNING id, name, warehouse_code, created_at;
+  `;
+
+  return res.status(201).json({ success: true, location: location[0] });
+}
+
+async function handleAdminListLocations(req, res) {
+  const admin = await authenticateRequest(req);
+  if (!admin || admin.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+
+  const locations = await sql`SELECT id, name, warehouse_code, created_at FROM locations ORDER BY name;`;
+  return res.status(200).json({ locations });
+}
+
 export default async function handler(req, res) {
   await setupPromise;
   res.setHeader("Content-Type", "application/json");
 
   try {
+    // Public auth endpoints
+    if (req.path === "/api/auth/login" && req.method === "POST") {
+      return handleLogin(req, res);
+    }
+
+    if (req.path === "/api/auth/me" && req.method === "GET") {
+      return handleMe(req, res);
+    }
+
+    // Admin endpoints
+    if (req.path === "/api/admin/users" && req.method === "POST") {
+      return handleAdminCreateUser(req, res);
+    }
+
+    if (req.path === "/api/admin/users" && req.method === "GET") {
+      return handleAdminListUsers(req, res);
+    }
+
+    if (req.path === "/api/admin/users" && req.method === "PATCH") {
+      return handleAdminUpdateUser(req, res);
+    }
+
+    if (req.path === "/api/admin/locations" && req.method === "POST") {
+      return handleAdminCreateLocation(req, res);
+    }
+
+    if (req.path === "/api/admin/locations" && req.method === "GET") {
+      return handleAdminListLocations(req, res);
+    }
+
+    // Protected inventory endpoints - require authentication
+    const user = await authenticateRequest(req);
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    // Get user's accessible locations
+    const userLocs = await getUserLocations(user.id);
+    if (user.role !== "admin" && userLocs.length === 0) {
+      return res.status(403).json({ error: "No accessible locations assigned" });
+    }
+
     if (req.method === "GET") {
-      const [inventory, orderQueue] = await Promise.all([
-        fetchInventory(),
-        fetchOrderQueue(),
-      ]);
-      return res.status(200).json({ inventory, orderQueue });
-    }
+      // Get inventory filtered by user's locations
+      const locationIds = user.role === "admin"
+        ? (await sql`SELECT id FROM locations;`).map(l => l.id)
+        : userLocs.map(l => l.id);
 
-    if (req.method === "POST") {
-      const action = req.body?.action;
+      const inventory = await sql`
+        SELECT part_number, location_id, description, current_qty, min_qty, max_qty
+        FROM inventory
+        WHERE location_id = ANY(${locationIds})
+        ORDER BY part_number;
+      `;
 
-      if (action === "consume") {
-        const result = await consumeInventory(req.body || {});
-        if (result.error) {
-          return res.status(result.status || 400).json({ error: result.error });
-        }
-        const orderQueue = await fetchOrderQueue();
-        return res.status(200).json({ success: true, item: result.item, orderQueue });
-      }
+      const orderQueue = await sql`
+        SELECT id, part_number, location_id, user_id, description, note, status, request_type, requested_qty, created_at
+        FROM order_queue
+        WHERE location_id = ANY(${locationIds}) AND status NOT IN ('completed', 'approved', 'denied')
+        ORDER BY created_at ASC;
+      `;
 
-      if (action === "receive") {
-        const result = await receiveInventory(req.body || {});
-        if (result.error) {
-          return res.status(result.status || 400).json({ error: result.error });
-        }
-        const orderQueue = await fetchOrderQueue();
-        return res.status(200).json({ success: true, item: result.item, orderQueue });
-      }
-
-      if (action === "request_adjustment") {
-        const result = await requestAdjustment(req.body || {});
-        if (result.error) {
-          return res.status(result.status || 400).json({ error: result.error });
-        }
-        const orderQueue = await fetchOrderQueue();
-        return res.status(200).json({ success: true, order: result.order, orderQueue });
-      }
-
-      if (action === "send_order") {
-        const result = await sendOrder(req.body?.part_number);
-        if (result.error) {
-          return res.status(result.status || 400).json({ error: result.error });
-        }
-        const orderQueue = await fetchOrderQueue();
-        return res.status(200).json({ success: true, order: result.order, orderQueue });
-      }
-
-      if (action === "approve_adjustment") {
-        const result = await approveAdjustment(req.body || {});
-        if (result.error) {
-          return res.status(result.status || 400).json({ error: result.error });
-        }
-        const orderQueue = await fetchOrderQueue();
-        return res
-          .status(200)
-          .json({ success: true, item: result.inventory, order: result.order, orderQueue });
-      }
-
-      if (action === "deny_adjustment") {
-        const result = await denyAdjustment(req.body || {});
-        if (result.error) {
-          return res.status(result.status || 400).json({ error: result.error });
-        }
-        const orderQueue = await fetchOrderQueue();
-        return res.status(200).json({ success: true, order: result.order, orderQueue });
-      }
-
-      if (action === "rename_part") {
-        const item = await renameItem(req.body || {});
-        if (item.error) {
-          return res.status(item.status || 400).json({ error: item.error });
-        }
-        const orderQueue = await fetchOrderQueue();
-        return res.status(200).json({ success: true, item, orderQueue });
-      }
-
-      const parsed = normalizeItem(req.body || {});
-      if (parsed.error) {
-        return res.status(400).json({ error: parsed.error });
-      }
-
-      const item = await upsertItem(parsed);
-      const orderQueue = await fetchOrderQueue();
-      return res.status(200).json({ success: true, item, orderQueue });
-    }
-
-    if (req.method === "PATCH") {
-      const { part_number } = req.body || {};
-      const result = await reorderToMax(part_number);
-      if (result.error) {
-        return res.status(result.status || 400).json({ error: result.error });
-      }
-      return res.status(200).json({ success: true, item: result.item });
+      return res.status(200).json({ inventory, orderQueue, user, locations: userLocs });
     }
 
     res.setHeader("Allow", "GET, POST, PATCH");

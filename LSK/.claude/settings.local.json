@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nRefactor site with clean, polished design\n\n- Extract CSS to css/styles.css with refined Sierra Modern aesthetic\n- Extract JavaScript to js/main.js with keyboard navigation for carousel\n- Organize images into images/ and favicon/ directories\n- Add .gitignore for local development files\n- Update typography to Fraunces + Source Sans 3 font pairing\n- Polish navigation on desktop and mobile with refined styling\n- Replace \"Biography\" labels with cleaner \"Read more\" copy\n- Improve color palette with warmer, more cohesive earth tones\n- Add keyboard navigation support for photo carousel\n- Streamline responsive breakpoints and spacing\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "WebFetch(domain:lostsierrakids.com)"
+    ]
+  }
+}

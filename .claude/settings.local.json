@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(git pull:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd featured thank you section for Graeagle Land & Water\n\n- Add prominent logo and gratitude message above Community Partners\n- Style with centered layout, border separator, and responsive sizing\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nUpdate CLAUDE.md: always take action without asking\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nRedesign site with terminal aesthetic\n\n- Replace canvas space animation with static terminal-style layout\n- IBM Plex Mono font, minimal grayscale palette\n- Blunt copy: whoami, cat about.txt, ls tools/\n- CRT scanlines overlay, blinking cursor\n- Mobile responsive\n- Remove script.js and audio file\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git rebase:*)",
+      "Bash(git fetch:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nRedesign with terminal aesthetic\n\n- Replace animated cards with clean terminal-style layout\n- IBM Plex Mono font, minimal grayscale palette\n- Command-line inspired navigation: whoami, ls ./tools, cat links.txt\n- Subtle CRT scanlines, blinking cursor\n- Consistent terminal styling across toolbox\n- Mobile responsive\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "WebFetch(domain:tomdisney.com)",
+      "Bash(curl:*)",
+      "Bash(nslookup:*)",
+      "Bash(ping:*)",
+      "Bash(ipconfig:*)",
+      "Bash(git commit:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(powershell:*)",
+      "Bash(npm --version:*)",
+      "Bash(bun:*)",
+      "Bash(\"C:\\\\Users\\\\ThomasDisney\\\\.bun\\\\bin\\\\bun.exe\" --version)",
+      "Bash(git diff-tree:*)",
+      "Skill(ralph-loop:ralph-loop)",
+      "Bash(git checkout:*)"
+    ]
+  },
+  "outputStyle": "default"
+}

@@ -1,0 +1,58 @@
+model_list:
+  - model_name: "anthropic/*"
+    litellm_params:
+      model: "anthropic/*"
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: "xai/*"
+    litellm_params:
+      model: "xai/*"
+      api_key: os.environ/XAI_API_KEY
+
+  - model_name: opus
+    litellm_params:
+      model: anthropic/claude-opus-4-5-20251101
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: haiku
+    litellm_params:
+      model: xai/grok-4-1-fast
+      api_key: os.environ/XAI_API_KEY
+
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: xai/grok-4-1-fast
+      api_key: os.environ/XAI_API_KEY
+
+  - model_name: claude-opus-4-5-20251101
+    litellm_params:
+      model: anthropic/claude-opus-4-5-20251101
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-3-5-sonnet-20241022
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-sonnet-4-5-20250929
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-3-5-haiku-20241022
+    litellm_params:
+      model: anthropic/claude-3-5-haiku-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+litellm_settings:
+  modify_params: true
+  check_provider_endpoint: true
+  callbacks: custom_callbacks.proxy_handler_instance
+
+general_settings:
+  master_key: sk-litellm-local

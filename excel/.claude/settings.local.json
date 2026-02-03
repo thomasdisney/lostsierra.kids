@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(head:*)",
+      "Bash(python:*)",
+      "Bash(powershell -Command \"Import-Csv ''TFI \\(unusable only\\).csv'' | Select-Object -ExpandProperty Status | Sort-Object -Unique\")",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd Jira status time analyzer script\n\n- Parses Jira CSV exports with [CHART] Time in Status field\n- Auto-detects status ID to name mappings\n- Calculates avg, median, P90 times per status\n- Exports results to CSV\n- Includes TFI project specific status mappings\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)",
+      "Bash(npm run build:*)",
+      "Bash(powershell -Command \"npm run build\")",
+      "Bash(git push:*)",
+      "Bash(git clone:*)",
+      "Bash(node --check:*)",
+      "Bash(npx esbuild:*)"
+    ]
+  }
+}
