@@ -792,6 +792,179 @@ export default async function handler(req, res) {
       return res.status(200).json({ inventory, orderQueue, user, locations: userLocs });
     }
 
+    if (req.method === "POST") {
+      const action = req.body?.action;
+      const locationIds = user.role === "admin"
+        ? (await sql`SELECT id FROM locations;`).map(l => l.id)
+        : userLocs.map(l => l.id);
+
+      if (action === "consume") {
+        const { part_number, qty, tfiTicket, location_id } = req.body;
+        const locId = location_id || locationIds[0];
+
+        if (!part_number || !qty || !tfiTicket) {
+          return res.status(400).json({ error: "part_number, qty, and tfiTicket are required" });
+        }
+
+        if (!locationIds.includes(locId)) {
+          return res.status(403).json({ error: "Access denied to this location" });
+        }
+
+        const item = await sql`
+          SELECT part_number, description, current_qty, min_qty, max_qty
+          FROM inventory
+          WHERE part_number = ${part_number} AND location_id = ${locId}
+          LIMIT 1;
+        `;
+
+        if (item.length === 0) {
+          return res.status(404).json({ error: "Item not found at this location" });
+        }
+
+        const newQty = Math.max(0, item[0].current_qty - qty);
+        await sql`
+          UPDATE inventory
+          SET current_qty = ${newQty}
+          WHERE part_number = ${part_number} AND location_id = ${locId};
+        `;
+
+        if (newQty <= item[0].min_qty) {
+          const existing = await sql`
+            SELECT id FROM order_queue
+            WHERE part_number = ${part_number} AND location_id = ${locId} AND status != 'completed'
+            LIMIT 1;
+          `;
+
+          if (existing.length === 0) {
+            await sql`
+              INSERT INTO order_queue (part_number, location_id, user_id, description, note, status, request_type)
+              VALUES (${part_number}, ${locId}, ${user.id}, ${item[0].description}, 'Auto-restock triggered', 'open', 'restock');
+            `;
+          }
+        }
+
+        const orderQueue = await sql`
+          SELECT id, part_number, location_id, user_id, description, note, status, request_type, requested_qty, created_at
+          FROM order_queue
+          WHERE location_id = ANY(${locationIds}) AND status NOT IN ('completed', 'approved', 'denied')
+          ORDER BY created_at ASC;
+        `;
+
+        return res.status(200).json({ success: true, item: { ...item[0], current_qty: newQty }, orderQueue });
+      }
+
+      if (action === "request_adjustment") {
+        const { part_number, requested_qty, reason, location_id } = req.body;
+        const locId = location_id || locationIds[0];
+
+        if (!part_number || requested_qty === undefined || !reason) {
+          return res.status(400).json({ error: "part_number, requested_qty, and reason are required" });
+        }
+
+        if (!locationIds.includes(locId)) {
+          return res.status(403).json({ error: "Access denied to this location" });
+        }
+
+        const item = await sql`
+          SELECT part_number, description FROM inventory
+          WHERE part_number = ${part_number} AND location_id = ${locId}
+          LIMIT 1;
+        `;
+
+        if (item.length === 0) {
+          return res.status(404).json({ error: "Item not found at this location" });
+        }
+
+        const note = `Requested: ${requested_qty} | Reason: ${reason}`;
+        await sql`
+          INSERT INTO order_queue (part_number, location_id, user_id, description, note, status, request_type, requested_qty)
+          VALUES (${part_number}, ${locId}, ${user.id}, ${item[0].description}, ${note}, 'pending', 'adjustment', ${requested_qty});
+        `;
+
+        const orderQueue = await sql`
+          SELECT id, part_number, location_id, user_id, description, note, status, request_type, requested_qty, created_at
+          FROM order_queue
+          WHERE location_id = ANY(${locationIds}) AND status NOT IN ('completed', 'approved', 'denied')
+          ORDER BY created_at ASC;
+        `;
+
+        return res.status(200).json({ success: true, orderQueue });
+      }
+
+      if (action === "approve_adjustment") {
+        if (user.role !== "admin") {
+          return res.status(403).json({ error: "Only admins can approve adjustments" });
+        }
+
+        const { id } = req.body;
+        if (!id) {
+          return res.status(400).json({ error: "Adjustment id is required" });
+        }
+
+        const order = await sql`
+          SELECT id, part_number, location_id, requested_qty
+          FROM order_queue
+          WHERE id = ${id} AND request_type = 'adjustment'
+          LIMIT 1;
+        `;
+
+        if (order.length === 0) {
+          return res.status(404).json({ error: "Adjustment request not found" });
+        }
+
+        await sql.begin(async (tx) => {
+          await tx`
+            UPDATE inventory
+            SET current_qty = ${order[0].requested_qty}
+            WHERE part_number = ${order[0].part_number} AND location_id = ${order[0].location_id};
+          `;
+
+          await tx`
+            UPDATE order_queue
+            SET status = 'approved'
+            WHERE id = ${id};
+          `;
+        });
+
+        const orderQueue = await sql`
+          SELECT id, part_number, location_id, user_id, description, note, status, request_type, requested_qty, created_at
+          FROM order_queue
+          WHERE location_id = ANY(${locationIds}) AND status NOT IN ('completed', 'approved', 'denied')
+          ORDER BY created_at ASC;
+        `;
+
+        return res.status(200).json({ success: true, orderQueue });
+      }
+
+      if (action === "deny_adjustment") {
+        if (user.role !== "admin") {
+          return res.status(403).json({ error: "Only admins can deny adjustments" });
+        }
+
+        const { id } = req.body;
+        if (!id) {
+          return res.status(400).json({ error: "Adjustment id is required" });
+        }
+
+        await sql`
+          UPDATE order_queue
+          SET status = 'denied'
+          WHERE id = ${id} AND request_type = 'adjustment';
+        `;
+
+        const orderQueue = await sql`
+          SELECT id, part_number, location_id, user_id, description, note, status, request_type, requested_qty, created_at
+          FROM order_queue
+          WHERE location_id = ANY(${locationIds}) AND status NOT IN ('completed', 'approved', 'denied')
+          ORDER BY created_at ASC;
+        `;
+
+        return res.status(200).json({ success: true, orderQueue });
+      }
+
+      return res.status(400).json({ error: "Unknown action" });
+    }
+
     res.setHeader("Allow", "GET, POST, PATCH");
     return res.status(405).json({ error: "Method not allowed" });
   } catch (err) {
