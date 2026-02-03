@@ -1,3 +1,208 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --wms-navy: #0a0f1a;
+  --wms-navy-light: #131b2e;
+  --wms-navy-lighter: #1e293b;
+  --wms-cyan: #06b6d4;
+  --wms-cyan-glow: rgba(6, 182, 212, 0.3);
+  --wms-amber: #f59e0b;
+  --wms-emerald: #10b981;
+  --wms-red: #ef4444;
+  --wms-text: #e2e8f0;
+  --wms-text-muted: #94a3b8;
+  --wms-border: rgba(148, 163, 184, 0.1);
+}
+
+* {
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--wms-navy);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--wms-navy-lighter);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--wms-cyan);
+}
+
+/* Grid background pattern */
+.wms-grid-bg {
+  background-color: var(--wms-navy);
+  background-image:
+    linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Glow effects */
+.wms-glow {
+  box-shadow: 0 0 20px var(--wms-cyan-glow), 0 0 40px rgba(6, 182, 212, 0.1);
+}
+
+.wms-glow-amber {
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+}
+
+.wms-glow-emerald {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+}
+
+.wms-glow-red {
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+}
+
+/* Card styling */
+.wms-card {
+  background: linear-gradient(135deg, var(--wms-navy-light) 0%, var(--wms-navy) 100%);
+  border: 1px solid var(--wms-border);
+  border-radius: 8px;
+}
+
+/* Input styling */
+.wms-input {
+  background: var(--wms-navy);
+  border: 1px solid var(--wms-border);
+  color: var(--wms-text);
+  transition: all 0.2s ease;
+}
+
+.wms-input:focus {
+  border-color: var(--wms-cyan);
+  box-shadow: 0 0 0 3px var(--wms-cyan-glow);
+  outline: none;
+}
+
+.wms-input::placeholder {
+  color: var(--wms-text-muted);
+}
+
+/* Button styling */
+.wms-btn-primary {
+  background: linear-gradient(135deg, var(--wms-cyan) 0%, #0891b2 100%);
+  color: var(--wms-navy);
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.wms-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px var(--wms-cyan-glow);
+}
+
+.wms-btn-primary:disabled {
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Table styling */
+.wms-table th {
+  background: var(--wms-navy-light);
+  color: var(--wms-text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+}
+
+.wms-table tbody tr {
+  border-bottom: 1px solid var(--wms-border);
+  transition: background 0.15s ease;
+}
+
+.wms-table tbody tr:hover {
+  background: rgba(6, 182, 212, 0.05);
+}
+
+/* Status badges */
+.wms-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+/* Sidebar navigation */
+.wms-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: var(--wms-text-muted);
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  border-left: 3px solid transparent;
+}
+
+.wms-nav-item:hover {
+  background: rgba(6, 182, 212, 0.1);
+  color: var(--wms-text);
+}
+
+.wms-nav-item.active {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--wms-cyan);
+  border-left-color: var(--wms-cyan);
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+/* Stock level indicator */
+.stock-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--wms-navy-lighter);
+  overflow: hidden;
+}
+
+.stock-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
