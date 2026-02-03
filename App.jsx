@@ -4,7 +4,6 @@ import ProtectedRoute from "./ProtectedRoute";
 import LandingPage from "./LandingPage";
 import Dashboard from "./Dashboard";
 import SimulatorV2 from "./SimulatorV2";
-import ExampleWMS from "./ExampleWMS";
 import Login from "./Login";
 import AdminDashboard from "./AdminDashboard";
 import UserDashboard from "./UserDashboard";
@@ -17,8 +16,10 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/simulator-v2" element={<SimulatorV2 />} />
-          <Route path="/example-wms" element={<ExampleWMS />} />
+
+          {/* WMS Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/example-wms" element={<Navigate to="/login" replace />} />
 
           {/* Protected WMS Routes */}
           <Route
