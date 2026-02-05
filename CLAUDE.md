@@ -18,6 +18,7 @@
 ├── index.html
 ├── css/styles.css
 ├── js/main.js
+├── CNAME              # Custom domain config (lostsierrakids.com)
 ├── images/          # Logo, team photos, hero background
 ├── favicon/         # All favicon assets
 ├── photos/          # Carousel community photos
@@ -50,10 +51,16 @@
 - CSS changes: Edit `/css/styles.css`
 - JS changes: Edit `/js/main.js`
 - Content changes: Edit `index.html`
+- Local preview: `npx serve` or `python -m http.server 8000`
 - Always commit and push to main for immediate Vercel deploy
 
+## Forms
+- Both forms use FormSubmit.co (free form-to-email service)
+- Contact form → lostsierrakids@gmail.com
+- Newsletter form → lostsierrakids@gmail.com
+
 ## Git Workflow
-- Single main branch
-- Commit directly to main
+- Work on `lsk-production` branch
+- Push to main when ready: `git push origin lsk-production:main`
 - Vercel auto-deploys on push
 - Include "Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>" in commits
