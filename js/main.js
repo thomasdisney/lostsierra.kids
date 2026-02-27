@@ -391,55 +391,36 @@ function initBulletinBoard() {
   const lightboxImg = lightbox ? lightbox.querySelector('img') : null;
   const imageExtensions = /(jpe?g|png|gif|webp|avif)$/i;
 
-  async function fetchManifest() {
+  const GITHUB_API = 'https://api.github.com/repos/thomasdisney/lostsierra.kids/contents/bulletin-board';
+
+  const fallbackImages = [
+    'bulletin-board/banner.jpg',
+    'bulletin-board/image0.png',
+    'bulletin-board/image1.png',
+  ];
+
+  // Fetch file list from GitHub API (auto-discovers new images)
+  async function fetchFromGitHub() {
     try {
-      const response = await fetch('bulletin-board/bulletin-board.json', { cache: 'no-store' });
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) return data;
-      }
+      const response = await fetch(GITHUB_API, { cache: 'no-store' });
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (!Array.isArray(data)) return null;
+
+      return data
+        .filter((file) => file.type === 'file' && imageExtensions.test(file.name))
+        .map((file) => `bulletin-board/${file.name}`);
     } catch (e) { /* ignore */ }
     return null;
   }
 
-  async function fetchDirectoryListing() {
-    try {
-      const response = await fetch('bulletin-board/');
-      if (response.ok) {
-        const html = await response.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const anchors = Array.from(doc.querySelectorAll('a'));
-
-        const files = anchors
-          .map((a) => decodeURIComponent(a.getAttribute('href') || ''))
-          .filter((href) => imageExtensions.test(href))
-          .map((href) => `bulletin-board/${href.replace(/^\/?/, '')}`);
-
-        if (files.length) return files;
-      }
-    } catch (e) { /* ignore */ }
-    return null;
-  }
-
-  function normalizeSources(...lists) {
+  function dedupe(sources) {
     const seen = new Set();
-    const deduped = [];
-
-    lists.forEach((list) => {
-      if (!Array.isArray(list)) return;
-      list.forEach((src) => {
-        const cleaned = (src || '').toString().trim();
-        if (!cleaned) return;
-        const prefixed = cleaned.startsWith('bulletin-board/') ? cleaned : `bulletin-board/${cleaned.replace(/^\/?/, '')}`;
-        const ext = prefixed.split('.').pop() || '';
-        if (!imageExtensions.test(ext) || seen.has(prefixed)) return;
-        seen.add(prefixed);
-        deduped.push(prefixed);
-      });
+    return sources.filter((src) => {
+      if (seen.has(src)) return false;
+      seen.add(src);
+      return true;
     });
-
-    return deduped;
   }
 
   async function verifyImages(sources) {
@@ -491,9 +472,8 @@ function initBulletinBoard() {
   }
 
   async function render() {
-    const manifest = await fetchManifest();
-    const listing = await fetchDirectoryListing();
-    const sources = normalizeSources(manifest, listing);
+    const fromGitHub = await fetchFromGitHub();
+    const sources = dedupe(fromGitHub || fallbackImages);
     const verified = await verifyImages(sources);
 
     if (!verified.length) {
@@ -537,7 +517,6 @@ function initBulletinBoard() {
       });
     }
 
-    // If only banner and no items, still show section
     if (!items.length && !bannerSrc) {
       section.hidden = true;
     }
