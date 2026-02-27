@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize components
   initPhotoCarousel();
   initPartnerLogos();
+  initBulletinBoard();
 });
 
 /* ==========================================================================
@@ -374,4 +375,173 @@ function initPartnerLogos() {
   }
 
   renderPartners();
+}
+
+/* ==========================================================================
+   Bulletin Board
+   ========================================================================== */
+
+function initBulletinBoard() {
+  const section = document.getElementById('bulletin-board');
+  if (!section) return;
+
+  const bannerContainer = section.querySelector('.cork-board__banner');
+  const itemsContainer = section.querySelector('.cork-board__items');
+  const lightbox = document.querySelector('.lightbox');
+  const lightboxImg = lightbox ? lightbox.querySelector('img') : null;
+  const imageExtensions = /(jpe?g|png|gif|webp|avif)$/i;
+
+  async function fetchManifest() {
+    try {
+      const response = await fetch('bulletin-board/bulletin-board.json', { cache: 'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) return data;
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  async function fetchDirectoryListing() {
+    try {
+      const response = await fetch('bulletin-board/');
+      if (response.ok) {
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const anchors = Array.from(doc.querySelectorAll('a'));
+
+        const files = anchors
+          .map((a) => decodeURIComponent(a.getAttribute('href') || ''))
+          .filter((href) => imageExtensions.test(href))
+          .map((href) => `bulletin-board/${href.replace(/^\/?/, '')}`);
+
+        if (files.length) return files;
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  function normalizeSources(...lists) {
+    const seen = new Set();
+    const deduped = [];
+
+    lists.forEach((list) => {
+      if (!Array.isArray(list)) return;
+      list.forEach((src) => {
+        const cleaned = (src || '').toString().trim();
+        if (!cleaned) return;
+        const prefixed = cleaned.startsWith('bulletin-board/') ? cleaned : `bulletin-board/${cleaned.replace(/^\/?/, '')}`;
+        const ext = prefixed.split('.').pop() || '';
+        if (!imageExtensions.test(ext) || seen.has(prefixed)) return;
+        seen.add(prefixed);
+        deduped.push(prefixed);
+      });
+    });
+
+    return deduped;
+  }
+
+  async function verifyImages(sources) {
+    const results = await Promise.all(
+      sources.map((src) =>
+        new Promise((resolve) => {
+          const img = new Image();
+          img.src = src;
+          img.onload = () => resolve(src);
+          img.onerror = () => resolve(null);
+        })
+      )
+    );
+    return results.filter(Boolean);
+  }
+
+  function isBanner(src) {
+    const filename = src.split('/').pop() || '';
+    return /banner/i.test(filename);
+  }
+
+  // Lightbox logic
+  function openLightbox(src) {
+    if (!lightbox || !lightboxImg) return;
+    lightboxImg.src = src;
+    lightboxImg.alt = 'Bulletin board image';
+    lightbox.hidden = false;
+    requestAnimationFrame(() => lightbox.classList.add('active'));
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    if (!lightbox) return;
+    lightbox.classList.remove('active');
+    document.body.style.overflow = '';
+    setTimeout(() => {
+      lightbox.hidden = true;
+      if (lightboxImg) lightboxImg.src = '';
+    }, 300);
+  }
+
+  if (lightbox) {
+    lightbox.addEventListener('click', closeLightbox);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && lightbox.classList.contains('active')) {
+        closeLightbox();
+      }
+    });
+  }
+
+  async function render() {
+    const manifest = await fetchManifest();
+    const listing = await fetchDirectoryListing();
+    const sources = normalizeSources(manifest, listing);
+    const verified = await verifyImages(sources);
+
+    if (!verified.length) {
+      section.hidden = true;
+      return;
+    }
+
+    section.hidden = false;
+
+    const bannerSrc = verified.find(isBanner);
+    const items = verified.filter((src) => !isBanner(src));
+
+    // Render banner
+    if (bannerSrc && bannerContainer) {
+      bannerContainer.innerHTML = '';
+      bannerContainer.classList.add('has-banner');
+      const img = document.createElement('img');
+      img.src = bannerSrc;
+      img.alt = 'Bulletin board banner';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      bannerContainer.appendChild(img);
+    }
+
+    // Render pinned items
+    if (itemsContainer && items.length) {
+      itemsContainer.innerHTML = '';
+      items.forEach((src) => {
+        const item = document.createElement('div');
+        item.className = 'cork-board__item';
+
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = 'Bulletin board posting';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+
+        item.appendChild(img);
+        item.addEventListener('click', () => openLightbox(src));
+        itemsContainer.appendChild(item);
+      });
+    }
+
+    // If only banner and no items, still show section
+    if (!items.length && !bannerSrc) {
+      section.hidden = true;
+    }
+  }
+
+  render();
 }
