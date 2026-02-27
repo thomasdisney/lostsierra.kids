@@ -1315,9 +1315,10 @@ textarea {
 /* Grid of pinned items */
 .cork-board__items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: var(--space-xl);
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-lg);
   padding: var(--space-sm);
+  width: 100%;
 }
 
 /* Individual pinned page */
@@ -1470,7 +1471,7 @@ textarea {
   }
 
   .cork-board__items {
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--space-lg);
   }
 }
@@ -1643,7 +1644,7 @@ textarea {
   }
 
   .cork-board__items {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: var(--space-md);
   }
 }
