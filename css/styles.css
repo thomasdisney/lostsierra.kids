@@ -1253,54 +1253,63 @@ textarea {
    Bulletin Board (Cork Board)
    -------------------------------------------------------------------------- */
 .cork-board {
-  background: url('/bulletin-board/cork.jpg') center/cover;
-  border-radius: var(--radius-xl);
-  padding: var(--space-xl);
-  box-shadow: 0 4px 20px hsl(var(--shadow-color) / 0.12);
-  border: none;
   position: relative;
-  overflow: hidden;
+  line-height: 0;
 }
 
-/* Banner image across top of board */
-.cork-board__banner {
-  margin-bottom: var(--space-lg);
-  position: relative;
-  display: none;
-}
-
-.cork-board__banner.has-banner {
+/* Cork image displayed directly — no bounding box, no dimension changes */
+.cork-board__bg {
+  width: 100%;
+  height: auto;
   display: block;
 }
 
-.cork-board__banner img {
-  width: 40%;
-  margin: 0 auto;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
-  border: 4px solid white;
+/* Overlay positions items on top of the cork image */
+.cork-board__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6% 5% 5%;
+  line-height: 1.5;
 }
 
-/* Banner pushpins - positioned at corners of the banner image */
-.cork-board__banner::before,
-.cork-board__banner::after {
+/* White title card pinned near top of board */
+.cork-board__title-card {
+  position: relative;
+  background: white;
+  padding: var(--space-sm) var(--space-xl);
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: clamp(0.9rem, 2vw, 1.5rem);
+  font-weight: 600;
+  color: var(--forest);
+  text-align: center;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+  margin-bottom: var(--space-md);
+  z-index: 1;
+}
+
+/* Pushpins on title card corners */
+.cork-board__title-card::before,
+.cork-board__title-card::after {
   content: '';
   position: absolute;
   top: -6px;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   z-index: 2;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
-.cork-board__banner::before {
-  left: 30%;
+.cork-board__title-card::before {
+  left: 8px;
   background: radial-gradient(circle at 40% 35%, #ff6b6b, #cc3333);
 }
 
-.cork-board__banner::after {
-  right: 30%;
+.cork-board__title-card::after {
+  right: 8px;
   background: radial-gradient(circle at 40% 35%, #4ecdc4, #2ba89e);
 }
 
@@ -1462,7 +1471,7 @@ textarea {
   }
 
   .cork-board__items {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: var(--space-lg);
   }
 }
@@ -1616,26 +1625,31 @@ textarea {
     aspect-ratio: 4 / 3;
   }
 
-  .cork-board {
-    padding: var(--space-md);
-    border-width: 5px;
-  }
-
   .cork-board__items {
-    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
-    gap: var(--space-md);
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: var(--space-sm);
   }
 
-  .cork-board__banner img {
-    width: 60%;
+  .cork-board__bg {
+    transform: rotate(90deg);
+    transform-origin: center center;
+    width: auto;
+    height: 100vw;
+    max-width: none;
   }
 
-  .cork-board__banner::before {
-    left: 20%;
+  .cork-board {
+    overflow: hidden;
+    max-height: 130vw;
   }
 
-  .cork-board__banner::after {
-    right: 20%;
+  .cork-board__overlay {
+    padding: 8% 6% 5%;
+  }
+
+  .cork-board__title-card {
+    font-size: 0.8rem;
+    padding: var(--space-xs) var(--space-md);
   }
 }
 

@@ -385,21 +385,19 @@ function initBulletinBoard() {
   const section = document.getElementById('bulletin-board');
   if (!section) return;
 
-  const bannerContainer = section.querySelector('.cork-board__banner');
   const itemsContainer = section.querySelector('.cork-board__items');
   const lightbox = document.querySelector('.lightbox');
   const lightboxImg = lightbox ? lightbox.querySelector('img') : null;
   const imageExtensions = /(jpe?g|png|gif|webp|avif)$/i;
+  const excludePattern = /^cork\./i;
 
   const GITHUB_API = 'https://api.github.com/repos/thomasdisney/lostsierra.kids/contents/bulletin-board';
 
   const fallbackImages = [
-    'bulletin-board/banner.jpg',
     'bulletin-board/image0.png',
     'bulletin-board/image1.png',
   ];
 
-  // Fetch file list from GitHub API (auto-discovers new images)
   async function fetchFromGitHub() {
     try {
       const response = await fetch(GITHUB_API, { cache: 'no-store' });
@@ -408,7 +406,7 @@ function initBulletinBoard() {
       if (!Array.isArray(data)) return null;
 
       return data
-        .filter((file) => file.type === 'file' && imageExtensions.test(file.name) && !/^cork\./i.test(file.name))
+        .filter((file) => file.type === 'file' && imageExtensions.test(file.name) && !excludePattern.test(file.name))
         .map((file) => `bulletin-board/${file.name}`);
     } catch (e) { /* ignore */ }
     return null;
@@ -435,11 +433,6 @@ function initBulletinBoard() {
       )
     );
     return results.filter(Boolean);
-  }
-
-  function isBanner(src) {
-    const filename = src.split('/').pop() || '';
-    return /banner/i.test(filename);
   }
 
   // Lightbox logic
@@ -483,25 +476,9 @@ function initBulletinBoard() {
 
     section.hidden = false;
 
-    const bannerSrc = verified.find(isBanner);
-    const items = verified.filter((src) => !isBanner(src));
-
-    // Render banner
-    if (bannerSrc && bannerContainer) {
-      bannerContainer.innerHTML = '';
-      bannerContainer.classList.add('has-banner');
-      const img = document.createElement('img');
-      img.src = bannerSrc;
-      img.alt = 'Bulletin board banner';
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      bannerContainer.appendChild(img);
-    }
-
-    // Render pinned items
-    if (itemsContainer && items.length) {
+    if (itemsContainer) {
       itemsContainer.innerHTML = '';
-      items.forEach((src) => {
+      verified.forEach((src) => {
         const item = document.createElement('div');
         item.className = 'cork-board__item';
 
@@ -515,10 +492,6 @@ function initBulletinBoard() {
         item.addEventListener('click', () => openLightbox(src));
         itemsContainer.appendChild(item);
       });
-    }
-
-    if (!items.length && !bannerSrc) {
-      section.hidden = true;
     }
   }
 
