@@ -1253,40 +1253,13 @@ textarea {
    Bulletin Board (Cork Board)
    -------------------------------------------------------------------------- */
 .cork-board {
-  background-color: #c4a265;
-  background-image:
-    /* fine grain speckle */
-    radial-gradient(ellipse 2px 2px at 20% 50%, rgba(160,120,60,0.5) 0%, transparent 100%),
-    radial-gradient(ellipse 2px 3px at 70% 20%, rgba(140,100,45,0.4) 0%, transparent 100%),
-    radial-gradient(ellipse 3px 2px at 40% 80%, rgba(180,140,75,0.35) 0%, transparent 100%),
-    radial-gradient(ellipse 2px 2px at 85% 65%, rgba(130,90,40,0.45) 0%, transparent 100%),
-    radial-gradient(ellipse 3px 3px at 15% 35%, rgba(170,130,65,0.3) 0%, transparent 100%),
-    /* medium grain clusters */
-    radial-gradient(ellipse 6px 4px at 30% 70%, rgba(150,110,50,0.25) 0%, transparent 100%),
-    radial-gradient(ellipse 5px 6px at 60% 30%, rgba(175,135,70,0.2) 0%, transparent 100%),
-    radial-gradient(ellipse 4px 5px at 80% 85%, rgba(140,100,45,0.25) 0%, transparent 100%),
-    radial-gradient(ellipse 7px 5px at 10% 90%, rgba(165,125,60,0.2) 0%, transparent 100%),
-    /* larger tone variation */
-    radial-gradient(ellipse 40px 35px at 25% 25%, rgba(185,150,85,0.3) 0%, transparent 100%),
-    radial-gradient(ellipse 50px 40px at 75% 60%, rgba(155,115,55,0.25) 0%, transparent 100%),
-    radial-gradient(ellipse 45px 50px at 50% 90%, rgba(175,140,75,0.2) 0%, transparent 100%),
-    radial-gradient(ellipse 35px 45px at 90% 15%, rgba(145,105,50,0.25) 0%, transparent 100%),
-    /* base warm gradient */
-    linear-gradient(160deg, #cba96e 0%, #b8956a 25%, #c4a265 50%, #ae8c58 75%, #c0a06a 100%);
-  background-size:
-    4px 4px, 5px 5px, 4px 6px, 5px 4px, 6px 5px,
-    12px 10px, 10px 12px, 11px 11px, 13px 10px,
-    80px 70px, 100px 80px, 90px 100px, 70px 90px,
-    100% 100%;
+  background: url('/bulletin-board/cork.jpg') center/cover;
   border-radius: var(--radius-xl);
   padding: var(--space-xl);
-  box-shadow:
-    inset 0 2px 12px rgba(0,0,0,0.2),
-    inset 0 -1px 6px rgba(0,0,0,0.1),
-    0 4px 20px hsl(var(--shadow-color) / 0.12);
-  border: 10px solid transparent;
-  border-image: linear-gradient(145deg, #8b6842 0%, #5c3a1e 30%, #7a5230 60%, #6b4226 100%) 1;
+  box-shadow: 0 4px 20px hsl(var(--shadow-color) / 0.12);
+  border: none;
   position: relative;
+  overflow: hidden;
 }
 
 /* Banner image across top of board */
@@ -1301,14 +1274,14 @@ textarea {
 }
 
 .cork-board__banner img {
-  width: 20%;
+  width: 40%;
   margin: 0 auto;
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 16px rgba(0,0,0,0.2);
   border: 4px solid white;
 }
 
-/* Banner pushpins */
+/* Banner pushpins - positioned at corners of the banner image */
 .cork-board__banner::before,
 .cork-board__banner::after {
   content: '';
@@ -1322,12 +1295,12 @@ textarea {
 }
 
 .cork-board__banner::before {
-  left: 12%;
+  left: 30%;
   background: radial-gradient(circle at 40% 35%, #ff6b6b, #cc3333);
 }
 
 .cork-board__banner::after {
-  right: 12%;
+  right: 30%;
   background: radial-gradient(circle at 40% 35%, #4ecdc4, #2ba89e);
 }
 
@@ -1654,7 +1627,15 @@ textarea {
   }
 
   .cork-board__banner img {
-    width: 40%;
+    width: 60%;
+  }
+
+  .cork-board__banner::before {
+    left: 20%;
+  }
+
+  .cork-board__banner::after {
+    right: 20%;
   }
 }
 

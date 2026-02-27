@@ -408,7 +408,7 @@ function initBulletinBoard() {
       if (!Array.isArray(data)) return null;
 
       return data
-        .filter((file) => file.type === 'file' && imageExtensions.test(file.name))
+        .filter((file) => file.type === 'file' && imageExtensions.test(file.name) && !/^cork\./i.test(file.name))
         .map((file) => `bulletin-board/${file.name}`);
     } catch (e) { /* ignore */ }
     return null;
