@@ -1255,74 +1255,21 @@ textarea {
 .cork-board {
   position: relative;
   padding: var(--space-xl) var(--space-xl) var(--space-lg);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  border-radius: 4px;
+  background-color: #c49a6c;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='6' stitchTiles='stitch' seed='2'/%3E%3CfeColorMatrix type='matrix' values='0.12 0 0 0 0.76 0 0.1 0 0 0.59 0 0 0.06 0 0.4 0 0 0 0.7 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
+  background-size: 400px 400px;
 
-  /* Realistic cork: layered noise at multiple scales on warm base */
-  background-color: #b89560;
-  background-image:
-    /* Tiny dark pore dots */
-    radial-gradient(circle 1px at  8%  12%, #8b6d3a 0.8px, transparent 0.8px),
-    radial-gradient(circle 1px at 22%  38%, #7f6333 0.8px, transparent 0.8px),
-    radial-gradient(circle 1px at 45%   7%, #8a6c39 0.8px, transparent 0.8px),
-    radial-gradient(circle 1px at 67%  55%, #7d6131 0.8px, transparent 0.8px),
-    radial-gradient(circle 1px at 88%  27%, #866836 0.8px, transparent 0.8px),
-    radial-gradient(circle 1px at 33%  73%, #7b5f2f 0.8px, transparent 0.8px),
-    radial-gradient(circle 1px at 55%  91%, #846636 0.8px, transparent 0.8px),
-    radial-gradient(circle 1px at 76%  82%, #7e6232 0.8px, transparent 0.8px),
-    /* Medium fibrous grain */
-    radial-gradient(ellipse 6px 3px at 15% 60%, rgba(160,120,55,0.35) 0%, transparent 100%),
-    radial-gradient(ellipse 4px 7px at 50% 25%, rgba(145,105,45,0.3)  0%, transparent 100%),
-    radial-gradient(ellipse 7px 4px at 80% 70%, rgba(155,115,50,0.3)  0%, transparent 100%),
-    radial-gradient(ellipse 5px 6px at 35% 45%, rgba(170,130,65,0.25) 0%, transparent 100%),
-    radial-gradient(ellipse 6px 5px at 65% 85%, rgba(140,100,40,0.3)  0%, transparent 100%),
-    radial-gradient(ellipse 5px 4px at 90% 15%, rgba(160,120,55,0.25) 0%, transparent 100%),
-    /* Larger warm/cool patches */
-    radial-gradient(ellipse 60px 45px at 20% 30%, rgba(195,160,90,0.25) 0%, transparent 100%),
-    radial-gradient(ellipse 70px 55px at 70% 65%, rgba(135,95,40,0.2)  0%, transparent 100%),
-    radial-gradient(ellipse 55px 65px at 45% 80%, rgba(185,150,80,0.2) 0%, transparent 100%),
-    radial-gradient(ellipse 65px 50px at 85% 20%, rgba(140,100,45,0.2) 0%, transparent 100%),
-    radial-gradient(ellipse 50px 60px at 10% 75%, rgba(175,140,70,0.15) 0%, transparent 100%),
-    /* Subtle directional grain streaks */
-    repeating-linear-gradient(
-      82deg,
-      transparent 0px,
-      transparent 3px,
-      rgba(140,100,40,0.06) 3px,
-      rgba(140,100,40,0.06) 4px
-    ),
-    repeating-linear-gradient(
-      170deg,
-      transparent 0px,
-      transparent 5px,
-      rgba(100,70,25,0.04) 5px,
-      rgba(100,70,25,0.04) 6px
-    ),
-    /* Base gradient */
-    linear-gradient(155deg, #c4a06a 0%, #b8956a 20%, #c09e65 40%, #ae8c58 60%, #bfa068 80%, #b5935f 100%);
-  background-size:
-    11px 11px, 13px 13px, 9px 9px, 11px 11px, 12px 12px, 10px 10px, 14px 14px, 11px 11px,
-    14px 12px, 12px 14px, 15px 13px, 13px 15px, 14px 14px, 12px 13px,
-    120px 90px, 140px 110px, 110px 130px, 130px 100px, 100px 120px,
-    100% 100%, 100% 100%,
-    100% 100%;
-
-  /* Wooden frame via layered box-shadows */
+  /* Wood frame */
   box-shadow:
-    /* Inner shadow for recessed cork feel */
-    inset 0 2px 6px rgba(0,0,0,0.2),
-    inset 0 -2px 6px rgba(0,0,0,0.1),
+    inset 0 2px 8px rgba(0,0,0,0.2),
+    inset 0 -2px 6px rgba(0,0,0,0.12),
     inset 2px 0 6px rgba(0,0,0,0.08),
     inset -2px 0 6px rgba(0,0,0,0.08),
-    /* Wood frame - dark inner edge */
     0 0 0 4px #5c3a1e,
-    /* Wood frame - main body */
     0 0 0 10px #7a5230,
-    /* Wood frame - light bevel */
     0 0 0 11px #96683f,
-    /* Wood frame - outer dark edge */
     0 0 0 13px #4a2c14,
-    /* Drop shadow from frame */
     0 6px 24px rgba(0,0,0,0.2);
   margin: 13px;
 }
