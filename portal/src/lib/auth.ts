@@ -43,6 +43,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
+  basePath: "/portal/api/auth",
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
