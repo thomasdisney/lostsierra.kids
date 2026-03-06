@@ -1,6 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { users, guardians, programs, academicYears } from "./schema";
 import { eq } from "drizzle-orm";
 
