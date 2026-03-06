@@ -1,10 +1,54 @@
 {
-  "buildCommand": "cd portal && npm run build",
-  "outputDirectory": "portal/.next",
-  "framework": "nextjs",
-  "installCommand": "cd portal && npm install",
-  "rewrites": [
-    { "source": "/portal/:path*", "destination": "/portal/:path*" }
+  "builds": [
+    {
+      "src": "portal/package.json",
+      "use": "@vercel/next",
+      "config": {
+        "rootDirectory": "portal"
+      }
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "css/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "js/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "images/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "photos/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "logos/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "favicon/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "bulletin-board/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "site.webmanifest",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    { "src": "/portal/(.*)", "dest": "/portal/$1" },
+    { "src": "/(css|js|images|photos|logos|favicon|bulletin-board)/(.*)", "dest": "/$1/$2" },
+    { "src": "/site.webmanifest", "dest": "/site.webmanifest" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ],
   "headers": [
     {
