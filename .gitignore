@@ -20,3 +20,10 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+.vercel
+
+# Portal (Next.js)
+portal/node_modules/
+portal/.next/
+portal/.env*
+portal/.vercel

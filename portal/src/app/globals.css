@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  --color-forest-900: #1e3a2f;
+  --color-forest-800: #2d5446;
+  --color-forest-700: #3a6858;
+  --color-forest-600: #4a7c67;
+  --color-forest-500: #5e9a7f;
+  --color-forest-400: #7fb89e;
+  --color-forest-300: #a3d1b9;
+  --color-forest-200: #c8e5d6;
+  --color-forest-100: #e8f4ee;
+  --color-forest-50: #f3faf6;
+
+  --color-gold-500: #e8c46c;
+  --color-gold-400: #f0d58a;
+  --color-gold-300: #f5e2a8;
+  --color-gold-200: #faefc8;
+  --color-gold-100: #fdf7e4;
+
+  --color-paper-50: #faf8f5;
+  --color-paper-100: #f5f1eb;
+  --color-paper-200: #ebe5db;
+  --color-paper-300: #d9d0c3;
+
+  --font-heading: "Fraunces", serif;
+  --font-body: "Source Sans 3", sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-paper-50);
+  color: var(--color-forest-900);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
