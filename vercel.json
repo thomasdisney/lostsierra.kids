@@ -2,10 +2,7 @@
   "builds": [
     {
       "src": "portal/package.json",
-      "use": "@vercel/next",
-      "config": {
-        "rootDirectory": "portal"
-      }
+      "use": "@vercel/next"
     },
     {
       "src": "index.html",
