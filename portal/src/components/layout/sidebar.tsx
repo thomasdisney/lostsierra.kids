@@ -108,7 +108,7 @@ export function Sidebar() {
           {session?.user?.email}
         </div>
         <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => signOut({ callbackUrl: "/portal/login" })}
           className="w-full rounded-lg border border-paper-300 px-3 py-1.5 text-sm text-forest-600 transition hover:bg-paper-100"
         >
           Sign Out

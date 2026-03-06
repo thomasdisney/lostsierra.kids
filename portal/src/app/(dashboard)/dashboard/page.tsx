@@ -27,7 +27,7 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       if (isAdmin) {
-        const res = await fetch("/api/admin/registrations");
+        const res = await fetch("/portal/api/admin/registrations");
         const data = await res.json();
         const regs = data.registrations || [];
         setAdminStats({
@@ -42,7 +42,7 @@ export default function DashboardPage() {
           ).length,
         });
       } else {
-        const res = await fetch("/api/registrations");
+        const res = await fetch("/portal/api/registrations");
         const data = await res.json();
         setRegistrations(data.registrations || []);
       }

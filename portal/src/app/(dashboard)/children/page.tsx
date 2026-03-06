@@ -18,7 +18,7 @@ export default function ChildrenPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/children")
+    fetch("/portal/api/children")
       .then((r) => r.json())
       .then((data) => {
         setChildren(data.children || []);
