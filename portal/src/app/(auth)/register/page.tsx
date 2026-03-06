@@ -29,7 +29,7 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    const res = await fetch("/portal/api/auth/register", {
+    const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fullName, email, password, confirmPassword }),
@@ -43,7 +43,7 @@ export default function RegisterPage() {
       return;
     }
 
-    router.push("/portal/login");
+    router.push("/login");
   }
 
   return (
@@ -151,7 +151,7 @@ export default function RegisterPage() {
           <p className="mt-4 text-center text-sm text-forest-600">
             Already have an account?{" "}
             <Link
-              href="/portal/login"
+              href="/login"
               className="font-medium text-forest-800 underline hover:text-forest-600"
             >
               Sign in

@@ -27,7 +27,7 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       if (isAdmin) {
-        const res = await fetch("/portal/api/admin/registrations");
+        const res = await fetch("/api/admin/registrations");
         const data = await res.json();
         const regs = data.registrations || [];
         setAdminStats({
@@ -42,7 +42,7 @@ export default function DashboardPage() {
           ).length,
         });
       } else {
-        const res = await fetch("/portal/api/registrations");
+        const res = await fetch("/api/registrations");
         const data = await res.json();
         setRegistrations(data.registrations || []);
       }
@@ -124,7 +124,7 @@ export default function DashboardPage() {
                 Pre-register your family for Lost Sierra Kids programs.
               </p>
               <Link
-                href="/portal/register-family"
+                href="/register-family"
                 className="inline-block rounded-lg bg-forest-800 px-6 py-2.5 font-medium text-white transition hover:bg-forest-700"
               >
                 Register Your Family
@@ -167,7 +167,7 @@ export default function DashboardPage() {
       {isAdmin && (
         <div className="grid gap-4 md:grid-cols-2">
           <Link
-            href="/portal/admin/registrations"
+            href="/admin/registrations"
             className="rounded-xl border border-paper-200 bg-white p-6 transition hover:shadow-md"
           >
             <h3 className="mb-1 font-semibold text-forest-900">
@@ -178,7 +178,7 @@ export default function DashboardPage() {
             </p>
           </Link>
           <Link
-            href="/portal/admin/users"
+            href="/admin/users"
             className="rounded-xl border border-paper-200 bg-white p-6 transition hover:shadow-md"
           >
             <h3 className="mb-1 font-semibold text-forest-900">

@@ -19,7 +19,7 @@ export default function AdminUsersPage() {
   }, []);
 
   async function loadUsers() {
-    const res = await fetch("/portal/api/admin/users");
+    const res = await fetch("/api/admin/users");
     const data = await res.json();
     setUsers(data.users || []);
     setLoading(false);
@@ -27,7 +27,7 @@ export default function AdminUsersPage() {
 
   async function toggleRole(userId: string, currentRole: string) {
     const newRole = currentRole === "admin" ? "parent" : "admin";
-    await fetch("/portal/api/admin/users", {
+    await fetch("/api/admin/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId, role: newRole }),

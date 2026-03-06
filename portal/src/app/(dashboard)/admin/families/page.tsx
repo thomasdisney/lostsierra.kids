@@ -29,7 +29,7 @@ export default function AdminFamiliesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/portal/api/admin/registrations")
+    fetch("/api/admin/registrations")
       .then((r) => r.json())
       .then((data) => {
         setRegistrations(data.registrations || []);

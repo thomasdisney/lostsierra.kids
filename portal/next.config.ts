@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  basePath: "/portal",
+  /* basePath handled by Vercel routing */
 };
 
 export default nextConfig;

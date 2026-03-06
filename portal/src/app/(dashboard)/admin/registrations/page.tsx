@@ -44,14 +44,14 @@ export default function AdminRegistrationsPage() {
   }, []);
 
   async function loadRegistrations() {
-    const res = await fetch("/portal/api/admin/registrations");
+    const res = await fetch("/api/admin/registrations");
     const data = await res.json();
     setRegistrations(data.registrations || []);
     setLoading(false);
   }
 
   async function updateStatus(id: string, status: string) {
-    await fetch("/portal/api/admin/registrations", {
+    await fetch("/api/admin/registrations", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, status }),

@@ -21,7 +21,7 @@ export default function AdminProgramsPage() {
   }, []);
 
   async function loadPrograms() {
-    const res = await fetch("/portal/api/admin/programs");
+    const res = await fetch("/api/admin/programs");
     const data = await res.json();
     setPrograms(data.programs || []);
     setLoading(false);
@@ -29,7 +29,7 @@ export default function AdminProgramsPage() {
 
   async function createProgram(e: React.FormEvent) {
     e.preventDefault();
-    await fetch("/portal/api/admin/programs", {
+    await fetch("/api/admin/programs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
@@ -40,7 +40,7 @@ export default function AdminProgramsPage() {
   }
 
   async function toggleActive(program: Program) {
-    await fetch("/portal/api/admin/programs", {
+    await fetch("/api/admin/programs", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

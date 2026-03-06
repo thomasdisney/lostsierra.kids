@@ -12,19 +12,19 @@ export default auth((req) => {
 
   if (isPublic) {
     if (isLoggedIn) {
-      return NextResponse.redirect(new URL("/portal/dashboard", req.url));
+      return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     return NextResponse.next();
   }
 
   // Protected routes - require login
   if (!isLoggedIn) {
-    return NextResponse.redirect(new URL("/portal/login", req.url));
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
   // Admin routes
   if (pathname.startsWith("/admin") && !isAdmin) {
-    return NextResponse.redirect(new URL("/portal/dashboard", req.url));
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   return NextResponse.next();

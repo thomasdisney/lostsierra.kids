@@ -24,7 +24,7 @@ export default function FamilyPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    fetch("/portal/api/guardians")
+    fetch("/api/guardians")
       .then((r) => r.json())
       .then((data) => {
         setGuardian(data.guardian);
@@ -38,7 +38,7 @@ export default function FamilyPage() {
     setSaving(true);
     setMessage("");
 
-    const res = await fetch("/portal/api/guardians", {
+    const res = await fetch("/api/guardians", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(guardian),

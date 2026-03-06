@@ -70,7 +70,7 @@ export default function RegisterFamilyPage() {
         email: session.user.email || "",
       }));
     }
-    fetch("/portal/api/admin/programs")
+    fetch("/api/admin/programs")
       .then((r) => r.json())
       .then((data) => setPrograms(data.programs || []));
   }, [session]);
@@ -130,7 +130,7 @@ export default function RegisterFamilyPage() {
     setError("");
     setSubmitting(true);
 
-    const res = await fetch("/portal/api/registrations", {
+    const res = await fetch("/api/registrations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ guardian, address, children }),
@@ -144,7 +144,7 @@ export default function RegisterFamilyPage() {
       return;
     }
 
-    router.push("/portal/dashboard");
+    router.push("/dashboard");
   }
 
   const stepTitles = ["Contact Info", "Address", "Children", "Review"];

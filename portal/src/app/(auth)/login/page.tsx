@@ -27,7 +27,7 @@ export default function LoginPage() {
       setError("Invalid email or password");
       setLoading(false);
     } else {
-      router.push("/portal/dashboard");
+      router.push("/dashboard");
     }
   }
 
@@ -100,7 +100,7 @@ export default function LoginPage() {
           <p className="mt-4 text-center text-sm text-forest-600">
             Don&apos;t have an account?{" "}
             <Link
-              href="/portal/register"
+              href="/register"
               className="font-medium text-forest-800 underline hover:text-forest-600"
             >
               Create one
