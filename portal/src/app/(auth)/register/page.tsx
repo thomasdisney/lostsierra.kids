@@ -44,62 +44,211 @@ export default function RegisterPage() {
     window.location.href = "/portal/login";
   }
 
-  return (
-    <div className="relative flex min-h-screen items-center justify-center bg-paper-50 px-4 py-12">
-      {/* Soft gradient wash */}
-      <div
-        className="pointer-events-none fixed inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(45,84,70,0.06) 0%, transparent 70%)",
-        }}
-      />
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "0.7rem 0.9rem",
+    fontSize: "0.9rem",
+    fontFamily: "'Source Sans 3', sans-serif",
+    color: "#1e3a2f",
+    backgroundColor: "#fff",
+    border: "1.5px solid #ebe5db",
+    borderRadius: "10px",
+    outline: "none",
+    transition: "border-color 0.15s, box-shadow 0.15s",
+    boxSizing: "border-box" as const,
+  };
 
-      <div className="relative z-10 w-full max-w-sm">
-        {/* Brand header */}
-        <div className="mb-8 flex flex-col items-center">
+  function handleFocus(e: React.FocusEvent<HTMLInputElement>) {
+    e.target.style.borderColor = "#5e9a7f";
+    e.target.style.boxShadow = "0 0 0 3px rgba(94,154,127,0.12)";
+  }
+
+  function handleBlur(e: React.FocusEvent<HTMLInputElement>) {
+    e.target.style.borderColor = "#ebe5db";
+    e.target.style.boxShadow = "none";
+  }
+
+  return (
+    <div style={{ display: "flex", minHeight: "100vh" }}>
+      {/* Left brand panel */}
+      <div
+        style={{
+          flex: "0 0 420px",
+          background: "linear-gradient(165deg, #1e3a2f 0%, #2d5446 50%, #3a6858 100%)",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: "3rem 2.5rem",
+          position: "relative",
+          overflow: "hidden",
+        }}
+        className="hidden lg:flex"
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: "-80px",
+            right: "-80px",
+            width: "300px",
+            height: "300px",
+            borderRadius: "50%",
+            border: "1px solid rgba(232,196,108,0.1)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: "-120px",
+            left: "-60px",
+            width: "400px",
+            height: "400px",
+            borderRadius: "50%",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}
+        />
+
+        <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
           <img
             src="/images/logo.png"
             alt="Lost Sierra Kids"
-            width={72}
-            height={72}
-            className="mb-4 rounded-xl"
-            style={{ width: 72, height: 72, objectFit: "contain" }}
+            style={{
+              width: "100px",
+              height: "100px",
+              objectFit: "contain",
+              borderRadius: "16px",
+              marginBottom: "2rem",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            }}
           />
-          <h1
-            className="text-2xl font-bold tracking-tight text-forest-900"
-            style={{ fontFamily: "var(--font-heading)" }}
+          <h2
+            style={{
+              fontFamily: "'Fraunces', serif",
+              fontSize: "1.75rem",
+              fontWeight: 700,
+              color: "#fff",
+              lineHeight: 1.3,
+              marginBottom: "0.75rem",
+            }}
           >
             Family Portal
-          </h1>
-          <p className="mt-1 text-sm text-forest-500">
-            Lost Sierra Kids
-          </p>
-        </div>
-
-        {/* Card */}
-        <div className="rounded-2xl border border-paper-200 bg-white px-7 py-8 shadow-[0_1px_3px_rgba(30,58,47,0.06),0_8px_24px_rgba(30,58,47,0.04)]">
-          <h2
-            className="mb-1 text-lg font-semibold text-forest-900"
-            style={{ fontFamily: "var(--font-heading)" }}
-          >
-            Create your account
           </h2>
-          <p className="mb-6 text-sm text-forest-500">
-            Join the enrollment waitlist for LSK programs
+          <p
+            style={{
+              fontFamily: "'Source Sans 3', sans-serif",
+              fontSize: "0.95rem",
+              color: "rgba(255,255,255,0.65)",
+              lineHeight: 1.6,
+              maxWidth: "280px",
+            }}
+          >
+            Pre-register your family for Lost Sierra Kids programs in Graeagle, CA
           </p>
+          <div
+            style={{
+              marginTop: "2.5rem",
+              padding: "1rem 1.5rem",
+              background: "rgba(255,255,255,0.06)",
+              borderRadius: "12px",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <p
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontSize: "0.85rem",
+                color: "#e8c46c",
+                fontStyle: "italic",
+                lineHeight: 1.5,
+              }}
+            >
+              &ldquo;Growing together in the Sierra&rdquo;
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Right form panel */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: "2rem 1.5rem",
+          backgroundColor: "#faf8f5",
+          overflowY: "auto",
+        }}
+      >
+        <div style={{ width: "100%", maxWidth: "380px" }}>
+          {/* Mobile-only logo */}
+          <div className="mb-8 flex flex-col items-center lg:hidden">
+            <img
+              src="/images/logo.png"
+              alt="Lost Sierra Kids"
+              style={{
+                width: "64px",
+                height: "64px",
+                objectFit: "contain",
+                borderRadius: "12px",
+                marginBottom: "1rem",
+              }}
+            />
+            <h1
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontSize: "1.5rem",
+                fontWeight: 700,
+                color: "#1e3a2f",
+              }}
+            >
+              Family Portal
+            </h1>
+            <p style={{ fontSize: "0.85rem", color: "#4a7c67", marginTop: "0.25rem" }}>
+              Lost Sierra Kids
+            </p>
+          </div>
+
+          {/* Form header */}
+          <div style={{ marginBottom: "1.75rem" }}>
+            <h1
+              style={{
+                fontFamily: "'Fraunces', serif",
+                fontSize: "1.65rem",
+                fontWeight: 700,
+                color: "#1e3a2f",
+                marginBottom: "0.5rem",
+              }}
+            >
+              Create your account
+            </h1>
+            <p style={{ fontSize: "0.9rem", color: "#4a7c67" }}>
+              Join the enrollment waitlist for LSK programs
+            </p>
+          </div>
 
           {error && (
-            <div className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm leading-snug text-red-700">
+            <div
+              style={{
+                marginBottom: "1.5rem",
+                padding: "0.75rem 1rem",
+                backgroundColor: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: "10px",
+                fontSize: "0.875rem",
+                color: "#b91c1c",
+              }}
+            >
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: "1.25rem" }}>
               <label
                 htmlFor="fullName"
-                className="mb-1 block text-sm font-medium text-forest-800"
+                style={{ display: "block", fontSize: "0.875rem", fontWeight: 600, color: "#2d5446", marginBottom: "0.4rem" }}
               >
                 Full name
               </label>
@@ -110,17 +259,19 @@ export default function RegisterPage() {
                 onChange={(e) => setFullName(e.target.value)}
                 required
                 autoComplete="name"
-                className="block w-full rounded-lg border border-paper-200 bg-paper-50 px-3.5 py-2.5 text-sm text-forest-900 outline-none transition placeholder:text-paper-300 focus:border-forest-500 focus:bg-white focus:ring-2 focus:ring-forest-100"
                 placeholder="Jane Smith"
+                style={inputStyle}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
               />
             </div>
 
-            <div>
+            <div style={{ marginBottom: "1.25rem" }}>
               <label
                 htmlFor="email"
-                className="mb-1 block text-sm font-medium text-forest-800"
+                style={{ display: "block", fontSize: "0.875rem", fontWeight: 600, color: "#2d5446", marginBottom: "0.4rem" }}
               >
-                Email
+                Email address
               </label>
               <input
                 id="email"
@@ -129,86 +280,144 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
-                className="block w-full rounded-lg border border-paper-200 bg-paper-50 px-3.5 py-2.5 text-sm text-forest-900 outline-none transition placeholder:text-paper-300 focus:border-forest-500 focus:bg-white focus:ring-2 focus:ring-forest-100"
                 placeholder="you@example.com"
+                style={inputStyle}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
               />
             </div>
 
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-1 block text-sm font-medium text-forest-800"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-                autoComplete="new-password"
-                className="block w-full rounded-lg border border-paper-200 bg-paper-50 px-3.5 py-2.5 text-sm text-forest-900 outline-none transition placeholder:text-paper-300 focus:border-forest-500 focus:bg-white focus:ring-2 focus:ring-forest-100"
-                placeholder="At least 8 characters"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="confirmPassword"
-                className="mb-1 block text-sm font-medium text-forest-800"
-              >
-                Confirm password
-              </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                minLength={8}
-                autoComplete="new-password"
-                className="block w-full rounded-lg border border-paper-200 bg-paper-50 px-3.5 py-2.5 text-sm text-forest-900 outline-none transition placeholder:text-paper-300 focus:border-forest-500 focus:bg-white focus:ring-2 focus:ring-forest-100"
-                placeholder="Re-enter your password"
-              />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.75rem" }}>
+              <div>
+                <label
+                  htmlFor="password"
+                  style={{ display: "block", fontSize: "0.875rem", fontWeight: 600, color: "#2d5446", marginBottom: "0.4rem" }}
+                >
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  placeholder="8+ characters"
+                  style={inputStyle}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="confirmPassword"
+                  style={{ display: "block", fontSize: "0.875rem", fontWeight: 600, color: "#2d5446", marginBottom: "0.4rem" }}
+                >
+                  Confirm
+                </label>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  placeholder="Re-enter"
+                  style={inputStyle}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                />
+              </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-forest-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-forest-700 disabled:opacity-50"
+              style={{
+                width: "100%",
+                padding: "0.75rem",
+                fontSize: "0.9rem",
+                fontWeight: 700,
+                fontFamily: "'Source Sans 3', sans-serif",
+                color: "#fff",
+                backgroundColor: loading ? "#3a6858" : "#2d5446",
+                border: "none",
+                borderRadius: "10px",
+                cursor: loading ? "not-allowed" : "pointer",
+                transition: "background-color 0.15s, transform 0.1s",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+                opacity: loading ? 0.7 : 1,
+              }}
+              onMouseOver={(e) => {
+                if (!loading) (e.target as HTMLElement).style.backgroundColor = "#1e3a2f";
+              }}
+              onMouseOut={(e) => {
+                if (!loading) (e.target as HTMLElement).style.backgroundColor = "#2d5446";
+              }}
             >
               {loading && (
                 <span
-                  className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                  style={{
+                    display: "inline-block",
+                    width: "16px",
+                    height: "16px",
+                    border: "2px solid rgba(255,255,255,0.3)",
+                    borderTopColor: "#fff",
+                    borderRadius: "50%",
+                    animation: "spin 0.6s linear infinite",
+                  }}
                 />
               )}
               {loading ? "Creating account\u2026" : "Create Account"}
             </button>
           </form>
+
+          {/* Divider */}
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", margin: "1.75rem 0" }}>
+            <div style={{ flex: 1, height: "1px", backgroundColor: "#ebe5db" }} />
+            <span style={{ fontSize: "0.75rem", color: "#d9d0c3" }}>or</span>
+            <div style={{ flex: 1, height: "1px", backgroundColor: "#ebe5db" }} />
+          </div>
+
+          <p style={{ textAlign: "center", fontSize: "0.9rem", color: "#4a7c67" }}>
+            Already have an account?{" "}
+            <Link
+              href="/login"
+              style={{
+                color: "#2d5446",
+                fontWeight: 700,
+                textDecoration: "underline",
+                textUnderlineOffset: "3px",
+                textDecorationColor: "#a3d1b9",
+              }}
+            >
+              Sign in
+            </Link>
+          </p>
+
+          <p style={{ textAlign: "center", fontSize: "0.8rem", color: "#d9d0c3", marginTop: "2rem" }}>
+            <a
+              href="https://lostsierrakids.com"
+              style={{ color: "inherit", textDecoration: "none", transition: "color 0.15s" }}
+              onMouseOver={(e) => { (e.target as HTMLElement).style.color = "#4a7c67"; }}
+              onMouseOut={(e) => { (e.target as HTMLElement).style.color = "#d9d0c3"; }}
+            >
+              &larr; Back to lostsierrakids.com
+            </a>
+          </p>
         </div>
-
-        {/* Footer links */}
-        <p className="mt-6 text-center text-sm text-forest-600">
-          Already have an account?{" "}
-          <Link
-            href="/login"
-            className="font-semibold text-forest-800 underline decoration-forest-300 underline-offset-2 transition hover:decoration-forest-500"
-          >
-            Sign in
-          </Link>
-        </p>
-
-        <p className="mt-4 text-center text-xs text-paper-300">
-          <a
-            href="https://lostsierrakids.com"
-            className="transition hover:text-forest-500"
-          >
-            &larr; lostsierrakids.com
-          </a>
-        </p>
       </div>
+
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
