@@ -29,8 +29,9 @@ async function seed() {
     .from(users)
     .where(eq(users.email, adminEmail));
 
+  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
+
   if (existing.length === 0) {
-    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
     const [adminUser] = await db
       .insert(users)
       .values({
@@ -49,7 +50,12 @@ async function seed() {
 
     console.log("Admin user created");
   } else {
-    console.log("Admin user already exists");
+    // Always update password hash to match current ADMIN_PASSWORD
+    await db
+      .update(users)
+      .set({ passwordHash })
+      .where(eq(users.email, adminEmail));
+    console.log("Admin password updated");
   }
 
   // Seed programs
