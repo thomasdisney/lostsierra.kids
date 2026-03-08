@@ -45,6 +45,7 @@
     { "src": "/portal/(.*)", "dest": "/portal/$1" },
     { "src": "/(css|js|images|photos|logos|favicon|bulletin-board)/(.*)", "dest": "/$1/$2" },
     { "src": "/site.webmanifest", "dest": "/site.webmanifest" },
+    { "src": "/_next/(.*)", "dest": "/portal/_next/$1" },
     { "src": "/(.*)", "dest": "/index.html" }
   ],
   "headers": [
