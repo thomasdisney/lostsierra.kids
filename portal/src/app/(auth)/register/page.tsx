@@ -42,7 +42,7 @@ export default function RegisterPage() {
         return;
       }
 
-      window.location.href = "/portal/login";
+      window.location.href = `/portal/verify?email=${encodeURIComponent(email)}`;
     } catch (err) {
       setError(`Connection error: ${err instanceof Error ? err.message : "Please try again."}`);
       setLoading(false);

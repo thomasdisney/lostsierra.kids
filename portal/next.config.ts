@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  basePath: "/portal",
+  /* basePath cannot be used with Vercel builds array */
 };
 
 export default nextConfig;

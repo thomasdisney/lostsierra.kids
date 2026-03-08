@@ -8,10 +8,15 @@ import {
   pgEnum,
   boolean,
   integer,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // Enums
-export const userRoleEnum = pgEnum("user_role", ["admin", "parent"]);
+export const userRoleEnum = pgEnum("user_role", [
+  "admin",
+  "parent",
+  "new_user",
+]);
 export const genderEnum = pgEnum("gender", ["male", "female", "other"]);
 export const registrationStatusEnum = pgEnum("registration_status", [
   "submitted",
@@ -26,6 +31,28 @@ export const relationshipTypeEnum = pgEnum("relationship_type", [
   "grandparent",
   "other",
 ]);
+export const announcementAudienceEnum = pgEnum("announcement_audience", [
+  "all",
+  "parents",
+  "admin",
+]);
+export const attendanceStatusEnum = pgEnum("attendance_status", [
+  "present",
+  "absent",
+  "excused",
+]);
+export const invoiceStatusEnum = pgEnum("invoice_status", [
+  "draft",
+  "sent",
+  "paid",
+  "overdue",
+  "cancelled",
+]);
+export const paymentMethodEnum = pgEnum("payment_method", [
+  "cash",
+  "check",
+  "other",
+]);
 
 // Users - auth accounts
 export const users = pgTable("users", {
@@ -33,7 +60,10 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
-  role: userRoleEnum("role").notNull().default("parent"),
+  role: userRoleEnum("role").notNull().default("new_user"),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  verificationCode: varchar("verification_code", { length: 6 }),
+  verificationExpiry: timestamp("verification_expiry"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -129,6 +159,138 @@ export const registrationChildren = pgTable("registration_children", {
   programId: uuid("program_id").references(() => programs.id),
 });
 
+// Announcements
+export const announcements = pgTable("announcements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body").notNull(),
+  audience: announcementAudienceEnum("audience").notNull().default("all"),
+  pinned: boolean("pinned").notNull().default(false),
+  publishedAt: timestamp("published_at"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const announcementReads = pgTable("announcement_reads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  announcementId: uuid("announcement_id")
+    .notNull()
+    .references(() => announcements.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at").notNull().defaultNow(),
+});
+
+// Enrollments
+export const enrollments = pgTable("enrollments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  childId: uuid("child_id")
+    .notNull()
+    .references(() => children.id, { onDelete: "cascade" }),
+  programId: uuid("program_id")
+    .notNull()
+    .references(() => programs.id, { onDelete: "cascade" }),
+  academicYearId: uuid("academic_year_id").references(() => academicYears.id),
+  active: boolean("active").notNull().default(true),
+  enrolledAt: timestamp("enrolled_at").notNull().defaultNow(),
+});
+
+// Attendance
+export const attendanceRecords = pgTable(
+  "attendance_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    childId: uuid("child_id")
+      .notNull()
+      .references(() => children.id, { onDelete: "cascade" }),
+    programId: uuid("program_id")
+      .notNull()
+      .references(() => programs.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    status: attendanceStatusEnum("status").notNull(),
+    notes: text("notes"),
+    markedBy: uuid("marked_by").references(() => users.id),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("attendance_unique_idx").on(
+      table.childId,
+      table.programId,
+      table.date
+    ),
+  ]
+);
+
+// Weekly Reports
+export const weeklyReports = pgTable("weekly_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  programId: uuid("program_id")
+    .notNull()
+    .references(() => programs.id, { onDelete: "cascade" }),
+  weekStart: date("week_start").notNull(),
+  weekEnd: date("week_end").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  summary: text("summary"),
+  highlights: text("highlights"),
+  notes: text("notes"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Invoices
+export const invoices = pgTable("invoices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  guardianId: uuid("guardian_id")
+    .notNull()
+    .references(() => guardians.id, { onDelete: "cascade" }),
+  invoiceNumber: varchar("invoice_number", { length: 20 }).notNull().unique(),
+  status: invoiceStatusEnum("status").notNull().default("draft"),
+  subtotal: integer("subtotal").notNull().default(0),
+  tax: integer("tax").notNull().default(0),
+  total: integer("total").notNull().default(0),
+  dueDate: date("due_date"),
+  notes: text("notes"),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const invoiceItems = pgTable("invoice_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  invoiceId: uuid("invoice_id")
+    .notNull()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  description: varchar("description", { length: 500 }).notNull(),
+  childId: uuid("child_id").references(() => children.id),
+  programId: uuid("program_id").references(() => programs.id),
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: integer("unit_price").notNull(),
+  total: integer("total").notNull(),
+});
+
+// Payments
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  invoiceId: uuid("invoice_id")
+    .notNull()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(),
+  method: paymentMethodEnum("method").notNull(),
+  notes: text("notes"),
+  paidAt: timestamp("paid_at").notNull().defaultNow(),
+  recordedBy: uuid("recorded_by").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Type exports for use in app
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -139,3 +301,10 @@ export type NewChild = typeof children.$inferInsert;
 export type Program = typeof programs.$inferSelect;
 export type Registration = typeof registrations.$inferSelect;
 export type AcademicYear = typeof academicYears.$inferSelect;
+export type Announcement = typeof announcements.$inferSelect;
+export type Enrollment = typeof enrollments.$inferSelect;
+export type AttendanceRecord = typeof attendanceRecords.$inferSelect;
+export type WeeklyReport = typeof weeklyReports.$inferSelect;
+export type Invoice = typeof invoices.$inferSelect;
+export type InvoiceItem = typeof invoiceItems.$inferSelect;
+export type Payment = typeof payments.$inferSelect;

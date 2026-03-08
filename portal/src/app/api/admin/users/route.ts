@@ -16,6 +16,7 @@ export async function GET() {
       email: users.email,
       fullName: users.fullName,
       role: users.role,
+      emailVerified: users.emailVerified,
       createdAt: users.createdAt,
     })
     .from(users);
@@ -31,7 +32,7 @@ export async function PATCH(req: NextRequest) {
 
   const { userId, role } = await req.json();
 
-  if (!["admin", "parent"].includes(role)) {
+  if (!["admin", "parent", "new_user"].includes(role)) {
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
   }
 

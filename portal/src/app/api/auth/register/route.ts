@@ -4,6 +4,10 @@ import { db } from "@/lib/db";
 import { users, guardians } from "@/lib/db/schema";
 import { registerSchema } from "@/lib/validations";
 import { eq } from "drizzle-orm";
+import {
+  generateVerificationCode,
+  sendVerificationEmail,
+} from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -32,6 +36,8 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  const verificationCode = generateVerificationCode();
+  const verificationExpiry = new Date(Date.now() + 15 * 60 * 1000);
 
   const [user] = await db
     .insert(users)
@@ -39,7 +45,10 @@ export async function POST(req: NextRequest) {
       email,
       passwordHash,
       fullName,
-      role: "parent",
+      role: "new_user",
+      emailVerified: false,
+      verificationCode,
+      verificationExpiry,
     })
     .returning();
 
@@ -50,5 +59,8 @@ export async function POST(req: NextRequest) {
     email,
   });
 
-  return NextResponse.json({ success: true });
+  // Send verification email
+  await sendVerificationEmail(email, verificationCode);
+
+  return NextResponse.json({ success: true, email });
 }

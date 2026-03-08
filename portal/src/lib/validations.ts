@@ -52,9 +52,64 @@ export const registrationSchema = z.object({
   children: z.array(childSchema).min(1, "At least one child is required"),
 });
 
+export const announcementSchema = z.object({
+  title: z.string().min(1, "Title is required").max(255),
+  body: z.string().min(1, "Body is required"),
+  audience: z.enum(["all", "parents", "admin"]).default("all"),
+  pinned: z.boolean().default(false),
+  publish: z.boolean().default(false),
+});
+
+export const attendanceSchema = z.object({
+  childId: z.string().uuid(),
+  programId: z.string().uuid(),
+  date: z.string(),
+  status: z.enum(["present", "absent", "excused"]),
+  notes: z.string().optional(),
+});
+
+export const weeklyReportSchema = z.object({
+  programId: z.string().uuid("Select a program"),
+  weekStart: z.string(),
+  weekEnd: z.string(),
+  title: z.string().min(1, "Title is required").max(255),
+  summary: z.string().optional(),
+  highlights: z.string().optional(),
+  notes: z.string().optional(),
+  publish: z.boolean().default(false),
+});
+
+export const invoiceItemSchema = z.object({
+  description: z.string().min(1, "Description is required"),
+  childId: z.string().uuid().optional(),
+  programId: z.string().uuid().optional(),
+  quantity: z.number().int().positive().default(1),
+  unitPrice: z.number().int(), // cents
+});
+
+export const invoiceSchema = z.object({
+  guardianId: z.string().uuid("Select a family"),
+  items: z.array(invoiceItemSchema).min(1, "At least one item is required"),
+  dueDate: z.string().optional(),
+  notes: z.string().optional(),
+  tax: z.number().int().default(0),
+});
+
+export const paymentSchema = z.object({
+  invoiceId: z.string().uuid(),
+  amount: z.number().int().positive(),
+  method: z.enum(["cash", "check", "other"]),
+  notes: z.string().optional(),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type GuardianInput = z.infer<typeof guardianSchema>;
 export type AddressInput = z.infer<typeof addressSchema>;
 export type ChildInput = z.infer<typeof childSchema>;
 export type RegistrationInput = z.infer<typeof registrationSchema>;
+export type AnnouncementInput = z.infer<typeof announcementSchema>;
+export type AttendanceInput = z.infer<typeof attendanceSchema>;
+export type WeeklyReportInput = z.infer<typeof weeklyReportSchema>;
+export type InvoiceInput = z.infer<typeof invoiceSchema>;
+export type PaymentInput = z.infer<typeof paymentSchema>;

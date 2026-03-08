@@ -7,8 +7,27 @@ interface User {
   email: string;
   fullName: string;
   role: string;
+  emailVerified: boolean;
   createdAt: string;
 }
+
+const roleCycle: Record<string, string> = {
+  new_user: "parent",
+  parent: "admin",
+  admin: "parent",
+};
+
+const roleColors: Record<string, string> = {
+  admin: "bg-gold-200 text-forest-900",
+  parent: "bg-forest-100 text-forest-700",
+  new_user: "bg-orange-100 text-orange-800",
+};
+
+const roleActions: Record<string, string> = {
+  new_user: "Approve → Parent",
+  parent: "Promote → Admin",
+  admin: "Demote → Parent",
+};
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -25,8 +44,8 @@ export default function AdminUsersPage() {
     setLoading(false);
   }
 
-  async function toggleRole(userId: string, currentRole: string) {
-    const newRole = currentRole === "admin" ? "parent" : "admin";
+  async function changeRole(userId: string, currentRole: string) {
+    const newRole = roleCycle[currentRole] || "parent";
     await fetch("/portal/api/admin/users", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -43,14 +62,52 @@ export default function AdminUsersPage() {
     );
   }
 
+  const pendingUsers = users.filter((u) => u.role === "new_user");
+  const activeUsers = users.filter((u) => u.role !== "new_user");
+
   return (
     <div>
       <h1 className="mb-1 text-2xl font-bold text-forest-900">
         Manage Users
       </h1>
       <p className="mb-8 text-forest-600">
-        View all accounts and manage admin roles
+        Approve new accounts and manage roles
       </p>
+
+      {pendingUsers.length > 0 && (
+        <div className="mb-8">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-orange-700">
+            Pending Approval ({pendingUsers.length})
+          </h2>
+          <div className="rounded-xl border-2 border-orange-200 bg-orange-50">
+            {pendingUsers.map((user) => (
+              <div
+                key={user.id}
+                className="flex items-center justify-between border-b border-orange-100 p-4 last:border-0"
+              >
+                <div>
+                  <div className="font-medium text-forest-900">
+                    {user.fullName}
+                  </div>
+                  <div className="text-sm text-forest-600">{user.email}</div>
+                  <div className="text-xs text-forest-500">
+                    Joined {new Date(user.createdAt).toLocaleDateString()}
+                    {!user.emailVerified && (
+                      <span className="ml-2 text-red-500">Email not verified</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => changeRole(user.id, user.role)}
+                  className="rounded-lg bg-forest-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-forest-600"
+                >
+                  Approve
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border border-paper-200 bg-white">
         <div className="overflow-x-auto">
@@ -58,20 +115,14 @@ export default function AdminUsersPage() {
             <thead>
               <tr className="border-b border-paper-200 text-left">
                 <th className="px-4 py-3 font-medium text-forest-600">Name</th>
-                <th className="px-4 py-3 font-medium text-forest-600">
-                  Email
-                </th>
+                <th className="px-4 py-3 font-medium text-forest-600">Email</th>
                 <th className="px-4 py-3 font-medium text-forest-600">Role</th>
-                <th className="px-4 py-3 font-medium text-forest-600">
-                  Joined
-                </th>
-                <th className="px-4 py-3 font-medium text-forest-600">
-                  Actions
-                </th>
+                <th className="px-4 py-3 font-medium text-forest-600">Joined</th>
+                <th className="px-4 py-3 font-medium text-forest-600">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
+              {activeUsers.map((user) => (
                 <tr
                   key={user.id}
                   className="border-b border-paper-100 last:border-0"
@@ -83,9 +134,7 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                        user.role === "admin"
-                          ? "bg-gold-200 text-forest-900"
-                          : "bg-forest-100 text-forest-700"
+                        roleColors[user.role] || "bg-gray-100 text-gray-800"
                       }`}
                     >
                       {user.role}
@@ -96,12 +145,10 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <button
-                      onClick={() => toggleRole(user.id, user.role)}
+                      onClick={() => changeRole(user.id, user.role)}
                       className="text-sm font-medium text-forest-600 hover:text-forest-800"
                     >
-                      {user.role === "admin"
-                        ? "Demote to Parent"
-                        : "Promote to Admin"}
+                      {roleActions[user.role]}
                     </button>
                   </td>
                 </tr>

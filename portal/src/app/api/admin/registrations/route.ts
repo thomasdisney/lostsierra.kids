@@ -7,6 +7,8 @@ import {
   registrationChildren,
   children,
   programs,
+  enrollments,
+  academicYears,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -75,6 +77,42 @@ export async function PATCH(req: NextRequest) {
       reviewedAt: new Date(),
     })
     .where(eq(registrations.id, id));
+
+  // Auto-create enrollment records when approved
+  if (status === "approved") {
+    const regChildren = await db
+      .select()
+      .from(registrationChildren)
+      .where(eq(registrationChildren.registrationId, id));
+
+    // Get active academic year
+    const [activeYear] = await db
+      .select()
+      .from(academicYears)
+      .where(eq(academicYears.active, true));
+
+    for (const rc of regChildren) {
+      if (rc.programId) {
+        // Check if enrollment already exists
+        const existing = await db
+          .select()
+          .from(enrollments)
+          .where(eq(enrollments.childId, rc.childId));
+
+        const alreadyEnrolled = existing.some(
+          (e) => e.programId === rc.programId
+        );
+
+        if (!alreadyEnrolled) {
+          await db.insert(enrollments).values({
+            childId: rc.childId,
+            programId: rc.programId,
+            academicYearId: activeYear?.id || null,
+          });
+        }
+      }
+    }
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -39,6 +39,7 @@ async function seed() {
         passwordHash,
         fullName: "Thomas Disney",
         role: "admin",
+        emailVerified: true,
       })
       .returning();
 
@@ -50,10 +51,10 @@ async function seed() {
 
     console.log("Admin user created");
   } else {
-    // Always update password hash to match current ADMIN_PASSWORD
+    // Always update password hash and ensure admin is verified
     await db
       .update(users)
-      .set({ passwordHash })
+      .set({ passwordHash, emailVerified: true })
       .where(eq(users.email, adminEmail));
     console.log("Admin password updated");
   }
