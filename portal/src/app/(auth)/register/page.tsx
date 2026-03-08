@@ -101,6 +101,8 @@ export default function RegisterPage() {
               height: "160px",
               objectFit: "contain",
               borderRadius: "20px",
+              backgroundColor: "#fff",
+              padding: "12px",
               boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
             }}
           />
@@ -121,14 +123,6 @@ export default function RegisterPage() {
         }}
       >
         <div style={{ width: "100%", maxWidth: "380px" }}>
-          {/* Mobile-only title */}
-          <div className="mb-6 lg:hidden" style={{ textAlign: "center" }}>
-            <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: "1.5rem", fontWeight: 700, color: "#1e3a2f" }}>
-              Lost Sierra Kids
-            </h1>
-            <p style={{ fontSize: "0.85rem", color: "#4a7c67", marginTop: "0.25rem" }}>Family Portal</p>
-          </div>
-
           {/* Form header */}
           <div style={{ marginBottom: "1.75rem" }}>
             <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: "1.65rem", fontWeight: 700, color: "#1e3a2f", marginBottom: "0.5rem" }}>
