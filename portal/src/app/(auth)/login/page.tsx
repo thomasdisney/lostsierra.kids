@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -8,89 +9,34 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [debug, setDebug] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    setDebug("");
     setLoading(true);
 
     try {
-      // Step 1: Get CSRF token
-      const csrfRes = await fetch("/portal/api/auth/csrf");
-      if (!csrfRes.ok) {
-        setError(`Failed to reach auth server (${csrfRes.status})`);
-        setDebug(`CSRF fetch failed: ${csrfRes.status} ${csrfRes.statusText}`);
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Invalid email or password");
         setLoading(false);
         return;
       }
-      const { csrfToken } = await csrfRes.json();
 
-      // Step 2: Post credentials
-      const res = await fetch("/portal/api/auth/callback/credentials", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          csrfToken,
-          email,
-          password,
-          redirect: "false",
-          json: "true",
-          callbackUrl: "/portal/dashboard",
-        }),
-        redirect: "manual",
-      });
-
-      // Step 3: Handle response
-      const url = res.url;
-      const status = res.status;
-
-      if (status === 200 || status === 302) {
-        // Check if there's an error in the redirect URL
-        if (url && url.includes("error=")) {
-          const errorParam = new URL(url).searchParams.get("error");
-          setError(`Invalid email or password`);
-          setDebug(`Auth error: ${errorParam}, URL: ${url}`);
-          setLoading(false);
-          return;
-        }
-
-        // Try to read response
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          // Not JSON, likely a redirect — that means success
-          window.location.href = "/portal/dashboard";
-          return;
-        }
-
-        if (data?.url) {
-          // NextAuth returned a redirect URL — success
-          window.location.href = "/portal/dashboard";
-          return;
-        }
-
-        if (data?.error) {
-          setError("Invalid email or password");
-          setDebug(`Response: ${JSON.stringify(data)}`);
-          setLoading(false);
-          return;
-        }
-
-        // If we got here with 200, assume success
+      if (result?.ok) {
         window.location.href = "/portal/dashboard";
-      } else {
-        setError(`Sign in failed (${status})`);
-        let body = "";
-        try { body = await res.text(); } catch {}
-        setDebug(`Status: ${status}, URL: ${url}, Body: ${body.substring(0, 300)}`);
-        setLoading(false);
+        return;
       }
+
+      setError("Sign in failed. Please try again.");
+      setLoading(false);
     } catch (err) {
-      setError(`Connection error: ${err instanceof Error ? err.message : "Unknown"}`);
-      setDebug(`Exception: ${err}`);
+      setError(`Connection error: ${err instanceof Error ? err.message : "Please try again."}`);
       setLoading(false);
     }
   }
@@ -186,18 +132,6 @@ export default function LoginPage() {
               borderRadius: "10px", fontSize: "0.875rem", color: "#b91c1c", lineHeight: 1.5,
             }}>
               {error}
-            </div>
-          )}
-
-          {/* Debug info — will remove once login works */}
-          {debug && (
-            <div style={{
-              marginBottom: "1rem", padding: "0.75rem 1rem",
-              backgroundColor: "#fefce8", border: "1px solid #fde68a",
-              borderRadius: "10px", fontSize: "0.75rem", color: "#92400e", lineHeight: 1.5,
-              wordBreak: "break-all",
-            }}>
-              Debug: {debug}
             </div>
           )}
 
