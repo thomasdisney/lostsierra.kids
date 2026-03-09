@@ -2,6 +2,7 @@
 
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { signOut } from "next-auth/react";
 
 function VerifyContent() {
   const searchParams = useSearchParams();
@@ -34,7 +35,9 @@ function VerifyContent() {
       }
 
       setSuccess(true);
-      setTimeout(() => {
+      // Clear any existing session so next login gets fresh token with emailVerified: true
+      setTimeout(async () => {
+        await signOut({ redirect: false }).catch(() => {});
         window.location.href = "/portal/login";
       }, 2000);
     } catch {

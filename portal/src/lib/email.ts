@@ -1,11 +1,12 @@
 import { Resend } from "resend";
+import crypto from "crypto";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
 }
 
 export function generateVerificationCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 999999).toString();
 }
 
 export async function sendVerificationEmail(
@@ -14,7 +15,7 @@ export async function sendVerificationEmail(
 ): Promise<boolean> {
   try {
     await getResend().emails.send({
-      from: "Lost Sierra Kids <noreply@lostsierrakids.com>",
+      from: "Lost Sierra Kids <onboarding@resend.dev>",
       to: email,
       subject: "Verify your email — Lost Sierra Kids Portal",
       html: `

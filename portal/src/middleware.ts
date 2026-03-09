@@ -26,6 +26,19 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/portal/login", req.url));
   }
 
+  // Redirect unverified users to verify page
+  const isEmailVerified = (req.auth?.user as { isEmailVerified?: boolean })
+    ?.isEmailVerified;
+  if (!isEmailVerified) {
+    const email = req.auth?.user?.email || "";
+    return NextResponse.redirect(
+      new URL(
+        `/portal/verify?email=${encodeURIComponent(email)}`,
+        req.url
+      )
+    );
+  }
+
   // new_user restriction: only dashboard + register-family allowed
   if (isNewUser) {
     const allowedPaths = ["/dashboard", "/register-family"];

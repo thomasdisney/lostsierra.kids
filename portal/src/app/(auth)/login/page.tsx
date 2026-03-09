@@ -23,10 +23,6 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        if (result.error === "EMAIL_NOT_VERIFIED" || result.code === "EMAIL_NOT_VERIFIED") {
-          window.location.href = `/portal/verify?email=${encodeURIComponent(email)}`;
-          return;
-        }
         setError("Invalid email or password");
         setLoading(false);
         return;

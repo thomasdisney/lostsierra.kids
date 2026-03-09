@@ -25,10 +25,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!user) return null;
 
-        if (!user.emailVerified) {
-          throw new Error("EMAIL_NOT_VERIFIED");
-        }
-
         const valid = await bcrypt.compare(password, user.passwordHash);
         if (!valid) return null;
 
@@ -43,6 +39,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.fullName,
           role: user.role,
           guardianId: guardian?.id,
+          isEmailVerified: user.emailVerified ?? false,
         };
       },
     }),
@@ -57,6 +54,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.role = (user as { role: string }).role;
         token.guardianId = (user as { guardianId: string }).guardianId;
+        token.isEmailVerified = (user as unknown as { isEmailVerified: boolean }).isEmailVerified;
       }
       return token;
     },
@@ -66,6 +64,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         (session.user as { role: string }).role = token.role as string;
         (session.user as { guardianId: string }).guardianId =
           token.guardianId as string;
+        (session.user as unknown as { isEmailVerified: boolean }).isEmailVerified =
+          token.isEmailVerified as boolean;
       }
       return session;
     },
