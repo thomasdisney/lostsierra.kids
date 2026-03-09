@@ -56,7 +56,7 @@ export default function NewReportPage() {
     });
 
     if (res.ok) {
-      router.push("/admin/reports");
+      router.push("/portal/admin/reports");
     }
     setSaving(false);
   }
@@ -183,7 +183,7 @@ export default function NewReportPage() {
             Save Draft
           </button>
           <button
-            onClick={() => router.push("/admin/reports")}
+            onClick={() => router.push("/portal/admin/reports")}
             className="px-4 py-2 text-sm text-forest-500 hover:text-forest-700"
           >
             Cancel

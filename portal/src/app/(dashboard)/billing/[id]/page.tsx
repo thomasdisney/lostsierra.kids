@@ -71,7 +71,7 @@ export default function InvoiceDetailPage() {
   return (
     <div>
       <button
-        onClick={() => router.push("/billing")}
+        onClick={() => router.push("/portal/billing")}
         className="mb-4 text-sm text-forest-500 hover:text-forest-700"
       >
         &larr; All Invoices

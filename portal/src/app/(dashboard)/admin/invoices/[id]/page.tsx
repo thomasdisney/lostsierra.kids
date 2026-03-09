@@ -113,7 +113,7 @@ export default function AdminInvoiceDetailPage() {
   return (
     <div>
       <button
-        onClick={() => router.push("/admin/invoices")}
+        onClick={() => router.push("/portal/admin/invoices")}
         className="mb-4 text-sm text-forest-500 hover:text-forest-700"
       >
         &larr; All Invoices

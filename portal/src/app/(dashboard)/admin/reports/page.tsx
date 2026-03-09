@@ -65,7 +65,7 @@ export default function AdminReportsPage() {
           <p className="text-forest-600">Create and manage weekly reports</p>
         </div>
         <Link
-          href="/admin/reports/new"
+          href="/portal/admin/reports/new"
           className="rounded-lg bg-forest-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-forest-600"
         >
           New Report

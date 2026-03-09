@@ -89,7 +89,7 @@ export default function NewInvoicePage() {
     });
 
     if (res.ok) {
-      router.push("/admin/invoices");
+      router.push("/portal/admin/invoices");
     } else {
       const data = await res.json();
       setError(data.error || "Failed to create invoice");
@@ -229,7 +229,7 @@ export default function NewInvoicePage() {
             {saving ? "Creating..." : "Create Invoice"}
           </button>
           <button
-            onClick={() => router.push("/admin/invoices")}
+            onClick={() => router.push("/portal/admin/invoices")}
             className="px-4 py-2 text-sm text-forest-500 hover:text-forest-700"
           >
             Cancel

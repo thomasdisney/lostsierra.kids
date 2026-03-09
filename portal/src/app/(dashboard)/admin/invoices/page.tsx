@@ -72,7 +72,7 @@ export default function AdminInvoicesPage() {
           </p>
         </div>
         <Link
-          href="/admin/invoices/new"
+          href="/portal/admin/invoices/new"
           className="rounded-lg bg-forest-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-forest-600"
         >
           New Invoice
@@ -131,7 +131,7 @@ export default function AdminInvoicesPage() {
                   >
                     <td className="px-4 py-3 font-medium text-forest-900">
                       <Link
-                        href={`/admin/invoices/${inv.id}`}
+                        href={`/portal/admin/invoices/${inv.id}`}
                         className="hover:text-forest-600"
                       >
                         {inv.invoiceNumber}
@@ -168,7 +168,7 @@ export default function AdminInvoicesPage() {
                           </button>
                         )}
                         <Link
-                          href={`/admin/invoices/${inv.id}`}
+                          href={`/portal/admin/invoices/${inv.id}`}
                           className="text-xs font-medium text-forest-600 hover:text-forest-800"
                         >
                           View

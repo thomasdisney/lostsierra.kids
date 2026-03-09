@@ -185,7 +185,7 @@ export default function DashboardPage() {
             family while you wait.
           </p>
           <Link
-            href="/register-family"
+            href="/portal/register-family"
             className="inline-block rounded-lg bg-forest-800 px-6 py-2.5 font-medium text-white transition hover:bg-forest-700"
           >
             Register Your Family
@@ -244,7 +244,7 @@ export default function DashboardPage() {
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Link
-              href="/admin/registrations"
+              href="/portal/admin/registrations"
               className="rounded-xl border border-paper-200 bg-white p-6 transition hover:shadow-md"
             >
               <h3 className="mb-1 font-semibold text-forest-900">
@@ -255,7 +255,7 @@ export default function DashboardPage() {
               </p>
             </Link>
             <Link
-              href="/admin/users"
+              href="/portal/admin/users"
               className="rounded-xl border border-paper-200 bg-white p-6 transition hover:shadow-md"
             >
               <h3 className="mb-1 font-semibold text-forest-900">
@@ -268,7 +268,7 @@ export default function DashboardPage() {
               </p>
             </Link>
             <Link
-              href="/admin/attendance"
+              href="/portal/admin/attendance"
               className="rounded-xl border border-paper-200 bg-white p-6 transition hover:shadow-md"
             >
               <h3 className="mb-1 font-semibold text-forest-900">
@@ -279,7 +279,7 @@ export default function DashboardPage() {
               </p>
             </Link>
             <Link
-              href="/admin/invoices"
+              href="/portal/admin/invoices"
               className="rounded-xl border border-paper-200 bg-white p-6 transition hover:shadow-md"
             >
               <h3 className="mb-1 font-semibold text-forest-900">
@@ -290,7 +290,7 @@ export default function DashboardPage() {
               </p>
             </Link>
             <Link
-              href="/admin/reports"
+              href="/portal/admin/reports"
               className="rounded-xl border border-paper-200 bg-white p-6 transition hover:shadow-md"
             >
               <h3 className="mb-1 font-semibold text-forest-900">
@@ -301,7 +301,7 @@ export default function DashboardPage() {
               </p>
             </Link>
             <Link
-              href="/admin/announcements"
+              href="/portal/admin/announcements"
               className="rounded-xl border border-paper-200 bg-white p-6 transition hover:shadow-md"
             >
               <h3 className="mb-1 font-semibold text-forest-900">
@@ -323,7 +323,7 @@ export default function DashboardPage() {
             <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
               {parentStats.unpaidCount > 0 && (
                 <Link
-                  href="/billing"
+                  href="/portal/billing"
                   className="rounded-xl border border-red-200 bg-red-50 p-4 transition hover:shadow-sm"
                 >
                   <div className="text-xl font-bold text-red-700">
@@ -364,7 +364,7 @@ export default function DashboardPage() {
                     Recent Announcements
                   </h2>
                   <Link
-                    href="/announcements"
+                    href="/portal/announcements"
                     className="text-xs text-forest-500 hover:text-forest-700"
                   >
                     View all
@@ -374,7 +374,7 @@ export default function DashboardPage() {
                   {parentStats.recentAnnouncements.map((a) => (
                     <Link
                       key={a.id}
-                      href="/announcements"
+                      href="/portal/announcements"
                       className="block rounded-lg border border-paper-200 bg-white p-3 transition hover:shadow-sm"
                     >
                       <div className="font-medium text-forest-800">
@@ -400,7 +400,7 @@ export default function DashboardPage() {
                 Pre-register your family for Lost Sierra Kids programs.
               </p>
               <Link
-                href="/register-family"
+                href="/portal/register-family"
                 className="inline-block rounded-lg bg-forest-800 px-6 py-2.5 font-medium text-white transition hover:bg-forest-700"
               >
                 Register Your Family

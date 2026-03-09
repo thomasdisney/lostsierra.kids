@@ -76,7 +76,7 @@ export default function BillingPage() {
             .map((inv) => (
               <Link
                 key={inv.id}
-                href={`/billing/${inv.id}`}
+                href={`/portal/billing/${inv.id}`}
                 className="block rounded-xl border border-paper-200 bg-white p-4 transition hover:shadow-sm"
               >
                 <div className="flex items-center justify-between">
