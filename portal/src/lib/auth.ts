@@ -56,6 +56,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.guardianId = (user as { guardianId: string }).guardianId;
         token.isEmailVerified = (user as unknown as { isEmailVerified: boolean }).isEmailVerified;
       }
+
+      // Refresh role + emailVerified from DB on each request (lightweight single-row query)
+      if (token.sub) {
+        const [dbUser] = await db
+          .select({ role: users.role, emailVerified: users.emailVerified })
+          .from(users)
+          .where(eq(users.id, token.sub));
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.isEmailVerified = dbUser.emailVerified;
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {

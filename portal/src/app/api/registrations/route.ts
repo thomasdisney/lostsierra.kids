@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
+  users,
   guardians,
   children,
   guardianChildren,
@@ -98,7 +99,20 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ id: registration.id, status: "submitted" });
+  // Upgrade user from new_user to new_account after first registration
+  const [user] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, session.user.id));
+
+  if (user?.role === "new_user") {
+    await db
+      .update(users)
+      .set({ role: "new_account" })
+      .where(eq(users.id, session.user.id));
+  }
+
+  return NextResponse.json({ id: registration.id, status: "submitted", roleUpgraded: user?.role === "new_user" });
 }
 
 export async function GET() {
