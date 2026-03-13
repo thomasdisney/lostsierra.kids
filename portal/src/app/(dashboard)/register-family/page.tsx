@@ -28,7 +28,8 @@ export default function RegisterFamilyPage() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
   const [ready, setReady] = useState(false);
 
   const [guardian, setGuardian] = useState({
@@ -51,118 +52,131 @@ export default function RegisterFamilyPage() {
 
   const [children, setChildren] = useState<ChildForm[]>([{ ...emptyChild }]);
 
-  // Refs for auto-save (avoids dependency loops)
+  // Refs for debounced DB save
   const guardianRef = useRef(guardian);
   const addressRef = useRef(address);
-  const childrenRef = useRef(children);
-  const stepRef = useRef(step);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   guardianRef.current = guardian;
   addressRef.current = address;
-  childrenRef.current = children;
-  stepRef.current = step;
 
-  // Load draft + session data once on mount
+  // Load guardian data from database on mount (the only data source)
   useEffect(() => {
     if (status === "loading") return;
 
-    let g = { fullName: "", email: "", phone: "", altPhone: "", relationship: "mother", occupation: "" };
-    let a = { addressLine1: "", addressLine2: "", city: "", state: "CA", zip: "", country: "US" };
-    let c: ChildForm[] = [{ ...emptyChild }];
-
-    // Load localStorage draft
-    const draft = localStorage.getItem("lsk-reg-draft");
-    if (draft) {
+    async function loadFromDB() {
       try {
-        const d = JSON.parse(draft);
-        if (d.guardian) g = { ...g, ...d.guardian };
-        if (d.address) a = { ...a, ...d.address };
-        if (d.children?.length) c = d.children;
-      } catch { /* ignore */ }
+        const res = await fetch("/portal/api/guardians");
+        const data = await res.json();
+        const g = data.guardian;
+
+        if (g) {
+          setGuardian({
+            fullName: g.fullName || session?.user?.name || "",
+            email: g.email || session?.user?.email || "",
+            phone: g.phone || "",
+            altPhone: g.altPhone || "",
+            relationship: "mother",
+            occupation: g.occupation || "",
+          });
+          setAddress({
+            addressLine1: g.addressLine1 || "",
+            addressLine2: g.addressLine2 || "",
+            city: g.city || "",
+            state: g.state || "CA",
+            zip: g.zip || "",
+            country: g.country || "US",
+          });
+        } else if (session?.user) {
+          setGuardian((prev) => ({
+            ...prev,
+            fullName: session.user.name || "",
+            email: session.user.email || "",
+          }));
+        }
+      } catch {
+        // If API fails, just use session name/email
+        if (session?.user) {
+          setGuardian((prev) => ({
+            ...prev,
+            fullName: session.user.name || "",
+            email: session.user.email || "",
+          }));
+        }
+      }
+      setReady(true);
     }
 
-    // Session always wins for name/email
-    if (session?.user) {
-      if (!g.fullName) g.fullName = session.user.name || "";
-      if (!g.email) g.email = session.user.email || "";
-    }
-
-    setGuardian(g);
-    setAddress(a);
-    setChildren(c);
-    setReady(true);
+    loadFromDB();
   }, [session, status]);
 
-  // Auto-save to localStorage (debounced, uses refs)
+  // Auto-save guardian/address to database (debounced)
   function scheduleSave() {
     if (!ready) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      localStorage.setItem(
-        "lsk-reg-draft",
-        JSON.stringify({
-          guardian: guardianRef.current,
-          address: addressRef.current,
-          children: childrenRef.current,
-        })
-      );
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1500);
-    }, 800);
+    saveTimerRef.current = setTimeout(async () => {
+      setSaving(true);
+      try {
+        await fetch("/portal/api/guardians", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fullName: guardianRef.current.fullName,
+            phone: guardianRef.current.phone,
+            altPhone: guardianRef.current.altPhone,
+            occupation: guardianRef.current.occupation,
+            addressLine1: addressRef.current.addressLine1,
+            addressLine2: addressRef.current.addressLine2,
+            city: addressRef.current.city,
+            state: addressRef.current.state,
+            zip: addressRef.current.zip,
+            country: addressRef.current.country,
+          }),
+        });
+        setSavedMsg("Saved");
+        setTimeout(() => setSavedMsg(""), 1500);
+      } catch { /* silently fail */ }
+      setSaving(false);
+    }, 1200);
   }
 
   function setGuardianAndSave(g: typeof guardian) {
     setGuardian(g);
+    guardianRef.current = g;
     scheduleSave();
   }
 
   function setAddressAndSave(a: typeof address) {
     setAddress(a);
+    addressRef.current = a;
     scheduleSave();
   }
 
   function updateChild(index: number, field: string, value: string | string[]) {
-    setChildren((prev) => {
-      const next = prev.map((c, i) => (i === index ? { ...c, [field]: value } : c));
-      childrenRef.current = next;
-      scheduleSave();
-      return next;
-    });
+    setChildren((prev) =>
+      prev.map((c, i) => (i === index ? { ...c, [field]: value } : c))
+    );
   }
 
   function toggleDay(childIndex: number, day: string) {
-    setChildren((prev) => {
-      const next = prev.map((c, i) => {
+    setChildren((prev) =>
+      prev.map((c, i) => {
         if (i !== childIndex) return c;
         const days = c.daysInterested.includes(day)
           ? c.daysInterested.filter((d) => d !== day)
           : [...c.daysInterested, day];
         return { ...c, daysInterested: days };
-      });
-      childrenRef.current = next;
-      scheduleSave();
-      return next;
-    });
+      })
+    );
   }
 
   function addChild() {
-    setChildren((prev) => {
-      const next = [...prev, { ...emptyChild }];
-      childrenRef.current = next;
-      scheduleSave();
-      return next;
-    });
+    setChildren((prev) => [...prev, { ...emptyChild }]);
   }
 
   function removeChild(index: number) {
     if (children.length > 1) {
-      setChildren((prev) => {
-        const next = prev.filter((_, i) => i !== index);
-        childrenRef.current = next;
-        scheduleSave();
-        return next;
-      });
+      setChildren((prev) => prev.filter((_, i) => i !== index));
     }
   }
 
@@ -216,7 +230,6 @@ export default function RegisterFamilyPage() {
       return;
     }
 
-    localStorage.removeItem("lsk-reg-draft");
     window.location.href = "/portal/dashboard";
   }
 
@@ -238,7 +251,9 @@ export default function RegisterFamilyPage() {
         <h1 className="text-xl font-bold text-forest-900 md:text-2xl">
           Family Pre-Registration
         </h1>
-        {saved && <span className="text-xs text-green-600">Draft saved</span>}
+        <span className="text-xs text-green-600">
+          {saving ? "Saving..." : savedMsg}
+        </span>
       </div>
       <p className="mb-6 text-sm text-forest-600">
         Register your family for Lost Sierra Kids programs
@@ -282,19 +297,19 @@ export default function RegisterFamilyPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-forest-800">Full Name *</label>
-                <input type="text" value={guardian.fullName} onChange={(e) => setGuardianAndSave({ ...guardian, fullName: e.target.value })} className={inputCls} autoComplete="name" />
+                <input type="text" value={guardian.fullName} onChange={(e) => setGuardianAndSave({ ...guardian, fullName: e.target.value })} className={inputCls} autoComplete="on" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-forest-800">Email *</label>
-                <input type="email" value={guardian.email} onChange={(e) => setGuardianAndSave({ ...guardian, email: e.target.value })} className={inputCls} autoComplete="email" />
+                <input type="email" value={guardian.email} onChange={(e) => setGuardianAndSave({ ...guardian, email: e.target.value })} className={inputCls} autoComplete="on" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-forest-800">Phone *</label>
-                <input type="tel" value={guardian.phone} onChange={(e) => setGuardianAndSave({ ...guardian, phone: e.target.value })} className={inputCls} autoComplete="tel" />
+                <input type="tel" value={guardian.phone} onChange={(e) => setGuardianAndSave({ ...guardian, phone: e.target.value })} className={inputCls} autoComplete="on" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-forest-800">Alternate Phone</label>
-                <input type="tel" value={guardian.altPhone} onChange={(e) => setGuardianAndSave({ ...guardian, altPhone: e.target.value })} className={inputCls} />
+                <input type="tel" value={guardian.altPhone} onChange={(e) => setGuardianAndSave({ ...guardian, altPhone: e.target.value })} className={inputCls} autoComplete="on" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-forest-800">Relationship to Children *</label>
@@ -308,7 +323,7 @@ export default function RegisterFamilyPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-forest-800">Occupation</label>
-                <input type="text" value={guardian.occupation} onChange={(e) => setGuardianAndSave({ ...guardian, occupation: e.target.value })} className={inputCls} />
+                <input type="text" value={guardian.occupation} onChange={(e) => setGuardianAndSave({ ...guardian, occupation: e.target.value })} className={inputCls} autoComplete="on" />
               </div>
             </div>
           </div>
@@ -321,24 +336,24 @@ export default function RegisterFamilyPage() {
             <div className="grid gap-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-forest-800">Address Line 1 *</label>
-                <input type="text" value={address.addressLine1} onChange={(e) => setAddressAndSave({ ...address, addressLine1: e.target.value })} className={inputCls} autoComplete="address-line1" />
+                <input type="text" value={address.addressLine1} onChange={(e) => setAddressAndSave({ ...address, addressLine1: e.target.value })} className={inputCls} autoComplete="on" />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-forest-800">Address Line 2</label>
-                <input type="text" value={address.addressLine2} onChange={(e) => setAddressAndSave({ ...address, addressLine2: e.target.value })} className={inputCls} autoComplete="address-line2" />
+                <input type="text" value={address.addressLine2} onChange={(e) => setAddressAndSave({ ...address, addressLine2: e.target.value })} className={inputCls} autoComplete="on" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-forest-800">City *</label>
-                  <input type="text" value={address.city} onChange={(e) => setAddressAndSave({ ...address, city: e.target.value })} className={inputCls} autoComplete="address-level2" />
+                  <input type="text" value={address.city} onChange={(e) => setAddressAndSave({ ...address, city: e.target.value })} className={inputCls} autoComplete="on" />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-forest-800">State *</label>
-                  <input type="text" value={address.state} onChange={(e) => setAddressAndSave({ ...address, state: e.target.value })} className={inputCls} autoComplete="address-level1" />
+                  <input type="text" value={address.state} onChange={(e) => setAddressAndSave({ ...address, state: e.target.value })} className={inputCls} autoComplete="on" />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-forest-800">ZIP *</label>
-                  <input type="text" value={address.zip} onChange={(e) => setAddressAndSave({ ...address, zip: e.target.value })} className={inputCls} autoComplete="postal-code" inputMode="numeric" />
+                  <input type="text" value={address.zip} onChange={(e) => setAddressAndSave({ ...address, zip: e.target.value })} className={inputCls} autoComplete="on" inputMode="numeric" />
                 </div>
               </div>
             </div>
@@ -360,11 +375,11 @@ export default function RegisterFamilyPage() {
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-forest-800">First Name *</label>
-                    <input type="text" value={child.firstName} onChange={(e) => updateChild(i, "firstName", e.target.value)} className={inputWhiteCls} autoComplete="given-name" />
+                    <input type="text" value={child.firstName} onChange={(e) => updateChild(i, "firstName", e.target.value)} className={inputWhiteCls} autoComplete="on" />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-forest-800">Last Name *</label>
-                    <input type="text" value={child.lastName} onChange={(e) => updateChild(i, "lastName", e.target.value)} className={inputWhiteCls} autoComplete="family-name" />
+                    <input type="text" value={child.lastName} onChange={(e) => updateChild(i, "lastName", e.target.value)} className={inputWhiteCls} autoComplete="on" />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-forest-800">Date of Birth *</label>
@@ -413,6 +428,7 @@ export default function RegisterFamilyPage() {
                       rows={2}
                       placeholder="Anything the staff should know about your child..."
                       className={inputWhiteCls}
+                      autoComplete="on"
                     />
                   </div>
                 </div>
