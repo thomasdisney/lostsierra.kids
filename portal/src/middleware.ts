@@ -51,9 +51,9 @@ export default auth((req) => {
     }
   }
 
-  // new_account restriction: dashboard, register-family, children, family
+  // new_account restriction: dashboard, register-family, children, family, announcements
   if (isNewAccount) {
-    const allowedPaths = ["/dashboard", "/register-family", "/children", "/family"];
+    const allowedPaths = ["/dashboard", "/register-family", "/children", "/family", "/announcements"];
     const isAllowed = allowedPaths.some(
       (p) => pathname === p || pathname.startsWith(p + "/")
     );

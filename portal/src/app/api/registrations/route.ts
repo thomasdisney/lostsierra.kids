@@ -67,8 +67,6 @@ export async function POST(req: NextRequest) {
         dateOfBirth: childData.dateOfBirth,
         gender: childData.gender || null,
         daysInterested: daysStr,
-        allergies: childData.allergies || null,
-        medicalNotes: childData.medicalNotes || null,
         staffNotes: childData.staffNotes || null,
       })
       .returning();

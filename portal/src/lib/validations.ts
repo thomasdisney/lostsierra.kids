@@ -42,8 +42,6 @@ export const childSchema = z.object({
   }, "Date of birth cannot be in the future"),
   gender: z.enum(["male", "female", "other"]).optional(),
   daysInterested: z.array(z.string()).min(1, "Select at least one day"),
-  allergies: z.string().optional(),
-  medicalNotes: z.string().optional(),
   staffNotes: z.string().optional(),
 });
 

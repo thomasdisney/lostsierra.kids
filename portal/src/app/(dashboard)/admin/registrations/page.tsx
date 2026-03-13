@@ -8,8 +8,6 @@ interface Child {
   lastName: string;
   dateOfBirth: string;
   daysInterested: string | null;
-  allergies: string | null;
-  medicalNotes: string | null;
   staffNotes: string | null;
   program: { name: string } | null;
 }
@@ -143,12 +141,6 @@ export default function AdminRegistrationsPage() {
                           )}
                           {!child.daysInterested && child.program?.name && (
                             <p>Program: {child.program.name}</p>
-                          )}
-                          {child.allergies && (
-                            <p className="text-red-600">Allergies: {child.allergies}</p>
-                          )}
-                          {child.medicalNotes && (
-                            <p>Special Instructions: {child.medicalNotes}</p>
                           )}
                           {child.staffNotes && (
                             <p>Staff Notes: {child.staffNotes}</p>

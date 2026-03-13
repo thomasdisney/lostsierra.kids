@@ -202,64 +202,74 @@ export default function DashboardPage() {
     );
   }
 
-  // new_account view - can register family + view family records
+  // new_account view
   if (isNewAccount) {
+    const hasRegs = registrations.length > 0;
     return (
       <div>
-        <h1 className="mb-1 text-2xl font-bold text-forest-900">
+        <h1 className="mb-1 text-xl font-bold text-forest-900 md:text-2xl">
           Welcome, {session?.user?.name}
         </h1>
-        <p className="mb-8 text-forest-600">Family Portal</p>
+        <p className="mb-6 text-sm text-forest-600">Family Portal</p>
 
-        <div className="mb-6 rounded-xl border-2 border-gold-300 bg-gold-50 p-6">
-          <h2 className="mb-2 text-lg font-semibold text-forest-900">
-            Account Setup
-          </h2>
-          <p className="mb-4 text-sm text-forest-600">
-            Register your family to get started. You can view your family records while your account is being reviewed.
-          </p>
-          <div className="flex flex-wrap gap-3">
+        {!hasRegs ? (
+          <div className="mb-6 rounded-xl border-2 border-gold-300 bg-gold-50 p-5">
+            <h2 className="mb-2 text-lg font-semibold text-forest-900">Get Started</h2>
+            <p className="mb-4 text-sm text-forest-600">
+              Register your family to join Lost Sierra Kids programs.
+            </p>
             <Link
               href="/portal/register-family"
-              className="inline-block rounded-lg bg-forest-800 px-6 py-2.5 font-medium text-white transition hover:bg-forest-700"
+              className="inline-block rounded-lg bg-forest-800 px-6 py-2.5 text-sm font-medium text-white transition active:bg-forest-700"
             >
               Register Your Family
             </Link>
-            <Link
-              href="/portal/children"
-              className="inline-block rounded-lg border border-forest-300 px-6 py-2.5 font-medium text-forest-700 transition hover:bg-forest-50"
-            >
-              View Children
-            </Link>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-medium text-green-800">Registration submitted</p>
+                  <p className="text-sm text-green-600">Your family is registered. You can edit your information while we review it.</p>
+                </div>
+              </div>
+            </div>
 
-        {/* Show registrations if any */}
-        {registrations.length > 0 && (
-          <div className="rounded-xl border border-paper-200 bg-white">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Link href="/portal/children" className="rounded-xl border border-paper-200 bg-white p-5 transition active:shadow-sm">
+                <h3 className="mb-1 font-semibold text-forest-900">My Children</h3>
+                <p className="text-sm text-forest-600">View and edit your children&apos;s info</p>
+              </Link>
+              <Link href="/portal/family" className="rounded-xl border border-paper-200 bg-white p-5 transition active:shadow-sm">
+                <h3 className="mb-1 font-semibold text-forest-900">Family Profile</h3>
+                <p className="text-sm text-forest-600">Update contact info and address</p>
+              </Link>
+              <Link href="/portal/announcements" className="rounded-xl border border-paper-200 bg-white p-5 transition active:shadow-sm md:col-span-2">
+                <h3 className="mb-1 font-semibold text-forest-900">Announcements</h3>
+                <p className="text-sm text-forest-600">Latest updates from Lost Sierra Kids</p>
+              </Link>
+            </div>
+          </>
+        )}
+
+        {hasRegs && (
+          <div className="mt-4 rounded-xl border border-paper-200 bg-white">
             <div className="border-b border-paper-200 p-4">
-              <h2 className="font-semibold text-forest-900">
-                Your Registrations
-              </h2>
+              <h2 className="font-semibold text-forest-900">Your Registrations</h2>
             </div>
             {registrations.map((reg) => (
-              <div
-                key={reg.id}
-                className="flex items-center justify-between border-b border-paper-100 p-4 last:border-0"
-              >
+              <div key={reg.id} className="flex items-center justify-between border-b border-paper-100 p-4 last:border-0">
                 <div>
-                  <div className="text-sm font-medium text-forest-800">
-                    Registration
-                  </div>
-                  <div className="text-xs text-forest-500">
-                    {new Date(reg.submittedAt).toLocaleDateString()}
-                  </div>
+                  <div className="text-sm font-medium text-forest-800">Registration</div>
+                  <div className="text-xs text-forest-500">{new Date(reg.submittedAt).toLocaleDateString()}</div>
                 </div>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
-                    statusColors[reg.status] || "bg-gray-100 text-gray-800"
-                  }`}
-                >
+                <span className={`rounded-full px-3 py-1 text-xs font-medium ${statusColors[reg.status] || "bg-gray-100 text-gray-800"}`}>
                   {reg.status.replace("_", " ")}
                 </span>
               </div>

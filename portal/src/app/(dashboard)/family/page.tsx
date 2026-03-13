@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 interface Guardian {
   id: string;
@@ -21,7 +21,8 @@ export default function FamilyPage() {
   const [guardian, setGuardian] = useState<Guardian | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [savedMsg, setSavedMsg] = useState("");
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetch("/portal/api/guardians")
@@ -32,24 +33,28 @@ export default function FamilyPage() {
       });
   }, []);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
+  const autoSave = useCallback((g: Guardian) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      setSaving(true);
+      const res = await fetch("/portal/api/guardians", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(g),
+      });
+      setSaving(false);
+      if (res.ok) {
+        setSavedMsg("Saved");
+        setTimeout(() => setSavedMsg(""), 1500);
+      }
+    }, 1000);
+  }, []);
+
+  function update(field: string, value: string) {
     if (!guardian) return;
-    setSaving(true);
-    setMessage("");
-
-    const res = await fetch("/portal/api/guardians", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(guardian),
-    });
-
-    if (res.ok) {
-      setMessage("Profile updated successfully");
-    } else {
-      setMessage("Failed to update profile");
-    }
-    setSaving(false);
+    const updated = { ...guardian, [field]: value };
+    setGuardian(updated);
+    autoSave(updated);
   }
 
   if (loading) {
@@ -64,179 +69,71 @@ export default function FamilyPage() {
     return <div className="text-forest-600">No profile found.</div>;
   }
 
+  const inputCls = "w-full rounded-lg border border-paper-300 bg-paper-50 px-3 py-2.5 text-base text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200";
+
   return (
-    <div>
-      <h1 className="mb-1 text-2xl font-bold text-forest-900">
-        Family Profile
-      </h1>
-      <p className="mb-8 text-forest-600">
-        Update your contact information and address
+    <div className="pb-8">
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="text-xl font-bold text-forest-900 md:text-2xl">Family Profile</h1>
+        <span className="text-xs text-green-600">
+          {saving ? "Saving..." : savedMsg}
+        </span>
+      </div>
+      <p className="mb-6 text-sm text-forest-600">
+        Changes are saved automatically
       </p>
 
-      {message && (
-        <div
-          className={`mb-4 rounded-lg p-3 text-sm ${
-            message.includes("success")
-              ? "bg-green-50 text-green-700"
-              : "bg-red-50 text-red-700"
-          }`}
-        >
-          {message}
-        </div>
-      )}
-
-      <form
-        onSubmit={handleSave}
-        className="rounded-xl border border-paper-200 bg-white p-6 md:p-8"
-      >
-        <h2 className="mb-6 text-lg font-semibold text-forest-900">
-          Contact Information
-        </h2>
-        <div className="mb-8 grid gap-4 md:grid-cols-2">
+      <div className="rounded-xl border border-paper-200 bg-white p-4 md:p-8">
+        <h2 className="mb-4 text-lg font-semibold text-forest-900">Contact Information</h2>
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-forest-800">
-              Full Name
-            </label>
-            <input
-              type="text"
-              value={guardian.fullName}
-              onChange={(e) =>
-                setGuardian({ ...guardian, fullName: e.target.value })
-              }
-              className="w-full rounded-lg border border-paper-300 bg-paper-50 px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-            />
+            <label className="mb-1 block text-sm font-medium text-forest-800">Full Name</label>
+            <input type="text" value={guardian.fullName} onChange={(e) => update("fullName", e.target.value)} className={inputCls} autoComplete="name" />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-forest-800">
-              Email
-            </label>
-            <input
-              type="email"
-              value={guardian.email}
-              disabled
-              className="w-full rounded-lg border border-paper-300 bg-paper-200 px-4 py-2.5 text-forest-500"
-            />
+            <label className="mb-1 block text-sm font-medium text-forest-800">Email</label>
+            <input type="email" value={guardian.email} disabled className="w-full rounded-lg border border-paper-300 bg-paper-200 px-3 py-2.5 text-base text-forest-500" />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-forest-800">
-              Phone
-            </label>
-            <input
-              type="tel"
-              value={guardian.phone || ""}
-              onChange={(e) =>
-                setGuardian({ ...guardian, phone: e.target.value })
-              }
-              className="w-full rounded-lg border border-paper-300 bg-paper-50 px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-            />
+            <label className="mb-1 block text-sm font-medium text-forest-800">Phone</label>
+            <input type="tel" value={guardian.phone || ""} onChange={(e) => update("phone", e.target.value)} className={inputCls} autoComplete="tel" />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-forest-800">
-              Alt Phone
-            </label>
-            <input
-              type="tel"
-              value={guardian.altPhone || ""}
-              onChange={(e) =>
-                setGuardian({ ...guardian, altPhone: e.target.value })
-              }
-              className="w-full rounded-lg border border-paper-300 bg-paper-50 px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-            />
+            <label className="mb-1 block text-sm font-medium text-forest-800">Alt Phone</label>
+            <input type="tel" value={guardian.altPhone || ""} onChange={(e) => update("altPhone", e.target.value)} className={inputCls} />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-forest-800">
-              Occupation
-            </label>
-            <input
-              type="text"
-              value={guardian.occupation || ""}
-              onChange={(e) =>
-                setGuardian({ ...guardian, occupation: e.target.value })
-              }
-              className="w-full rounded-lg border border-paper-300 bg-paper-50 px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-            />
+            <label className="mb-1 block text-sm font-medium text-forest-800">Occupation</label>
+            <input type="text" value={guardian.occupation || ""} onChange={(e) => update("occupation", e.target.value)} className={inputCls} />
           </div>
         </div>
 
-        <h2 className="mb-6 text-lg font-semibold text-forest-900">Address</h2>
-        <div className="mb-8 grid gap-4">
+        <h2 className="mb-4 text-lg font-semibold text-forest-900">Address</h2>
+        <div className="grid gap-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-forest-800">
-              Address Line 1
-            </label>
-            <input
-              type="text"
-              value={guardian.addressLine1 || ""}
-              onChange={(e) =>
-                setGuardian({ ...guardian, addressLine1: e.target.value })
-              }
-              className="w-full rounded-lg border border-paper-300 bg-paper-50 px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-            />
+            <label className="mb-1 block text-sm font-medium text-forest-800">Address Line 1</label>
+            <input type="text" value={guardian.addressLine1 || ""} onChange={(e) => update("addressLine1", e.target.value)} className={inputCls} autoComplete="address-line1" />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-forest-800">
-              Address Line 2
-            </label>
-            <input
-              type="text"
-              value={guardian.addressLine2 || ""}
-              onChange={(e) =>
-                setGuardian({ ...guardian, addressLine2: e.target.value })
-              }
-              className="w-full rounded-lg border border-paper-300 bg-paper-50 px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-            />
+            <label className="mb-1 block text-sm font-medium text-forest-800">Address Line 2</label>
+            <input type="text" value={guardian.addressLine2 || ""} onChange={(e) => update("addressLine2", e.target.value)} className={inputCls} autoComplete="address-line2" />
           </div>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-forest-800">
-                City
-              </label>
-              <input
-                type="text"
-                value={guardian.city || ""}
-                onChange={(e) =>
-                  setGuardian({ ...guardian, city: e.target.value })
-                }
-                className="w-full rounded-lg border border-paper-300 bg-paper-50 px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-              />
+              <label className="mb-1 block text-sm font-medium text-forest-800">City</label>
+              <input type="text" value={guardian.city || ""} onChange={(e) => update("city", e.target.value)} className={inputCls} autoComplete="address-level2" />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-forest-800">
-                State
-              </label>
-              <input
-                type="text"
-                value={guardian.state || ""}
-                onChange={(e) =>
-                  setGuardian({ ...guardian, state: e.target.value })
-                }
-                className="w-full rounded-lg border border-paper-300 bg-paper-50 px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-              />
+              <label className="mb-1 block text-sm font-medium text-forest-800">State</label>
+              <input type="text" value={guardian.state || ""} onChange={(e) => update("state", e.target.value)} className={inputCls} autoComplete="address-level1" />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-forest-800">
-                ZIP
-              </label>
-              <input
-                type="text"
-                value={guardian.zip || ""}
-                onChange={(e) =>
-                  setGuardian({ ...guardian, zip: e.target.value })
-                }
-                className="w-full rounded-lg border border-paper-300 bg-paper-50 px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-              />
+              <label className="mb-1 block text-sm font-medium text-forest-800">ZIP</label>
+              <input type="text" value={guardian.zip || ""} onChange={(e) => update("zip", e.target.value)} className={inputCls} autoComplete="postal-code" inputMode="numeric" />
             </div>
           </div>
         </div>
-
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg bg-forest-800 px-6 py-2.5 font-medium text-white transition hover:bg-forest-700 disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save Changes"}
-        </button>
-      </form>
+      </div>
     </div>
   );
 }
