@@ -8,8 +8,10 @@ interface Child {
   lastName: string;
   dateOfBirth: string;
   gender: string | null;
+  daysInterested: string | null;
   allergies: string | null;
   medicalNotes: string | null;
+  staffNotes: string | null;
   relationship: string;
 }
 
@@ -71,13 +73,31 @@ export default function ChildrenPage() {
                   {child.relationship.charAt(0).toUpperCase() +
                     child.relationship.slice(1)}
                 </p>
+                {child.daysInterested && (
+                  <div className="mt-2">
+                    <span className="font-medium text-forest-800">Days:</span>{" "}
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {child.daysInterested.split(",").map((day) => (
+                        <span
+                          key={day}
+                          className="rounded-md bg-forest-50 px-2 py-0.5 text-xs font-medium text-forest-700"
+                        >
+                          {day.charAt(0).toUpperCase() + day.slice(1)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {child.allergies && (
                   <p className="text-red-600">
                     Allergies: {child.allergies}
                   </p>
                 )}
                 {child.medicalNotes && (
-                  <p>Medical Notes: {child.medicalNotes}</p>
+                  <p>Special Instructions: {child.medicalNotes}</p>
+                )}
+                {child.staffNotes && (
+                  <p>Staff Notes: {child.staffNotes}</p>
                 )}
               </div>
             </div>

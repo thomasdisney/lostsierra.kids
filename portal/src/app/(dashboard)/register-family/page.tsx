@@ -9,26 +9,23 @@ interface ChildForm {
   lastName: string;
   dateOfBirth: string;
   gender: string;
+  daysInterested: string[];
   allergies: string;
   medicalNotes: string;
-  programId: string;
+  staffNotes: string;
 }
 
-interface Program {
-  id: string;
-  name: string;
-  description: string;
-  ageRange: string;
-}
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 const emptyChild: ChildForm = {
   firstName: "",
   lastName: "",
   dateOfBirth: "",
   gender: "",
+  daysInterested: [],
   allergies: "",
   medicalNotes: "",
-  programId: "",
+  staffNotes: "",
 };
 
 export default function RegisterFamilyPage() {
@@ -37,7 +34,6 @@ export default function RegisterFamilyPage() {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [programs, setPrograms] = useState<Program[]>([]);
 
   // Step 1: Contact Info
   const [guardian, setGuardian] = useState({
@@ -70,14 +66,23 @@ export default function RegisterFamilyPage() {
         email: session.user.email || "",
       }));
     }
-    fetch("/portal/api/admin/programs")
-      .then((r) => r.json())
-      .then((data) => setPrograms(data.programs || []));
   }, [session]);
 
-  function updateChild(index: number, field: string, value: string) {
+  function updateChild(index: number, field: string, value: string | string[]) {
     setChildren((prev) =>
       prev.map((c, i) => (i === index ? { ...c, [field]: value } : c))
+    );
+  }
+
+  function toggleDay(childIndex: number, day: string) {
+    setChildren((prev) =>
+      prev.map((c, i) => {
+        if (i !== childIndex) return c;
+        const days = c.daysInterested.includes(day)
+          ? c.daysInterested.filter((d) => d !== day)
+          : [...c.daysInterested, day];
+        return { ...c, daysInterested: days };
+      })
     );
   }
 
@@ -107,8 +112,12 @@ export default function RegisterFamilyPage() {
     }
     if (s === 3) {
       for (const child of children) {
-        if (!child.firstName || !child.lastName || !child.dateOfBirth || !child.programId) {
+        if (!child.firstName || !child.lastName || !child.dateOfBirth) {
           setError("Please fill in all required fields for each child");
+          return false;
+        }
+        if (child.daysInterested.length === 0) {
+          setError("Please select at least one day for each child");
           return false;
         }
         if (new Date(child.dateOfBirth) > new Date()) {
@@ -448,41 +457,56 @@ export default function RegisterFamilyPage() {
                       <option value="other">Other</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="mb-1 block text-sm font-medium text-forest-800">
-                      Desired Program *
+
+                  {/* Days Interested in Attending */}
+                  <div className="md:col-span-2">
+                    <label className="mb-2 block text-sm font-medium text-forest-800">
+                      Days Interested in Attending *
                     </label>
-                    <select
-                      value={child.programId}
-                      onChange={(e) =>
-                        updateChild(i, "programId", e.target.value)
-                      }
-                      className="w-full rounded-lg border border-paper-300 bg-white px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
-                    >
-                      <option value="">Select a program...</option>
-                      {programs.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} (ages {p.ageRange})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex flex-wrap gap-2">
+                      {WEEKDAYS.map((day) => {
+                        const selected = child.daysInterested.includes(day.toLowerCase());
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => toggleDay(i, day.toLowerCase())}
+                            className={`rounded-lg border px-4 py-2.5 text-sm font-medium transition ${
+                              selected
+                                ? "border-forest-600 bg-forest-800 text-white"
+                                : "border-paper-300 bg-white text-forest-600 hover:border-forest-400 hover:bg-forest-50"
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {child.daysInterested.length > 0 && (
+                      <p className="mt-1.5 text-xs text-forest-500">
+                        {child.daysInterested.length} day{child.daysInterested.length !== 1 ? "s" : ""} selected
+                      </p>
+                    )}
                   </div>
+
+                  {/* Allergies & Special Instructions */}
                   <div>
                     <label className="mb-1 block text-sm font-medium text-forest-800">
                       Allergies
                     </label>
-                    <input
-                      type="text"
+                    <textarea
                       value={child.allergies}
                       onChange={(e) =>
                         updateChild(i, "allergies", e.target.value)
                       }
+                      rows={2}
+                      placeholder="List any allergies..."
                       className="w-full rounded-lg border border-paper-300 bg-white px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
                     />
                   </div>
-                  <div className="md:col-span-2">
+                  <div>
                     <label className="mb-1 block text-sm font-medium text-forest-800">
-                      Medical Notes
+                      Special Instructions
                     </label>
                     <textarea
                       value={child.medicalNotes}
@@ -490,6 +514,23 @@ export default function RegisterFamilyPage() {
                         updateChild(i, "medicalNotes", e.target.value)
                       }
                       rows={2}
+                      placeholder="Medical needs, dietary restrictions..."
+                      className="w-full rounded-lg border border-paper-300 bg-white px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
+                    />
+                  </div>
+
+                  {/* Notes/Suggestions for Staff */}
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-sm font-medium text-forest-800">
+                      Notes/Suggestions for Staff
+                    </label>
+                    <textarea
+                      value={child.staffNotes}
+                      onChange={(e) =>
+                        updateChild(i, "staffNotes", e.target.value)
+                      }
+                      rows={2}
+                      placeholder="Anything the staff should know about your child..."
                       className="w-full rounded-lg border border-paper-300 bg-white px-4 py-2.5 text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-200"
                     />
                   </div>
@@ -558,11 +599,7 @@ export default function RegisterFamilyPage() {
               <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-forest-500">
                 Children ({children.length})
               </h3>
-              {children.map((child, i) => {
-                const program = programs.find(
-                  (p) => p.id === child.programId
-                );
-                return (
+              {children.map((child, i) => (
                   <div
                     key={i}
                     className="mb-2 rounded-lg bg-paper-50 p-4 text-sm"
@@ -571,11 +608,12 @@ export default function RegisterFamilyPage() {
                       {child.firstName} {child.lastName}
                     </p>
                     <p>DOB: {child.dateOfBirth}</p>
-                    <p>Program: {program?.name || "N/A"}</p>
+                    <p>Days: {child.daysInterested.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(", ")}</p>
                     {child.allergies && <p>Allergies: {child.allergies}</p>}
+                    {child.medicalNotes && <p>Special Instructions: {child.medicalNotes}</p>}
+                    {child.staffNotes && <p>Staff Notes: {child.staffNotes}</p>}
                   </div>
-                );
-              })}
+              ))}
             </div>
           </div>
         )}

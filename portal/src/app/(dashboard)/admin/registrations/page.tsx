@@ -7,6 +7,10 @@ interface Child {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
+  daysInterested: string | null;
+  allergies: string | null;
+  medicalNotes: string | null;
+  staffNotes: string | null;
   program: { name: string } | null;
 }
 
@@ -131,10 +135,24 @@ export default function AdminRegistrationsPage() {
                         Children
                       </h4>
                       {reg.children?.map((child) => (
-                        <div key={child.id} className="text-sm">
-                          {child.firstName} {child.lastName} &middot;{" "}
-                          DOB: {child.dateOfBirth} &middot;{" "}
-                          {child.program?.name || "No program"}
+                        <div key={child.id} className="mb-2 rounded-lg bg-paper-50 p-2 text-sm">
+                          <p className="font-medium">{child.firstName} {child.lastName}</p>
+                          <p>DOB: {child.dateOfBirth}</p>
+                          {child.daysInterested && (
+                            <p>Days: {child.daysInterested.split(",").map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(", ")}</p>
+                          )}
+                          {!child.daysInterested && child.program?.name && (
+                            <p>Program: {child.program.name}</p>
+                          )}
+                          {child.allergies && (
+                            <p className="text-red-600">Allergies: {child.allergies}</p>
+                          )}
+                          {child.medicalNotes && (
+                            <p>Special Instructions: {child.medicalNotes}</p>
+                          )}
+                          {child.staffNotes && (
+                            <p>Staff Notes: {child.staffNotes}</p>
+                          )}
                         </div>
                       ))}
                     </div>

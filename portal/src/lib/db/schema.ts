@@ -15,6 +15,7 @@ import {
 export const userRoleEnum = pgEnum("user_role", [
   "admin",
   "parent",
+  "new_account",
   "new_user",
 ]);
 export const genderEnum = pgEnum("gender", ["male", "female", "other"]);
@@ -97,8 +98,10 @@ export const children = pgTable("children", {
   lastName: varchar("last_name", { length: 100 }).notNull(),
   dateOfBirth: date("date_of_birth").notNull(),
   gender: genderEnum("gender"),
+  daysInterested: text("days_interested"), // comma-separated: "monday,wednesday,friday"
   allergies: text("allergies"),
   medicalNotes: text("medical_notes"),
+  staffNotes: text("staff_notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -157,6 +160,7 @@ export const registrationChildren = pgTable("registration_children", {
     .notNull()
     .references(() => children.id, { onDelete: "cascade" }),
   programId: uuid("program_id").references(() => programs.id),
+  daysInterested: text("days_interested"),
 });
 
 // Announcements

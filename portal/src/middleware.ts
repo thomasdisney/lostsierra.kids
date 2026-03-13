@@ -7,6 +7,7 @@ export default auth((req) => {
   const userRole = (req.auth?.user as { role?: string })?.role;
   const isAdmin = userRole === "admin";
   const isNewUser = userRole === "new_user";
+  const isNewAccount = userRole === "new_account";
 
   // Public routes
   const publicPaths = ["/login", "/register", "/verify"];
@@ -42,6 +43,17 @@ export default auth((req) => {
   // new_user restriction: only dashboard + register-family allowed
   if (isNewUser) {
     const allowedPaths = ["/dashboard", "/register-family"];
+    const isAllowed = allowedPaths.some(
+      (p) => pathname === p || pathname.startsWith(p + "/")
+    );
+    if (!isAllowed) {
+      return NextResponse.redirect(new URL("/portal/dashboard", req.url));
+    }
+  }
+
+  // new_account restriction: dashboard, register-family, children, family
+  if (isNewAccount) {
+    const allowedPaths = ["/dashboard", "/register-family", "/children", "/family"];
     const isAllowed = allowedPaths.some(
       (p) => pathname === p || pathname.startsWith(p + "/")
     );

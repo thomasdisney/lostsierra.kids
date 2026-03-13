@@ -55,9 +55,10 @@ export async function POST(req: NextRequest) {
     .where(eq(guardians.userId, session.user.id));
 
   // Create children and link to guardian
-  const childIds: { childId: string; programId: string }[] = [];
+  const childIds: { childId: string; daysInterested: string | null }[] = [];
 
   for (const childData of childrenData) {
+    const daysStr = childData.daysInterested?.join(",") || null;
     const [child] = await db
       .insert(children)
       .values({
@@ -65,8 +66,10 @@ export async function POST(req: NextRequest) {
         lastName: childData.lastName,
         dateOfBirth: childData.dateOfBirth,
         gender: childData.gender || null,
+        daysInterested: daysStr,
         allergies: childData.allergies || null,
         medicalNotes: childData.medicalNotes || null,
+        staffNotes: childData.staffNotes || null,
       })
       .returning();
 
@@ -76,7 +79,7 @@ export async function POST(req: NextRequest) {
       relationship: guardianData.relationship,
     });
 
-    childIds.push({ childId: child.id, programId: childData.programId });
+    childIds.push({ childId: child.id, daysInterested: daysStr });
   }
 
   // Create registration
@@ -89,11 +92,11 @@ export async function POST(req: NextRequest) {
     .returning();
 
   // Link children to registration
-  for (const { childId, programId } of childIds) {
+  for (const { childId, daysInterested } of childIds) {
     await db.insert(registrationChildren).values({
       registrationId: registration.id,
       childId,
-      programId,
+      daysInterested,
     });
   }
 

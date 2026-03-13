@@ -6,9 +6,9 @@ export const loginSchema = z.object({
 });
 
 export const registerSchema = z.object({
-  fullName: z.string().min(2, "Name must be at least 2 characters"),
+  fullName: z.string().min(2, "Name must be at least 2 characters").max(255, "Name is too long"),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(72, "Password is too long"),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -41,9 +41,10 @@ export const childSchema = z.object({
     return dob < new Date(); // DOB cannot be in the future (from ERP validate_dates pattern)
   }, "Date of birth cannot be in the future"),
   gender: z.enum(["male", "female", "other"]).optional(),
+  daysInterested: z.array(z.string()).min(1, "Select at least one day"),
   allergies: z.string().optional(),
   medicalNotes: z.string().optional(),
-  programId: z.string().uuid("Select a program"),
+  staffNotes: z.string().optional(),
 });
 
 export const registrationSchema = z.object({

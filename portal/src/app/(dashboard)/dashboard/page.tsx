@@ -39,6 +39,7 @@ export default function DashboardPage() {
   const role = (session?.user as { role?: string })?.role;
   const isAdmin = role === "admin";
   const isNewUser = role === "new_user";
+  const isNewAccount = role === "new_account";
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [parentStats, setParentStats] = useState<ParentStats | null>(null);
@@ -46,7 +47,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function load() {
-      if (isNewUser) {
+      if (isNewUser || isNewAccount) {
+        // For new_account, also fetch registrations
+        if (isNewAccount) {
+          const regsRes = await fetch("/portal/api/registrations");
+          const regsData = await regsRes.json();
+          setRegistrations(regsData.registrations || []);
+        }
         setLoading(false);
         return;
       }
@@ -150,7 +157,7 @@ export default function DashboardPage() {
       setLoading(false);
     }
     if (session) load();
-  }, [session, isAdmin, isNewUser]);
+  }, [session, isAdmin, isNewUser, isNewAccount]);
 
   if (loading) {
     return (
@@ -191,6 +198,74 @@ export default function DashboardPage() {
             Register Your Family
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  // new_account view - can register family + view family records
+  if (isNewAccount) {
+    return (
+      <div>
+        <h1 className="mb-1 text-2xl font-bold text-forest-900">
+          Welcome, {session?.user?.name}
+        </h1>
+        <p className="mb-8 text-forest-600">Family Portal</p>
+
+        <div className="mb-6 rounded-xl border-2 border-gold-300 bg-gold-50 p-6">
+          <h2 className="mb-2 text-lg font-semibold text-forest-900">
+            Account Setup
+          </h2>
+          <p className="mb-4 text-sm text-forest-600">
+            Register your family to get started. You can view your family records while your account is being reviewed.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/portal/register-family"
+              className="inline-block rounded-lg bg-forest-800 px-6 py-2.5 font-medium text-white transition hover:bg-forest-700"
+            >
+              Register Your Family
+            </Link>
+            <Link
+              href="/portal/children"
+              className="inline-block rounded-lg border border-forest-300 px-6 py-2.5 font-medium text-forest-700 transition hover:bg-forest-50"
+            >
+              View Children
+            </Link>
+          </div>
+        </div>
+
+        {/* Show registrations if any */}
+        {registrations.length > 0 && (
+          <div className="rounded-xl border border-paper-200 bg-white">
+            <div className="border-b border-paper-200 p-4">
+              <h2 className="font-semibold text-forest-900">
+                Your Registrations
+              </h2>
+            </div>
+            {registrations.map((reg) => (
+              <div
+                key={reg.id}
+                className="flex items-center justify-between border-b border-paper-100 p-4 last:border-0"
+              >
+                <div>
+                  <div className="text-sm font-medium text-forest-800">
+                    Registration
+                  </div>
+                  <div className="text-xs text-forest-500">
+                    {new Date(reg.submittedAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-medium ${
+                    statusColors[reg.status] || "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {reg.status.replace("_", " ")}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }

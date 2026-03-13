@@ -12,7 +12,8 @@ interface User {
 }
 
 const roleCycle: Record<string, string> = {
-  new_user: "parent",
+  new_user: "new_account",
+  new_account: "parent",
   parent: "admin",
   admin: "parent",
 };
@@ -20,11 +21,13 @@ const roleCycle: Record<string, string> = {
 const roleColors: Record<string, string> = {
   admin: "bg-gold-200 text-forest-900",
   parent: "bg-forest-100 text-forest-700",
+  new_account: "bg-blue-100 text-blue-800",
   new_user: "bg-orange-100 text-orange-800",
 };
 
 const roleActions: Record<string, string> = {
-  new_user: "Approve → Parent",
+  new_user: "Approve → New Account",
+  new_account: "Promote → Parent",
   parent: "Promote → Admin",
   admin: "Demote → Parent",
 };
@@ -62,8 +65,8 @@ export default function AdminUsersPage() {
     );
   }
 
-  const pendingUsers = users.filter((u) => u.role === "new_user");
-  const activeUsers = users.filter((u) => u.role !== "new_user");
+  const pendingUsers = users.filter((u) => u.role === "new_user" || u.role === "new_account");
+  const activeUsers = users.filter((u) => u.role !== "new_user" && u.role !== "new_account");
 
   return (
     <div>

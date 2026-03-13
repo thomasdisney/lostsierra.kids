@@ -13,9 +13,18 @@ export async function sendVerificationEmail(
   email: string,
   code: string
 ): Promise<boolean> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error("RESEND_API_KEY is not set — cannot send verification email");
+    console.log(`[VERIFICATION CODE] ${email}: ${code}`);
+    return false;
+  }
+
+  const fromAddress = process.env.RESEND_FROM_EMAIL || "Lost Sierra Kids <onboarding@resend.dev>";
+
   try {
-    await getResend().emails.send({
-      from: "Lost Sierra Kids <onboarding@resend.dev>",
+    const { data, error } = await getResend().emails.send({
+      from: fromAddress,
       to: email,
       subject: "Verify your email — Lost Sierra Kids Portal",
       html: `
@@ -35,6 +44,13 @@ export async function sendVerificationEmail(
         </div>
       `,
     });
+
+    if (error) {
+      console.error("Resend API error:", error);
+      return false;
+    }
+
+    console.log("Verification email sent:", data?.id);
     return true;
   } catch (error) {
     console.error("Failed to send verification email:", error);
