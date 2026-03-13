@@ -44,7 +44,7 @@ export default function LoginPage() {
   const inputBase: React.CSSProperties = {
     width: "100%",
     padding: "0.7rem 0.9rem",
-    fontSize: "0.9rem",
+    fontSize: "1rem",
     fontFamily: "'Source Sans 3', sans-serif",
     color: "#1e3a2f",
     backgroundColor: "#fff",
@@ -65,7 +65,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
+    <div style={{ display: "flex", minHeight: "100vh", overflow: "hidden" }}>
       {/* Left brand panel — desktop only */}
       <div
         style={{

@@ -40,7 +40,7 @@ export const childSchema = z.object({
     const dob = new Date(val);
     return dob < new Date(); // DOB cannot be in the future (from ERP validate_dates pattern)
   }, "Date of birth cannot be in the future"),
-  gender: z.enum(["male", "female", "other"]).optional(),
+  gender: z.enum(["male", "female"]).optional(),
   daysInterested: z.array(z.string()).min(1, "Select at least one day"),
   staffNotes: z.string().optional(),
 });

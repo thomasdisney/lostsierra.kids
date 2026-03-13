@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "drizzle-kit push",
-    "db:seed": "npx tsx src/lib/db/seed.ts"
+    "db:seed": "npx tsx src/lib/db/seed.ts",
+    "test": "npx playwright test",
+    "test:mobile": "npx playwright test --project='iPhone 14'"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
@@ -23,6 +25,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
