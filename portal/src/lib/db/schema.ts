@@ -147,6 +147,7 @@ export const registrations = pgTable("registrations", {
     .references(() => guardians.id, { onDelete: "cascade" }),
   academicYearId: uuid("academic_year_id").references(() => academicYears.id),
   status: registrationStatusEnum("status").notNull().default("submitted"),
+  coParents: text("co_parents"), // JSON array of co-parent objects
   adminNotes: text("admin_notes"),
   submittedAt: timestamp("submitted_at").notNull().defaultNow(),
   reviewedAt: timestamp("reviewed_at"),

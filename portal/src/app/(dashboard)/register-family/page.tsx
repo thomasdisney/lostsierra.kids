@@ -3,6 +3,20 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useState, useRef } from "react";
 
+interface CoParentForm {
+  fullName: string;
+  email: string;
+  phone: string;
+  relationship: string;
+}
+
+const emptyCoParent: CoParentForm = {
+  fullName: "",
+  email: "",
+  phone: "",
+  relationship: "",
+};
+
 interface ChildForm {
   firstName: string;
   lastName: string;
@@ -54,6 +68,7 @@ export default function RegisterFamilyPage() {
     country: "US",
   });
 
+  const [coParents, setCoParents] = useState<CoParentForm[]>([]);
   const [children, setChildren] = useState<ChildForm[]>([{ ...emptyChild }]);
 
   // Refs for debounced DB save
@@ -156,6 +171,20 @@ export default function RegisterFamilyPage() {
     scheduleSave();
   }
 
+  function updateCoParent(index: number, field: string, value: string) {
+    setCoParents((prev) =>
+      prev.map((cp, i) => (i === index ? { ...cp, [field]: value } : cp))
+    );
+  }
+
+  function addCoParent() {
+    setCoParents((prev) => [...prev, { ...emptyCoParent }]);
+  }
+
+  function removeCoParent(index: number) {
+    setCoParents((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function updateChild(index: number, field: string, value: string | string[]) {
     setChildren((prev) =>
       prev.map((c, i) => (i === index ? { ...c, [field]: value } : c))
@@ -223,7 +252,7 @@ export default function RegisterFamilyPage() {
     const res = await fetch("/portal/api/registrations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ guardian, address, children }),
+      body: JSON.stringify({ guardian, address, children, coParents }),
     });
 
     const data = await res.json();
@@ -342,6 +371,53 @@ export default function RegisterFamilyPage() {
                 <label className="mb-1 block text-sm font-medium text-forest-800">Occupation</label>
                 <input type="text" value={guardian.occupation} onChange={(e) => setGuardianAndSave({ ...guardian, occupation: e.target.value })} className={inputCls} autoComplete="on" />
               </div>
+            </div>
+
+            {/* Co-Parents */}
+            <div className="mt-6 border-t border-paper-200 pt-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-base font-semibold text-forest-900">Co-Parents / Additional Contacts</h3>
+              </div>
+              {coParents.map((cp, i) => (
+                <div key={i} className="mb-3 rounded-lg border border-paper-200 bg-paper-50 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-sm font-medium text-forest-700">Co-Parent {i + 1}</span>
+                    <button type="button" onClick={() => removeCoParent(i)} className="text-xs text-red-600 active:text-red-800">Remove</button>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-forest-700">Full Name</label>
+                      <input type="text" value={cp.fullName} onChange={(e) => updateCoParent(i, "fullName", e.target.value)} className={inputWhiteCls} placeholder="Name" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-forest-700">Email</label>
+                      <input type="email" value={cp.email} onChange={(e) => updateCoParent(i, "email", e.target.value)} className={inputWhiteCls} placeholder="Email" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-forest-700">Phone</label>
+                      <input type="tel" value={cp.phone} onChange={(e) => updateCoParent(i, "phone", e.target.value)} className={inputWhiteCls} placeholder="Phone" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-forest-700">Relationship</label>
+                      <select value={cp.relationship} onChange={(e) => updateCoParent(i, "relationship", e.target.value)} className={inputWhiteCls}>
+                        <option value="">Select...</option>
+                        <option value="mother">Mother</option>
+                        <option value="father">Father</option>
+                        <option value="guardian">Guardian</option>
+                        <option value="grandparent">Grandparent</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addCoParent}
+                className="w-full rounded-lg border border-dashed border-forest-400 px-4 py-2 text-sm font-medium text-forest-600 transition active:bg-forest-50"
+              >
+                + Add Co-Parent
+              </button>
             </div>
           </div>
         )}
@@ -504,6 +580,23 @@ export default function RegisterFamilyPage() {
                 {guardian.occupation && <p><span className="font-medium">Occupation:</span> {guardian.occupation}</p>}
               </div>
             </div>
+
+            {coParents.length > 0 && (
+              <div className="mb-4">
+                <div className="mb-1 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-forest-500">Co-Parents ({coParents.length})</h3>
+                  <button type="button" onClick={() => setStep(1)} className="text-xs font-medium text-forest-600 active:text-forest-800">Edit</button>
+                </div>
+                {coParents.map((cp, i) => (
+                  <div key={i} className="mb-2 rounded-lg bg-paper-50 p-3 text-sm">
+                    <p className="font-medium">{cp.fullName || "Unnamed"}</p>
+                    {cp.email && <p>Email: {cp.email}</p>}
+                    {cp.phone && <p>Phone: {cp.phone}</p>}
+                    {cp.relationship && <p>Relationship: {cp.relationship}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="mb-4">
               <div className="mb-1 flex items-center justify-between">

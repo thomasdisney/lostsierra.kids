@@ -22,10 +22,18 @@ interface Guardian {
   state: string;
 }
 
+interface CoParent {
+  fullName: string;
+  email: string;
+  phone: string;
+  relationship: string;
+}
+
 interface Registration {
   id: string;
   status: string;
   submittedAt: string;
+  coParents: string | null;
   adminNotes: string | null;
   guardian: Guardian;
   children: Child[];
@@ -136,6 +144,25 @@ export default function AdminRegistrationsPage() {
                         {reg.guardian?.city}, {reg.guardian?.state}
                       </p>
                     </div>
+                    {reg.coParents && (() => {
+                      try {
+                        const cps: CoParent[] = JSON.parse(reg.coParents);
+                        if (cps.length === 0) return null;
+                        return (
+                          <div>
+                            <h4 className="mb-1 text-xs font-semibold uppercase text-forest-500">Co-Parents</h4>
+                            {cps.map((cp, i) => (
+                              <div key={i} className="mb-1 text-sm">
+                                <span className="font-medium">{cp.fullName}</span>
+                                {cp.phone && <> &middot; {cp.phone}</>}
+                                {cp.email && <> &middot; {cp.email}</>}
+                                {cp.relationship && <> ({cp.relationship})</>}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      } catch { return null; }
+                    })()}
                     <div>
                       <h4 className="mb-1 text-xs font-semibold uppercase text-forest-500">
                         Children

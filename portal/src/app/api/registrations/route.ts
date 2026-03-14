@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { guardian: guardianData, address, children: childrenData } = parsed.data;
+  const coParents = body.coParents || [];
 
   // Update guardian info
   await db
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
     .values({
       guardianId: guardian.id,
       status: "submitted",
+      coParents: coParents.length > 0 ? JSON.stringify(coParents) : null,
     })
     .returning();
 
