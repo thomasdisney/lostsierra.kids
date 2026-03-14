@@ -18,14 +18,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!email || !password) return null;
 
+        // Allow "admin" as alias for the admin email
+        const lookupEmail = email.toLowerCase() === "admin"
+          ? "thomasdisney7@gmail.com"
+          : email;
+
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.email, email));
+          .where(eq(users.email, lookupEmail));
 
         if (!user) return null;
 
-        const valid = await bcrypt.compare(password, user.passwordHash);
+        // Admin account can also authenticate with ADMIN_PASSWORD env var
+        let valid = false;
+        if (user.role === "admin" && process.env.ADMIN_PASSWORD && password === process.env.ADMIN_PASSWORD) {
+          valid = true;
+        } else {
+          valid = await bcrypt.compare(password, user.passwordHash);
+        }
         if (!valid) return null;
 
         const [guardian] = await db
