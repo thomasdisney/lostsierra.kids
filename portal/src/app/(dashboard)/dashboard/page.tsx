@@ -191,17 +191,16 @@ export default function DashboardPage() {
 
         <div className="rounded-xl border-2 border-gold-300 bg-gold-50 p-6">
           <h2 className="mb-2 text-lg font-semibold text-forest-900">
-            Account Pending Approval
+            Get Started
           </h2>
           <p className="mb-4 text-sm text-forest-600">
-            Your account is awaiting admin approval. You can register your
-            family while you wait.
+            Pre-register your family to express interest in Lost Sierra Kids programs. This is not a firm commitment — just lets us know you&apos;re interested.
           </p>
           <Link
             href="/portal/register-family"
             className="inline-block rounded-lg bg-forest-800 px-6 py-2.5 font-medium text-white transition hover:bg-forest-700"
           >
-            Register Your Family
+            Pre-Register Your Family
           </Link>
         </div>
       </div>
@@ -222,13 +221,13 @@ export default function DashboardPage() {
           <div className="mb-6 rounded-xl border-2 border-gold-300 bg-gold-50 p-5">
             <h2 className="mb-2 text-lg font-semibold text-forest-900">Get Started</h2>
             <p className="mb-4 text-sm text-forest-600">
-              Register your family to join Lost Sierra Kids programs.
+              Pre-register your family to express interest in Lost Sierra Kids programs. No commitment required.
             </p>
             <Link
               href="/portal/register-family"
               className="inline-block rounded-lg bg-forest-800 px-6 py-2.5 text-sm font-medium text-white transition active:bg-forest-700"
             >
-              Register Your Family
+              Pre-Register Your Family
             </Link>
           </div>
         ) : (
@@ -241,8 +240,8 @@ export default function DashboardPage() {
                   </svg>
                 </div>
                 <div>
-                  <p className="font-medium text-green-800">Registration submitted</p>
-                  <p className="text-sm text-green-600">Your family is registered. You can edit your information while we review it.</p>
+                  <p className="font-medium text-green-800">Pre-registration submitted</p>
+                  <p className="text-sm text-green-600">Thanks for your interest! You can update your family&apos;s information anytime. We&apos;ll be in touch.</p>
                 </div>
               </div>
             </div>

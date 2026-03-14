@@ -269,7 +269,7 @@ export default function RegisterFamilyPage() {
         </span>
       </div>
       <p className="mb-6 text-sm text-forest-600">
-        Register your family for Lost Sierra Kids programs
+        Pre-register your family for Lost Sierra Kids programs. This is not a firm commitment.
       </p>
 
       {/* Step indicators */}

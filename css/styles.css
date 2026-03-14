@@ -432,6 +432,27 @@ header::after {
   box-shadow: 0 4px 16px rgba(232, 196, 108, 0.4);
 }
 
+.btn-secondary {
+  background: var(--forest-light);
+  color: white;
+  box-shadow: 0 2px 8px rgba(45, 84, 70, 0.3);
+}
+
+.btn-secondary:hover {
+  background: var(--forest);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(45, 84, 70, 0.4);
+}
+
+.sidebar-actions .btn-secondary {
+  background: var(--forest-light);
+  color: white;
+}
+
+.sidebar-actions .btn-secondary:hover {
+  background: var(--forest);
+}
+
 .btn-outline {
   background: transparent;
   color: white;
@@ -1646,6 +1667,75 @@ textarea {
   .cork-board__items {
     grid-template-columns: repeat(2, 1fr);
     gap: var(--space-md);
+  }
+}
+
+/* Floating Waitlist Button */
+.waitlist-fab {
+  position: fixed;
+  bottom: 5.5rem;
+  right: 1.25rem;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem 0.625rem 0.875rem;
+  background: var(--forest-dark);
+  color: #fff;
+  border-radius: 2rem;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  box-shadow: 0 2px 12px rgba(30, 58, 47, 0.25);
+  transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
+  animation: waitlist-slide-in 0.5s ease-out 1s both;
+}
+
+.waitlist-fab:hover {
+  background: var(--forest-medium);
+  box-shadow: 0 4px 20px rgba(30, 58, 47, 0.35);
+  transform: translateY(-1px);
+}
+
+.waitlist-fab:active {
+  transform: translateY(0);
+}
+
+.waitlist-fab svg {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.waitlist-fab__label {
+  white-space: nowrap;
+}
+
+@keyframes waitlist-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Desktop: move above bottom nav area */
+@media (min-width: 769px) {
+  .waitlist-fab {
+    bottom: 2rem;
+    right: 2rem;
+  }
+}
+
+/* Mobile: ensure it doesn't overlap bottom nav */
+@media (max-width: 768px) {
+  .waitlist-fab {
+    bottom: 5.5rem;
+    right: 1rem;
   }
 }
 

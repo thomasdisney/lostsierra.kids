@@ -129,7 +129,7 @@ export default function RegisterPage() {
               Create your account
             </h1>
             <p style={{ fontSize: "0.9rem", color: "#4a7c67" }}>
-              Join the enrollment waitlist for LSK programs
+              Pre-register for Lost Sierra Kids programs
             </p>
           </div>
 
