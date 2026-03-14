@@ -45,7 +45,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { id, firstName, lastName, dateOfBirth, gender, daysInterested, staffNotes } = body;
+  const { id, firstName, lastName, dateOfBirth, gender, daysInterested, desiredStartDate, hoursNeeded, staffNotes } = body;
 
   if (!id) {
     return NextResponse.json({ error: "Child ID required" }, { status: 400 });
@@ -79,6 +79,8 @@ export async function PUT(req: NextRequest) {
       dateOfBirth: dateOfBirth || undefined,
       gender: gender || null,
       daysInterested: daysInterested || null,
+      desiredStartDate: desiredStartDate || null,
+      hoursNeeded: hoursNeeded || null,
       staffNotes: staffNotes || null,
       updatedAt: new Date(),
     })

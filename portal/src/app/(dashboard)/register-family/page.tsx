@@ -9,6 +9,8 @@ interface ChildForm {
   dateOfBirth: string;
   gender: string;
   daysInterested: string[];
+  desiredStartDate: string;
+  hoursNeeded: string;
   staffNotes: string;
 }
 
@@ -20,6 +22,8 @@ const emptyChild: ChildForm = {
   dateOfBirth: "",
   gender: "",
   daysInterested: [],
+  desiredStartDate: "",
+  hoursNeeded: "",
   staffNotes: "",
 };
 
@@ -432,6 +436,31 @@ export default function RegisterFamilyPage() {
                     </div>
                   </div>
 
+                  {/* Start Date & Hours */}
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-forest-800">Desired Start Date (2026)</label>
+                    <select value={child.desiredStartDate} onChange={(e) => updateChild(i, "desiredStartDate", e.target.value)} className={inputWhiteCls}>
+                      <option value="">Select...</option>
+                      <option value="august">August</option>
+                      <option value="september">September</option>
+                      <option value="october">October</option>
+                      <option value="november">November</option>
+                      <option value="december">December</option>
+                      <option value="2027">2027</option>
+                      <option value="unsure">Not sure yet</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-forest-800">Hours Needed</label>
+                    <select value={child.hoursNeeded} onChange={(e) => updateChild(i, "hoursNeeded", e.target.value)} className={inputWhiteCls}>
+                      <option value="">Select...</option>
+                      <option value="half-day-am">Half Day (AM)</option>
+                      <option value="half-day-pm">Half Day (PM)</option>
+                      <option value="full-day">Full Day</option>
+                      <option value="flexible">Flexible</option>
+                    </select>
+                  </div>
+
                   {/* Notes for Staff */}
                   <div className="md:col-span-2">
                     <label className="mb-1 block text-sm font-medium text-forest-800">Notes for Staff</label>
@@ -498,6 +527,8 @@ export default function RegisterFamilyPage() {
                   <p className="font-medium">{child.firstName} {child.lastName}</p>
                   <p>DOB: {child.dateOfBirth}</p>
                   <p>Days: {child.daysInterested.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(", ")}</p>
+                  {child.desiredStartDate && <p>Start: {child.desiredStartDate.charAt(0).toUpperCase() + child.desiredStartDate.slice(1)}</p>}
+                  {child.hoursNeeded && <p>Hours: {child.hoursNeeded.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</p>}
                   {child.staffNotes && <p>Staff Notes: {child.staffNotes}</p>}
                 </div>
               ))}

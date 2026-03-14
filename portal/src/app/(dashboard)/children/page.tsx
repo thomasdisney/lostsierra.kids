@@ -9,6 +9,8 @@ interface Child {
   dateOfBirth: string;
   gender: string | null;
   daysInterested: string | null;
+  desiredStartDate: string | null;
+  hoursNeeded: string | null;
   staffNotes: string | null;
   relationship: string;
 }
@@ -197,6 +199,31 @@ export default function ChildrenPage() {
                             );
                           })}
                         </div>
+                      </div>
+
+                      {/* Start Date & Hours */}
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-forest-800">Desired Start Date (2026)</label>
+                        <select value={child.desiredStartDate || ""} onChange={(e) => updateChild(child.id, "desiredStartDate", e.target.value || null)} className={inputCls}>
+                          <option value="">Select...</option>
+                          <option value="august">August</option>
+                          <option value="september">September</option>
+                          <option value="october">October</option>
+                          <option value="november">November</option>
+                          <option value="december">December</option>
+                          <option value="2027">2027</option>
+                          <option value="unsure">Not sure yet</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-forest-800">Hours Needed</label>
+                        <select value={child.hoursNeeded || ""} onChange={(e) => updateChild(child.id, "hoursNeeded", e.target.value || null)} className={inputCls}>
+                          <option value="">Select...</option>
+                          <option value="half-day-am">Half Day (AM)</option>
+                          <option value="half-day-pm">Half Day (PM)</option>
+                          <option value="full-day">Full Day</option>
+                          <option value="flexible">Flexible</option>
+                        </select>
                       </div>
 
                       {/* Staff Notes */}

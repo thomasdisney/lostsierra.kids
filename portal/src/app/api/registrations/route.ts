@@ -68,6 +68,8 @@ export async function POST(req: NextRequest) {
         dateOfBirth: childData.dateOfBirth,
         gender: childData.gender || null,
         daysInterested: daysStr,
+        desiredStartDate: childData.desiredStartDate || null,
+        hoursNeeded: childData.hoursNeeded || null,
         staffNotes: childData.staffNotes || null,
       })
       .returning();

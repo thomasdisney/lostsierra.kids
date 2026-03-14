@@ -99,6 +99,8 @@ export const children = pgTable("children", {
   dateOfBirth: date("date_of_birth").notNull(),
   gender: genderEnum("gender"),
   daysInterested: text("days_interested"), // comma-separated: "monday,wednesday,friday"
+  desiredStartDate: varchar("desired_start_date", { length: 50 }),
+  hoursNeeded: varchar("hours_needed", { length: 50 }),
   allergies: text("allergies"),
   medicalNotes: text("medical_notes"),
   staffNotes: text("staff_notes"),
