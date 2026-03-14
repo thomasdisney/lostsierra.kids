@@ -55,7 +55,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label htmlFor="email" className="mb-1 block text-sm font-semibold text-forest-700">Email address</label>
-              <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@example.com" className={inputCls} />
+              <input id="email" type="text" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="Email or username" className={inputCls} />
             </div>
 
             <div className="mb-6">
