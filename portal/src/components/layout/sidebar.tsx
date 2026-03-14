@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 const allParentLinks = [
   { href: "/portal/dashboard", label: "Dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -40,7 +40,7 @@ function NavLink({ link, isActive, isAdminLink }: {
   return (
     <Link
       href={link.href}
-      className={`mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+      className={`mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
         isActive
           ? isAdminLink
             ? "bg-gold-100 font-medium text-forest-800"
@@ -58,32 +58,53 @@ function NavLink({ link, isActive, isAdminLink }: {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const role = (session?.user as { role?: string })?.role;
   const isAdmin = role === "admin";
   const isNewUser = role === "new_user";
   const isNewAccount = role === "new_account";
-  const [hasRegistration, setHasRegistration] = useState(false);
+  // Default to true to prevent flash of "Register Family" link
+  const [hasRegistration, setHasRegistration] = useState(true);
+  const fetched = useRef(false);
 
   useEffect(() => {
+    if (fetched.current || status === "loading") return;
     if (isNewAccount || role === "parent") {
+      fetched.current = true;
       fetch("/portal/api/registrations")
         .then((r) => r.json())
-        .then((data) => {
-          setHasRegistration((data.registrations || []).length > 0);
-        })
+        .then((data) => setHasRegistration((data.registrations || []).length > 0))
         .catch(() => {});
+    } else {
+      setHasRegistration(false);
     }
-  }, [role, isNewAccount]);
+  }, [role, isNewAccount, status]);
+
+  // Don't render links until session is ready
+  if (status === "loading") {
+    return (
+      <aside className="flex h-screen w-64 flex-col border-r border-paper-200 bg-white">
+        <div className="border-b border-paper-200 p-6">
+          <h1 className="text-lg font-bold text-forest-900">Lost Sierra Kids</h1>
+          <p className="text-xs text-forest-600">Family Portal</p>
+        </div>
+        <nav className="flex-1 p-4">
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-9 animate-pulse rounded-lg bg-paper-100" />
+            ))}
+          </div>
+        </nav>
+      </aside>
+    );
+  }
 
   let visibleLinks;
   if (isNewUser) {
     visibleLinks = newUserLinks;
   } else {
     visibleLinks = allParentLinks.filter((link) => {
-      // Hide parent-only links for new_account
       if (isNewAccount && (link as { parentOnly?: boolean }).parentOnly) return false;
-      // Hide register-family after registration
       if ((link as { hideAfterRegistration?: boolean }).hideAfterRegistration && hasRegistration) return false;
       return true;
     });

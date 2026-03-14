@@ -8,37 +8,43 @@ import {
 } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
-  const { email } = await req.json();
+  try {
+    const body = await req.json();
+    const { email } = body;
 
-  if (!email) {
+    if (!email || typeof email !== "string") {
+      return NextResponse.json(
+        { error: "Email is required" },
+        { status: 400 }
+      );
+    }
+
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email));
+
+    // Return generic success even if user not found (prevent email enumeration)
+    if (!user || user.emailVerified) {
+      return NextResponse.json({ success: true });
+    }
+
+    const verificationCode = generateVerificationCode();
+    const verificationExpiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    await db
+      .update(users)
+      .set({ verificationCode, verificationExpiry })
+      .where(eq(users.id, user.id));
+
+    await sendVerificationEmail(email, verificationCode);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error resending code:", error);
     return NextResponse.json(
-      { error: "Email is required" },
-      { status: 400 }
+      { error: "Internal server error" },
+      { status: 500 }
     );
   }
-
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email));
-
-  if (!user) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
-  }
-
-  if (user.emailVerified) {
-    return NextResponse.json({ success: true, alreadyVerified: true });
-  }
-
-  const verificationCode = generateVerificationCode();
-  const verificationExpiry = new Date(Date.now() + 15 * 60 * 1000);
-
-  await db
-    .update(users)
-    .set({ verificationCode, verificationExpiry })
-    .where(eq(users.id, user.id));
-
-  await sendVerificationEmail(email, verificationCode);
-
-  return NextResponse.json({ success: true });
 }

@@ -97,8 +97,14 @@ export default function AdminAttendancePage() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-forest-500">Loading...</div>
+      <div>
+        <div className="mb-2 h-7 w-44 animate-pulse rounded-lg bg-paper-200" />
+        <div className="mb-8 h-4 w-56 animate-pulse rounded-lg bg-paper-200" />
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-14 animate-pulse rounded-xl bg-paper-100" />
+          ))}
+        </div>
       </div>
     );
   }

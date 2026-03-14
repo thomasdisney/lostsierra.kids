@@ -161,8 +161,14 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-forest-500">Loading...</div>
+      <div>
+        <div className="mb-2 h-7 w-52 animate-pulse rounded-lg bg-paper-200" />
+        <div className="mb-8 h-4 w-36 animate-pulse rounded-lg bg-paper-200" />
+        <div className="grid gap-4 md:grid-cols-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-xl bg-paper-100" />
+          ))}
+        </div>
       </div>
     );
   }

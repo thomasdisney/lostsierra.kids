@@ -59,8 +59,16 @@ export default function FamilyPage() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-forest-500">Loading...</div>
+      <div>
+        <div className="mb-2 h-7 w-40 animate-pulse rounded-lg bg-paper-200" />
+        <div className="mb-6 h-4 w-48 animate-pulse rounded-lg bg-paper-200" />
+        <div className="rounded-xl border border-paper-200 bg-white p-4 md:p-8">
+          <div className="grid gap-4 md:grid-cols-2">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-16 animate-pulse rounded-lg bg-paper-100" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
