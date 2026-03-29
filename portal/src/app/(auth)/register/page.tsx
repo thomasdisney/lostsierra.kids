@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 
 export default function RegisterPage() {
@@ -9,6 +9,8 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [website, setWebsite] = useState("");
+  const formLoadedAt = useRef(Date.now());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -23,7 +25,7 @@ export default function RegisterPage() {
       const res = await fetch("/portal/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, email, password, confirmPassword }),
+        body: JSON.stringify({ fullName, email, password, confirmPassword, website, _formRenderedAt: formLoadedAt.current }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Registration failed"); setLoading(false); return; }
@@ -59,6 +61,12 @@ export default function RegisterPage() {
           )}
 
           <form onSubmit={handleSubmit}>
+            {/* Honeypot — hidden from humans, bots auto-fill it */}
+            <div aria-hidden="true" style={{ position: "absolute", left: "-9999px", opacity: 0, height: 0, overflow: "hidden" }}>
+              <label htmlFor="website">Leave blank</label>
+              <input id="website" name="website" type="text" value={website} onChange={(e) => setWebsite(e.target.value)} tabIndex={-1} autoComplete="off" />
+            </div>
+
             <div className="mb-4">
               <label htmlFor="fullName" className="mb-1 block text-sm font-semibold text-forest-700">Full name</label>
               <input id="fullName" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required autoComplete="name" placeholder="Jane Smith" className={inputCls} />

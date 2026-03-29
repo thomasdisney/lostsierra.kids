@@ -35,6 +35,8 @@ const roleActions: Record<string, string> = {
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -55,6 +57,48 @@ export default function AdminUsersPage() {
       body: JSON.stringify({ userId, role: newRole }),
     });
     loadUsers();
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllPending() {
+    const pendingIds = users
+      .filter((u) => u.role === "new_user" || u.role === "new_account")
+      .map((u) => u.id);
+    const allSelected = pendingIds.every((id) => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        pendingIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => new Set([...prev, ...pendingIds]));
+    }
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} user(s)? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await fetch("/portal/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds: [...selectedIds] }),
+      });
+      setSelectedIds(new Set());
+      loadUsers();
+    } finally {
+      setDeleting(false);
+    }
   }
 
   if (loading) {
@@ -85,25 +129,52 @@ export default function AdminUsersPage() {
 
       {pendingUsers.length > 0 && (
         <div className="mb-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-orange-700">
-            Pending Approval ({pendingUsers.length})
-          </h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-orange-700">
+              Pending Approval ({pendingUsers.length})
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={toggleSelectAllPending}
+                className="rounded-lg border border-paper-300 px-3 py-1.5 text-xs font-medium text-forest-700 transition hover:bg-paper-100"
+              >
+                {pendingUsers.every((u) => selectedIds.has(u.id)) ? "Deselect All" : "Select All"}
+              </button>
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={deleteSelected}
+                  disabled={deleting}
+                  className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-60"
+                >
+                  {deleting ? "Deleting\u2026" : `Delete Selected (${selectedIds.size})`}
+                </button>
+              )}
+            </div>
+          </div>
           <div className="rounded-xl border-2 border-orange-200 bg-orange-50">
             {pendingUsers.map((user) => (
               <div
                 key={user.id}
                 className="flex items-center justify-between border-b border-orange-100 p-4 last:border-0"
               >
-                <div>
-                  <div className="font-medium text-forest-900">
-                    {user.fullName}
-                  </div>
-                  <div className="text-sm text-forest-600">{user.email}</div>
-                  <div className="text-xs text-forest-500">
-                    Joined {new Date(user.createdAt).toLocaleDateString()}
-                    {!user.emailVerified && (
-                      <span className="ml-2 text-red-500">Email not verified</span>
-                    )}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(user.id)}
+                    onChange={() => toggleSelect(user.id)}
+                    className="h-4 w-4 rounded border-paper-300 text-forest-600 focus:ring-forest-500"
+                  />
+                  <div>
+                    <div className="font-medium text-forest-900">
+                      {user.fullName}
+                    </div>
+                    <div className="text-sm text-forest-600">{user.email}</div>
+                    <div className="text-xs text-forest-500">
+                      Joined {new Date(user.createdAt).toLocaleDateString()}
+                      {!user.emailVerified && (
+                        <span className="ml-2 text-red-500">Email not verified</span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <button

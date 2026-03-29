@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -76,6 +76,44 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error updating user role:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== "admin") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { userIds } = body;
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return NextResponse.json(
+        { error: "userIds array is required" },
+        { status: 400 }
+      );
+    }
+
+    // Prevent admin from deleting themselves
+    const safeIds = userIds.filter((id: string) => id !== session.user!.id);
+    if (safeIds.length === 0) {
+      return NextResponse.json(
+        { error: "Cannot delete your own account" },
+        { status: 400 }
+      );
+    }
+
+    await db.delete(users).where(inArray(users.id, safeIds));
+
+    return NextResponse.json({ success: true, deleted: safeIds.length });
+  } catch (error) {
+    console.error("Error deleting users:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

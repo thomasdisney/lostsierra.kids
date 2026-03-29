@@ -12,6 +12,18 @@ import {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    // Bot protection: honeypot field (bots auto-fill hidden "website" field)
+    if (body.website) {
+      return NextResponse.json({ success: true, email: body.email, emailSent: true });
+    }
+
+    // Bot protection: time-based check (no human fills 4 fields in < 3 seconds)
+    const renderTime = body._formRenderedAt;
+    if (typeof renderTime !== "number" || Date.now() - renderTime < 3000) {
+      return NextResponse.json({ success: true, email: body.email, emailSent: true });
+    }
+
     const parsed = registerSchema.safeParse(body);
 
     if (!parsed.success) {
