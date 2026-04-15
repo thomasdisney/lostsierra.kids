@@ -5,22 +5,36 @@ export const loginSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
-export const registerSchema = z.object({
-  fullName: z.string().min(2, "Name must be at least 2 characters").max(255, "Name is too long"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters").max(72, "Password is too long"),
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
+export const registerSchema = z
+  .object({
+    fullName: z
+      .string()
+      .min(2, "Name must be at least 2 characters")
+      .max(255, "Name is too long"),
+    email: z.string().email("Invalid email address"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(72, "Password is too long"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
 export const guardianSchema = z.object({
   fullName: z.string().min(2, "Name is required"),
   email: z.string().email("Invalid email"),
   phone: z.string().min(7, "Valid phone number required"),
   altPhone: z.string().optional(),
-  relationship: z.enum(["mother", "father", "guardian", "grandparent", "other"]),
+  relationship: z.enum([
+    "mother",
+    "father",
+    "guardian",
+    "grandparent",
+    "other",
+  ]),
   occupation: z.string().optional(),
 });
 
@@ -47,10 +61,18 @@ export const childSchema = z.object({
   staffNotes: z.string().optional(),
 });
 
+export const coParentSchema = z.object({
+  fullName: z.string().max(255),
+  email: z.string().email().or(z.literal("")).default(""),
+  phone: z.string().max(20).default(""),
+  relationship: z.string().max(50).default(""),
+});
+
 export const registrationSchema = z.object({
   guardian: guardianSchema,
   address: addressSchema,
   children: z.array(childSchema).min(1, "At least one child is required"),
+  coParents: z.array(coParentSchema).max(5).optional().default([]),
 });
 
 export const announcementSchema = z.object({

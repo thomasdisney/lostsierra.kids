@@ -24,12 +24,16 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Validation failed", details: parsed.error.flatten() },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  const { guardian: guardianData, address, children: childrenData } = parsed.data;
-  const coParents = body.coParents || [];
+  const {
+    guardian: guardianData,
+    address,
+    children: childrenData,
+    coParents,
+  } = parsed.data;
 
   // Update guardian info
   await db
@@ -116,7 +120,11 @@ export async function POST(req: NextRequest) {
       .where(eq(users.id, session.user.id));
   }
 
-  return NextResponse.json({ id: registration.id, status: "submitted", roleUpgraded: user?.role === "new_user" });
+  return NextResponse.json({
+    id: registration.id,
+    status: "submitted",
+    roleUpgraded: user?.role === "new_user",
+  });
 }
 
 export async function GET() {
